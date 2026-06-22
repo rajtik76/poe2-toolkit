@@ -245,6 +245,23 @@ export function TreeView({
     }
   }, [scene, activeClassId, activeAscendancy, centreSprites, resources, preview, highlight]);
 
+  // While a highlight set is active, drive its pulse by redrawing every frame.
+  // Idle (no matches) keeps the tree static — no animation cost.
+  useEffect(() => {
+    if (!highlight || highlight.size === 0) {
+      return;
+    }
+
+    let raf = 0;
+    const tick = (): void => {
+      draw();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => cancelAnimationFrame(raf);
+  }, [highlight, draw]);
+
   // Load centre sprite images; redraw as each arrives.
   useEffect(() => {
     const urls = [centreSprites?.portrait?.url, centreSprites?.ringStatic?.url, centreSprites?.ringActive?.url].filter(
@@ -662,26 +679,33 @@ function drawVector(
 
 /**
  * Standing emphasis for a set of skills (name-search hits): a soft teal glow
- * under a bright core ring, sized to each node's frame like the hover ring.
- * Masteries have no disc to outline, so skip them.
+ * under a bright core ring, sized to each node's frame like the hover ring. The
+ * ring pulses — opacity and radius breathe on a time phase, so matches stay
+ * eye-catching against the static tree. Masteries have no disc to outline, so
+ * skip them. Driven by the highlight rAF loop, which redraws every frame.
  */
 function drawHighlight(ctx: CanvasRenderingContext2D, screen: ScreenScene, highlight: Set<number>): void {
+  const pulse = (Math.sin(performance.now() / 320) + 1) / 2; // 0..1, ~2s period
+  const glowAlpha = 0.2 + pulse * 0.45;
+  const coreAlpha = 0.55 + pulse * 0.45;
+  const grow = pulse * 5;
+
   for (const node of screen.nodes) {
     if (!highlight.has(node.skill) || node.kind === 'mastery') {
       continue;
     }
 
-    const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + 6;
+    const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + 6 + grow;
 
     ctx.beginPath();
     ctx.arc(node.x, node.y, outline, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(63, 174, 159, 0.45)';
+    ctx.strokeStyle = `rgba(63, 174, 159, ${glowAlpha})`;
     ctx.lineWidth = 8;
     ctx.stroke();
 
     ctx.beginPath();
     ctx.arc(node.x, node.y, outline, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(125, 249, 224, 0.95)';
+    ctx.strokeStyle = `rgba(125, 249, 224, ${coreAlpha})`;
     ctx.lineWidth = 3;
     ctx.stroke();
   }
