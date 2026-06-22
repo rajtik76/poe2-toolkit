@@ -58,6 +58,11 @@ export interface TreeViewProps {
    * keep the current/default view (the hub).
    */
   focus?: WorldRect | null;
+  /**
+   * Skill ids to emphasise with a standing teal ring (e.g. name-search hits).
+   * Unlike `onNodeHover`, this is a persistent set drawn until it changes.
+   */
+  highlight?: Set<number> | null;
   className?: string;
   style?: CSSProperties;
 }
@@ -180,6 +185,7 @@ export function TreeView({
   controls,
   wheelZoom,
   focus,
+  highlight,
   className,
   style,
 }: TreeViewProps): React.JSX.Element {
@@ -226,6 +232,10 @@ export function TreeView({
 
     drawVector(ctx, screen, scene, viewport, hoverRef.current, activeClassId, centreSprites, imagesRef.current, resources);
 
+    if (highlight && highlight.size > 0) {
+      drawHighlight(ctx, screen, highlight);
+    }
+
     if (preview) {
       drawPreview(ctx, screen, preview);
     }
@@ -233,7 +243,7 @@ export function TreeView({
     if (activeAscendancy) {
       drawAscendancy(ctx, scene, viewport, activeAscendancy, resources, hoverRef.current, preview);
     }
-  }, [scene, activeClassId, activeAscendancy, centreSprites, resources, preview]);
+  }, [scene, activeClassId, activeAscendancy, centreSprites, resources, preview, highlight]);
 
   // Load centre sprite images; redraw as each arrives.
   useEffect(() => {
@@ -647,6 +657,33 @@ function drawVector(
       ctx.lineWidth = 2;
       ctx.stroke();
     }
+  }
+}
+
+/**
+ * Standing emphasis for a set of skills (name-search hits): a soft teal glow
+ * under a bright core ring, sized to each node's frame like the hover ring.
+ * Masteries have no disc to outline, so skip them.
+ */
+function drawHighlight(ctx: CanvasRenderingContext2D, screen: ScreenScene, highlight: Set<number>): void {
+  for (const node of screen.nodes) {
+    if (!highlight.has(node.skill) || node.kind === 'mastery') {
+      continue;
+    }
+
+    const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + 6;
+
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, outline, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(63, 174, 159, 0.45)';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, outline, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(125, 249, 224, 0.95)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
   }
 }
 
