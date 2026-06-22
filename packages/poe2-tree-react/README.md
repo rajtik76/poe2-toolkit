@@ -18,6 +18,9 @@ The geometry lives in a framework-agnostic core, so the same `Scene` can just as
 easily be drawn from Vue, Svelte, or anything else. React is what this project
 happens to use.
 
+> **Live demo:** see this renderer in a real app at
+> [poe.rajtik.com/tree](https://poe.rajtik.com/tree).
+
 ## Who does what
 
 | Concern | Owner |

@@ -10,6 +10,30 @@ into clean, typed output, and renderers for the passive tree.
 
 Everything here is **code**. None of it bundles game data or art.
 
+## Live demo and patch webhook
+
+A running instance of the passive tree built from these packages is live at
+**[poe.rajtik.com/tree](https://poe.rajtik.com/tree)** — the same `@poe2-tree/*`
+core and React renderer in a real app.
+
+The same site also runs a **public patch webhook**: subscribe a URL and you get a
+signed `POST` the moment a new Path of Exile 2 client version is detected on GGG's
+patch server (`patch.pathofexile2.com`, polled every five minutes). No account, no
+polling on your side — deliveries are HMAC-SHA256 signed so you can verify they're
+genuine, and retried with backoff. Full docs at
+**[poe.rajtik.com/patch-webhook](https://poe.rajtik.com/patch-webhook)**.
+
+```bash
+# Subscribe; your endpoint echoes the verification `challenge` to prove ownership.
+curl -X POST https://poe.rajtik.com/api/patch/subscribers \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://example.com/poe2-hook"}'
+```
+
+Once verified, every new patch triggers a `patch.released` delivery carrying the
+`version` and `released_at`. See the docs for signature verification, re-verify /
+unsubscribe endpoints, and retry behavior.
+
 ## Packages
 
 | Package | What it does | Status |

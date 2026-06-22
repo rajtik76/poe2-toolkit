@@ -12,6 +12,10 @@ positioned, correctly sized `Scene` that any renderer can draw.
 
 Pure TypeScript, zero runtime dependencies, no DOM, no canvas, no framework.
 
+> **Live demo:** this engine drives the passive tree at
+> [poe.rajtik.com/tree](https://poe.rajtik.com/tree) (rendered via
+> [`@poe2-tree/react`](../poe2-tree-react)).
+
 ```ts
 import { buildScene, project } from '@poe2-tree/core';
 import { normalizeGggTree } from '@poe2-tree/core/ggg'; // data adapter, opt-in
