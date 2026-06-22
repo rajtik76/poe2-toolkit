@@ -64,6 +64,13 @@ tests need a local GGPK extract and golden fixtures (both kept outside the repo)
 point `POE2_GGPK_EXTRACT`, `POE2_TREE_GOLDEN`, and `POE2_TREE_DATA` at them to run
 those locally. Without the variables, those tests skip.
 
+Enable the commit hooks once per clone (a `commit-msg` hook rejects messages that
+carry an AI-assistant trace):
+
+```sh
+git config core.hooksPath .githooks
+```
+
 ## Attributions and legal
 
 This is an unofficial, fan-made project. It is **not** affiliated with, endorsed
