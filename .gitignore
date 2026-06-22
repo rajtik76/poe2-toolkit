@@ -1,0 +1,15 @@
+node_modules
+dist
+*.tsbuildinfo
+coverage
+
+# This repo ships code only — no game data, no derived data, no art. Golden
+# characterization fixtures (tree data.json, atlas frame-maps, art hashes) and
+# any GGPK extract live OUTSIDE the repo, located via env vars at test time
+# (POE2_TREE_GOLDEN / POE2_TREE_DATA / POE2_GGPK_EXTRACT). Defensive ignores in
+# case anything is ever regenerated into the tree:
+**/test/golden/
+**/*.dds
+**/*.csd
+**/*.psg
+

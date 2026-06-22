@@ -1,0 +1,47 @@
+{
+  "name": "@poe2-tree/core",
+  "version": "0.0.0",
+  "description": "Headless, framework-agnostic geometry engine for the Path of Exile 2 passive tree. Data in, game-accurate scene out. Positions and sizes derived from the source data, never hand-tuned.",
+  "keywords": [
+    "path-of-exile",
+    "poe2",
+    "passive-tree",
+    "skill-tree",
+    "geometry"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ggg": {
+      "types": "./dist/ggg/normalize.d.ts",
+      "default": "./dist/ggg/normalize.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

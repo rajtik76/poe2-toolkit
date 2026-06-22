@@ -1,0 +1,47 @@
+{
+  "name": "@poe2/ggpk",
+  "version": "0.0.0",
+  "description": "Access layer for Path of Exile 2's official GGPK / patch server: fetches and decodes game tables and raw files, and decodes GGPK image and stat-description formats. The shared base every PoE2 data extractor builds on.",
+  "keywords": [
+    "path-of-exile",
+    "poe2",
+    "ggpk",
+    "patch-server",
+    "dds",
+    "datc64"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "pathofexile-dat": "^15.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

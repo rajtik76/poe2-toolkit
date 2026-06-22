@@ -1,0 +1,49 @@
+{
+  "name": "@poe2-tree/react",
+  "version": "0.0.0",
+  "description": "React renderer for the Path of Exile 2 passive tree. A thin view adapter over @poe2-tree/core: it draws what the core computed and owns pan/zoom/hover/click. No geometry.",
+  "keywords": [
+    "path-of-exile",
+    "poe2",
+    "passive-tree",
+    "react",
+    "canvas"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@poe2-tree/core": "*"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

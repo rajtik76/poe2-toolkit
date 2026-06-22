@@ -1,0 +1,33 @@
+{
+  "name": "poe2-toolkit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Framework-agnostic toolkit for Path of Exile 2 data: a shared GGPK access layer plus extractors and renderers for the passive tree (items and gems in progress). Code only — ships no game data or art.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @poe2/ggpk && npm run build -w @poe2-tree/core && npm run build -w @poe2-tree/react && npm run build -w @poe2-tree/extractor && npm run build -w @poe2-item/extractor && npm run build -w @poe2-gem/extractor",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint packages",
+    "ci": "npm run build && npm run typecheck && npm run lint && npm run test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-react": "^7.37.3",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "globals": "^15.14.0",
+    "typescript-eslint": "^8.23.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
