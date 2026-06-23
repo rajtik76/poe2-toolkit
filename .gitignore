@@ -2,6 +2,7 @@ node_modules
 dist
 *.tsbuildinfo
 coverage
+.idea
 
 # This repo ships code only — no game data, no derived data, no art. Golden
 # characterization fixtures (tree data.json, atlas frame-maps, art hashes) and
