@@ -1,6 +1,7 @@
-import type { NodeKind, Scene, ScreenNode, ScreenScene, Viewport, WorldRect } from '@poe2-toolkit/tree-core';
-import { nodeAt, project, projectPoint, screenToWorld } from '@poe2-toolkit/tree-core';
-import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { Scene, Viewport, WorldRect } from '@poe2-toolkit/tree-core';
+import { nodeAt, screenToWorld } from '@poe2-toolkit/tree-core';
+import { Application, Container, Graphics, ImageSource, Rectangle, Sprite, Texture } from 'pixi.js';
+import { useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, Ref } from 'react';
 import type { RenderResources } from './resources.js';
 import { effectKeyFor, frameKeyFor, iconKeyFor } from './spriteKeys.js';
@@ -21,7 +22,6 @@ export interface TreeViewProps {
    *  - `ringStatic` -> `ring.frameRadius` (the ornate ring)
    *  - `ringActive` -> `ring.activeRadius`, rotated by the active class's
    *    `ringRotation` (the gold band pointing at the class)
-   * When absent, the vector hub stand-in is drawn instead.
    */
   centreSprites?: {
     portrait?: CentreSprite;
@@ -99,77 +99,41 @@ const FIT_PADDING = 0.92;
 /** Connection rail look (world units). Two parallel rails with a gap between. */
 const RAIL_WIDTH = 3.6;
 const RAIL_GAP = 4.8;
-const RAIL_COLOR = '#7d6836';
-const RAIL_GAP_ACTIVE = '#fcde86';
-const RAIL_GAP_INACTIVE = '#000000';
-
-/**
- * Stroke the current path as twin parallel rails with a gap. One wide stroke in
- * the rail colour lays down both rails; a narrower stroke on top fills the gap
- * (gold when allocated, background otherwise).
- */
-function strokeRail(ctx: CanvasRenderingContext2D, active: boolean, scale: number): void {
-  const gap = Math.max(0.6, RAIL_GAP * scale);
-  const rail = Math.max(0.6, RAIL_WIDTH * scale);
-  // Active: both rails and the gap are gold (solid band). Inactive: dark rails
-  // around an empty (background) gap.
-  ctx.strokeStyle = active ? RAIL_GAP_ACTIVE : RAIL_COLOR;
-  ctx.lineWidth = gap + rail * 2;
-  ctx.stroke();
-  ctx.strokeStyle = active ? RAIL_GAP_ACTIVE : RAIL_GAP_INACTIVE;
-  ctx.lineWidth = gap;
-  ctx.stroke();
-}
-
-/**
- * Ascendancy edges: inactive ones are a single solid black line the full width
- * of a twin rail (matching the in-game ascendancy tree); active ones keep the
- * gold rail used everywhere else.
- */
-function strokeAscendancyRail(ctx: CanvasRenderingContext2D, active: boolean, scale: number): void {
-  if (active) {
-    strokeRail(ctx, true, scale);
-
-    return;
-  }
-
-  const gap = Math.max(0.6, RAIL_GAP * scale);
-  const rail = Math.max(0.6, RAIL_WIDTH * scale);
-  ctx.strokeStyle = RAIL_GAP_INACTIVE;
-  ctx.lineWidth = gap + rail * 2;
-  ctx.stroke();
-}
+const RAIL_COLOR = 0x7d6836;
+const RAIL_GAP_ACTIVE = 0xfcde86;
+const RAIL_GAP_INACTIVE = 0x000000;
 
 /** Vector palette by node kind, used when no atlas art is supplied. */
-const KIND_COLOR: Record<NodeKind, string> = {
-  normal: '#3a5b54',
-  notable: '#6fe0d0',
-  keystone: '#d9b86a',
-  mastery: '#8a6fd0',
-  jewel: '#d06f9a',
-  attribute: '#4a6a62',
-  classStart: '#9aa7a3',
-  ascendancyStart: '#d9b86a',
-  ascendancyNormal: '#5a7a72',
-  ascendancyNotable: '#7fd0c0',
+const KIND_COLOR: Record<string, number> = {
+  normal: 0x3a5b54,
+  notable: 0x6fe0d0,
+  keystone: 0xd9b86a,
+  mastery: 0x8a6fd0,
+  jewel: 0xd06f9a,
+  attribute: 0x4a6a62,
+  classStart: 0x9aa7a3,
+  ascendancyStart: 0xd9b86a,
+  ascendancyNormal: 0x5a7a72,
+  ascendancyNotable: 0x7fd0c0,
 };
 
 /** Item-rarity colours for the gem drawn inside a socketed jewel. */
-const RARITY_COLOR: Record<string, string> = {
-  NORMAL: '#d6d6d6',
-  MAGIC: '#8888ff',
-  RARE: '#e8e84a',
-  UNIQUE: '#cf7a3a',
+const RARITY_COLOR: Record<string, number> = {
+  NORMAL: 0xd6d6d6,
+  MAGIC: 0x8888ff,
+  RARE: 0xe8e84a,
+  UNIQUE: 0xcf7a3a,
 };
 
 /**
- * Thin canvas view over a core `Scene`. It owns nothing geometric — pan, zoom,
- * device-pixel sizing, the draw loop, and hover hit-testing only. Positions,
- * sizes, projection and hit-testing all come from `@poe2-toolkit/tree-core`.
+ * WebGL view over a core `Scene`, rendered with PixiJS. It owns nothing
+ * geometric — pan, zoom, device-pixel sizing and hover hit-testing only;
+ * positions, sizes and hit-testing all come from `@poe2-toolkit/tree-core`.
  *
- * Without `resources` it renders a vector debug view (nodes as discs, edges as
- * lines/arcs, the hub opening as a ring) — enough to see the geometry before any
- * GGG atlas art exists.
+ * The whole tree is built once as a Pixi scene graph in world space; panning and
+ * zooming only set the world container's transform, so the GPU recomposites
+ * without re-rasterising any sprites. That keeps a full-tree pan/zoom smooth even
+ * on machines where Canvas2D `drawImage` falls back to the CPU.
  */
 export function TreeView({
   scene,
@@ -190,131 +154,183 @@ export function TreeView({
   style,
 }: TreeViewProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const appRef = useRef<Application | null>(null);
+  const worldRef = useRef<Container | null>(null);
+  // World-space layers, back-to-front.
+  const centreLayerRef = useRef<Container | null>(null);
+  const effectLayerRef = useRef<Container | null>(null);
+  const connLayerRef = useRef<Graphics | null>(null);
+  const nodeLayerRef = useRef<Container | null>(null);
+  const ascLayerRef = useRef<Container | null>(null);
+  const overlayRef = useRef<Graphics | null>(null);
+
   const viewportRef = useRef<Viewport | null>(null);
   const hoverRef = useRef<number | null>(null);
   const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
-  const imagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
-  const [, forceRedraw] = useState(0);
+  const texRef = useRef<TexCtx>({ textures: new Map(), sources: new Map(), images: new Map() });
+  const readyRef = useRef(false);
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
+  // Latest-value refs the long-lived ticker closure reads without re-subscribing.
+  const sceneRef = useRef(scene);
+  const highlightRef = useRef<Set<number> | null>(highlight ?? null);
+  const previewRef = useRef<AllocationPreview | null>(preview ?? null);
+  const highlightActiveRef = useRef(false);
+  const rebuildRef = useRef<(() => void) | null>(null);
 
-    if (!canvas || !ctx) {
-      return;
-    }
-
-    const dpr = window.devicePixelRatio || 1;
-    const cssWidth = canvas.clientWidth;
-    const cssHeight = canvas.clientHeight;
-
-    // Lazily centre the view on the hub (class portrait) the first time we have
-    // a size.
-    if (!viewportRef.current && cssWidth > 0 && cssHeight > 0) {
-      viewportRef.current = centreViewport(scene, cssWidth, cssHeight);
-    }
-
+  // Apply the current viewport to the world container and refresh the overlay.
+  // O(1) — no sprite touches. Stable (reads refs), so panning/zooming never
+  // rebuilds the scene graph.
+  const sync = useCallback(() => {
+    const world = worldRef.current;
     const viewport = viewportRef.current;
 
-    if (!viewport) {
+    if (!world || !viewport) {
       return;
     }
 
-    clampViewport(viewport, scene, cssWidth, cssHeight);
-
-    const screen = project(scene, viewport, { width: cssWidth, height: cssHeight });
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssWidth, cssHeight);
-
-    // Solid near-black background.
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, cssWidth, cssHeight);
-
-    drawVector(ctx, screen, scene, viewport, hoverRef.current, activeClassId, centreSprites, imagesRef.current, resources);
-
-    if (highlight && highlight.size > 0) {
-      drawHighlight(ctx, screen, highlight);
-    }
-
-    if (preview) {
-      drawPreview(ctx, screen, preview);
-    }
-
-    if (activeAscendancy) {
-      drawAscendancy(ctx, scene, viewport, activeAscendancy, resources, hoverRef.current, preview);
-    }
-  }, [scene, activeClassId, activeAscendancy, centreSprites, resources, preview, highlight]);
-
-  // Coalesce repaints to one per animation frame. Pan and zoom can fire many
-  // pointer/wheel events per frame (coalesced moves, high-Hz mice); without this
-  // each one forced a full project + redraw, so the tree stuttered under drag.
-  // `drawRef` always points at the latest `draw`, keeping `scheduleDraw` stable.
-  const drawRef = useRef(draw);
-  useEffect(() => {
-    drawRef.current = draw;
-  }, [draw]);
-  const rafRef = useRef<number | null>(null);
-  const scheduleDraw = useCallback(() => {
-    if (rafRef.current !== null) {
-      return;
-    }
-
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null;
-      drawRef.current();
-    });
+    world.scale.set(viewport.scale);
+    world.position.set(viewport.tx, viewport.ty);
+    drawOverlay(overlayRef.current, sceneRef.current, viewport, hoverRef.current, highlightRef.current, previewRef.current);
   }, []);
 
-  useEffect(
-    () => () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-      }
-    },
-    [],
-  );
+  // ---- Pixi application lifecycle -----------------------------------------
 
-  // While a highlight set is active, drive its pulse by redrawing every frame.
-  // Idle (no matches) keeps the tree static — no animation cost.
   useEffect(() => {
-    if (!highlight || highlight.size === 0) {
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
       return;
     }
 
-    let raf = 0;
-    const tick = (): void => {
-      scheduleDraw();
-      raf = requestAnimationFrame(tick);
+    let cancelled = false;
+    const app = new Application();
+
+    void app
+      .init({
+        canvas,
+        backgroundAlpha: 0,
+        antialias: true,
+        resolution: window.devicePixelRatio || 1,
+        // CSS sizing is owned by the `width/height: 100%` canvas style, not Pixi —
+        // autoDensity would set explicit px and fight it, leaving a gap + scrollbar.
+        autoDensity: false,
+        preference: 'webgl',
+        width: canvas.clientWidth || 800,
+        height: canvas.clientHeight || 600,
+      })
+      .then(() => {
+        if (cancelled) {
+          app.destroy(true);
+
+          return;
+        }
+
+        const world = new Container();
+        const centreLayer = new Container();
+        const effectLayer = new Container();
+        const connLayer = new Graphics();
+        const nodeLayer = new Container();
+        const ascLayer = new Container();
+        const overlay = new Graphics();
+        world.addChild(centreLayer, effectLayer, connLayer, nodeLayer, ascLayer, overlay);
+        app.stage.addChild(world);
+
+        appRef.current = app;
+        worldRef.current = world;
+        centreLayerRef.current = centreLayer;
+        effectLayerRef.current = effectLayer;
+        connLayerRef.current = connLayer;
+        nodeLayerRef.current = nodeLayer;
+        ascLayerRef.current = ascLayer;
+        overlayRef.current = overlay;
+        readyRef.current = true;
+
+        // Pulse the highlight rings each frame while a highlight set is active.
+        app.ticker.add(() => {
+          if (highlightActiveRef.current) {
+            drawOverlay(
+              overlayRef.current,
+              sceneRef.current,
+              viewportRef.current,
+              hoverRef.current,
+              highlightRef.current,
+              previewRef.current,
+            );
+          }
+        });
+
+        rebuildRef.current?.();
+      });
+
+    return () => {
+      cancelled = true;
+      readyRef.current = false;
+
+      if (appRef.current) {
+        appRef.current.destroy(true, { children: true });
+        appRef.current = null;
+      }
     };
-    raf = requestAnimationFrame(tick);
+  }, []);
 
-    return () => cancelAnimationFrame(raf);
-  }, [highlight, scheduleDraw]);
-
-  // Load centre sprite images; redraw as each arrives.
+  // Keep the latest-value refs current (in an effect, never during render) and
+  // refresh the overlay when its inputs change — no scene-graph rebuild.
   useEffect(() => {
-    const urls = [centreSprites?.portrait?.url, centreSprites?.ringStatic?.url, centreSprites?.ringActive?.url].filter(
-      (url): url is string => Boolean(url),
+    sceneRef.current = scene;
+    highlightRef.current = highlight ?? null;
+    previewRef.current = preview ?? null;
+    highlightActiveRef.current = Boolean(highlight && highlight.size > 0);
+    sync();
+  }, [scene, highlight, preview, sync]);
+
+  // ---- Scene graph build ---------------------------------------------------
+
+  const rebuild = useCallback(() => {
+    if (!readyRef.current) {
+      return;
+    }
+
+    buildScene(
+      {
+        centreLayer: centreLayerRef.current,
+        effectLayer: effectLayerRef.current,
+        connLayer: connLayerRef.current,
+        nodeLayer: nodeLayerRef.current,
+        ascLayer: ascLayerRef.current,
+      },
+      scene,
+      resources,
+      centreSprites,
+      activeClassId,
+      activeAscendancy,
+      texRef.current,
     );
 
-    for (const url of urls) {
-      if (imagesRef.current.has(url)) {
-        continue;
-      }
+    // Centre the view on first build, then keep it across rebuilds.
+    const canvas = canvasRef.current;
 
-      const img = new Image();
-      img.onload = () => {
-        imagesRef.current.set(url, img);
-        draw();
-      };
-      img.src = url;
+    if (canvas && !viewportRef.current && canvas.clientWidth > 0) {
+      viewportRef.current = centreViewport(scene, canvas.clientWidth, canvas.clientHeight);
     }
-  }, [centreSprites, draw]);
 
-  // Load socketed-jewel icons (item art keyed by base type); redraw as each
-  // arrives. Same image cache as the centre sprites.
+    sync();
+  }, [scene, resources, centreSprites, activeClassId, activeAscendancy, sync]);
+
+  useEffect(() => {
+    rebuildRef.current = rebuild;
+    rebuild();
+  }, [rebuild]);
+
+  // Load centre-art and jewel images (URLs, unlike the already-loaded atlas
+  // bitmaps); rebuild as each arrives so its sprite appears.
   useEffect(() => {
     const urls = new Set<string>();
+
+    for (const sprite of [centreSprites?.portrait, centreSprites?.ringStatic, centreSprites?.ringActive]) {
+      if (sprite?.url) {
+        urls.add(sprite.url);
+      }
+    }
 
     for (const node of scene.nodes) {
       if (node.jewel?.icon) {
@@ -323,21 +339,22 @@ export function TreeView({
     }
 
     for (const url of urls) {
-      if (imagesRef.current.has(url)) {
+      if (texRef.current.images.has(url)) {
         continue;
       }
 
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        imagesRef.current.set(url, img);
-        draw();
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.onload = () => {
+        texRef.current.images.set(url, image);
+        rebuildRef.current?.();
       };
-      img.src = url;
+      image.src = url;
     }
-  }, [scene, draw]);
+  }, [scene, centreSprites]);
 
-  // Redraw on size change (device-pixel backing store + CSS size).
+  // ---- Sizing --------------------------------------------------------------
+
   useEffect(() => {
     const canvas = canvasRef.current;
 
@@ -346,23 +363,30 @@ export function TreeView({
     }
 
     const observer = new ResizeObserver(() => {
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(canvas.clientWidth * dpr);
-      canvas.height = Math.round(canvas.clientHeight * dpr);
-      draw();
+      const app = appRef.current;
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+
+      if (!app || width <= 0 || height <= 0) {
+        return;
+      }
+
+      app.renderer.resize(width, height);
+
+      if (!viewportRef.current) {
+        viewportRef.current = centreViewport(scene, width, height);
+      } else {
+        clampViewport(viewportRef.current, scene, width, height);
+      }
+
+      sync();
     });
     observer.observe(canvas);
 
     return () => observer.disconnect();
-  }, [draw]);
+  }, [scene, sync]);
 
-  // Repaint whenever anything affecting the render changes (scene/allocation,
-  // atlases finishing loading, centre art, active class/ascendancy) — WITHOUT
-  // touching the viewport. The view is centred lazily on first draw and then
-  // preserved, so editing the build or panning never snaps it back to the hub.
-  useEffect(() => {
-    draw();
-  }, [draw]);
+  // ---- Pointer interaction -------------------------------------------------
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -383,10 +407,6 @@ export function TreeView({
 
       const drag = dragRef.current;
 
-      // Recover from a missed pointerup: if the primary button is no longer held
-      // (e.g. the release landed outside the canvas, or fullscreen stole pointer
-      // capture), `buttons` is 0 — end the drag so the tree stops following the
-      // cursor instead of panning forever.
       if (drag && (event.buttons & 1) === 0) {
         dragRef.current = null;
 
@@ -405,23 +425,22 @@ export function TreeView({
         drag.y = event.clientY;
         viewport.tx += dx;
         viewport.ty += dy;
-        scheduleDraw();
+        sync();
 
         return;
       }
 
-      // Hover hit-test.
       const rect = event.currentTarget.getBoundingClientRect();
       const hit = hitTest(scene, viewport, event.clientX - rect.left, event.clientY - rect.top, activeAscendancy);
 
       if (hit !== hoverRef.current) {
         hoverRef.current = hit;
         const node = hit !== null ? scene.nodes.find((candidate) => candidate.skill === hit) : undefined;
-        onNodeHover?.(hit, node ? projectPoint(viewport, { x: node.x, y: node.y }) : undefined);
-        scheduleDraw();
+        onNodeHover?.(hit, node ? worldToScreen(viewport, node.x, node.y) : undefined);
+        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null);
       }
     },
-    [scene, scheduleDraw, onNodeHover, activeAscendancy],
+    [scene, sync, onNodeHover, activeAscendancy, highlight, preview],
   );
 
   const onPointerUp = useCallback(
@@ -437,7 +456,7 @@ export function TreeView({
 
         if (hit !== null) {
           const node = scene.nodes.find((candidate) => candidate.skill === hit);
-          onNodeClick(hit, node ? projectPoint(viewport, { x: node.x, y: node.y }) : { x: 0, y: 0 });
+          onNodeClick(hit, node ? worldToScreen(viewport, node.x, node.y) : { x: 0, y: 0 });
         }
       }
     },
@@ -462,8 +481,6 @@ export function TreeView({
     [scene, onNodeDoubleClick, activeAscendancy],
   );
 
-  // Zoom keeping a screen point fixed. Wheel zoom is intentionally omitted so
-  // the page can scroll over the canvas; zooming is driven by external buttons.
   const zoomAt = useCallback(
     (px: number, py: number, factor: number) => {
       const viewport = viewportRef.current;
@@ -477,10 +494,16 @@ export function TreeView({
       viewport.tx = px - (px - viewport.tx) * ratio;
       viewport.ty = py - (py - viewport.ty) * ratio;
       viewport.scale = scale;
-      scheduleDraw();
-      forceRedraw((n) => n + 1);
+
+      const canvas = canvasRef.current;
+
+      if (canvas) {
+        clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight);
+      }
+
+      sync();
     },
-    [scheduleDraw],
+    [scene, sync],
   );
 
   useImperativeHandle(
@@ -504,8 +527,6 @@ export function TreeView({
     [zoomAt],
   );
 
-  // Wheel zoom (fullscreen only): native non-passive listener so we can
-  // preventDefault and zoom toward the cursor instead of scrolling.
   useEffect(() => {
     const canvas = canvasRef.current;
 
@@ -524,9 +545,6 @@ export function TreeView({
     return () => canvas.removeEventListener('wheel', onWheel);
   }, [wheelZoom, zoomAt]);
 
-  // Frame a requested world rect (e.g. a freshly imported build's allocation).
-  // One-shot: keyed on `focus` only, so it fires when the caller passes a new
-  // rect — not on every class/ascendancy redraw.
   useEffect(() => {
     if (!focus) {
       return;
@@ -534,33 +552,22 @@ export function TreeView({
 
     const canvas = canvasRef.current;
 
-    if (!canvas) {
+    if (!canvas || canvas.clientWidth <= 0 || canvas.clientHeight <= 0) {
       return;
     }
 
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-
-    if (width <= 0 || height <= 0) {
-      return;
-    }
-
-    const viewport = viewportForRect(focus, width, height);
-    clampViewport(viewport, scene, width, height);
+    const viewport = viewportForRect(focus, canvas.clientWidth, canvas.clientHeight);
+    clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight);
     viewportRef.current = viewport;
-    draw();
-    forceRedraw((n) => n + 1);
+    sync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);
-
-  // Suppress unused-resources warning while the atlas path is not yet wired.
-  void resources;
 
   return (
     <canvas
       ref={canvasRef}
       className={className}
-      style={{ touchAction: 'none', cursor: 'grab', width: '100%', height: '100%', background: '#000000', ...style }}
+      style={{ touchAction: 'none', cursor: 'grab', display: 'block', width: '100%', height: '100%', background: '#000000', ...style }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -573,8 +580,443 @@ export function TreeView({
   );
 }
 
+// ===========================================================================
+// Scene graph construction
+// ===========================================================================
+
+interface Layers {
+  centreLayer: Container | null;
+  effectLayer: Container | null;
+  connLayer: Graphics | null;
+  nodeLayer: Container | null;
+  ascLayer: Container | null;
+}
+
+/** (Re)build the whole world scene graph from the scene + resources. */
+function buildScene(
+  layers: Layers,
+  scene: Scene,
+  resources: RenderResources | undefined,
+  centreSprites: TreeViewProps['centreSprites'],
+  activeClassId: number | undefined,
+  activeAscendancy: string | undefined,
+  tex: TexCtx,
+): void {
+  const { centreLayer, effectLayer, connLayer, nodeLayer, ascLayer } = layers;
+
+  if (!centreLayer || !effectLayer || !connLayer || !nodeLayer || !ascLayer) {
+    return;
+  }
+
+  centreLayer.removeChildren().forEach((child) => child.destroy());
+  effectLayer.removeChildren().forEach((child) => child.destroy());
+  nodeLayer.removeChildren().forEach((child) => child.destroy());
+  ascLayer.removeChildren().forEach((child) => child.destroy());
+  connLayer.clear();
+
+  buildCentre(centreLayer, scene, centreSprites, activeClassId, tex);
+
+  if (resources) {
+    for (const effect of scene.masteryEffects) {
+      const sprite = atlasSprite(resources, effectKeyFor(effect.patternKey), effect.x, effect.y, effect.size, tex);
+
+      if (sprite) {
+        sprite.alpha = effect.active ? 1 : 0.15;
+        effectLayer.addChild(sprite);
+      }
+    }
+  }
+
+  // Main map excludes ascendancy nodes/edges: they live far out in world space
+  // and are only drawn relocated into the hub when their disc is active (below).
+  buildConnections(connLayer, scene.connections, false);
+
+  for (const node of scene.nodes) {
+    if (node.ascendancy) {
+      continue;
+    }
+
+    buildNode(nodeLayer, node, resources, tex);
+  }
+
+  // Active ascendancy disc: its nodes relocated into the hub. The originals stay
+  // at their far world anchor in `nodeLayer`; this is the game-style overlay.
+  if (activeAscendancy) {
+    const disc = scene.centre.ascendancies.find((a) => a.id === activeAscendancy);
+
+    if (disc) {
+      ascLayer.position.set(scene.centre.centre.x - disc.worldAnchor.x, scene.centre.centre.y - disc.worldAnchor.y);
+      const ascConns = scene.connections.filter((conn) => conn.ascendancy === activeAscendancy);
+      const ascGraphics = new Graphics();
+      buildConnections(ascGraphics, ascConns, true);
+      ascLayer.addChild(ascGraphics);
+
+      for (const node of scene.nodes) {
+        if (node.ascendancy === activeAscendancy) {
+          buildNode(ascLayer, node, resources, tex);
+        }
+      }
+    }
+  }
+}
+
+/** Draw all connections as twin parallel rails into a Graphics (world units). */
+function buildConnections(g: Graphics, connections: Scene['connections'], ascendancyOnly: boolean | null): void {
+  const gap = RAIL_GAP;
+  const rail = RAIL_WIDTH;
+
+  // Inactive first (under), then active (on top). For each state a wide rail
+  // stroke then a narrow gap stroke gives the twin-rail look.
+  for (const active of [false, true]) {
+    const want = connections.filter((conn) => {
+      if (ascendancyOnly === false && conn.ascendancy) {
+        return false;
+      }
+
+      return conn.active === active;
+    });
+
+    if (want.length === 0) {
+      continue;
+    }
+
+    // Inactive ascendancy edges are a single solid black rail (matching the game).
+    const gapColor = active ? RAIL_GAP_ACTIVE : ascendancyOnly ? null : RAIL_GAP_INACTIVE;
+
+    addConnPaths(g, want);
+    g.stroke({ width: gap + rail * 2, color: active ? RAIL_GAP_ACTIVE : RAIL_COLOR, cap: 'round' });
+
+    if (gapColor !== null) {
+      addConnPaths(g, want);
+      g.stroke({ width: gap, color: gapColor, cap: 'round' });
+    }
+  }
+}
+
+/** Append every connection's path (line or arc) to the current Graphics path. */
+function addConnPaths(g: Graphics, connections: Scene['connections']): void {
+  for (const conn of connections) {
+    if (conn.kind === 'arc' && conn.arc) {
+      const { cx, cy, radius, startAngle, endAngle, clockwise } = conn.arc;
+      g.moveTo(cx + radius * Math.cos(startAngle), cy + radius * Math.sin(startAngle));
+      g.arc(cx, cy, radius, startAngle, endAngle, clockwise);
+    } else {
+      g.moveTo(conn.a.x, conn.a.y);
+      g.lineTo(conn.b.x, conn.b.y);
+    }
+  }
+}
+
+/** Build a node's icon + frame sprites (and jewel gem) into the layer. */
+function buildNode(layer: Container, node: Scene['nodes'][number], resources: RenderResources | undefined, tex: TexCtx): void {
+  if (node.kind === 'mastery') {
+    return; // drawn as its effect pattern
+  }
+
+  let drew = false;
+
+  if (resources) {
+    const iconKey = iconKeyFor(node.kind, node.icon, node.allocated);
+    const icon = iconKey ? atlasSprite(resources, iconKey, node.x, node.y, node.iconSize, tex) : null;
+
+    if (icon) {
+      layer.addChild(icon);
+      drew = true;
+    }
+
+    const frameKey = frameKeyFor(node.kind, node.allocated);
+    const frame = frameKey ? atlasSprite(resources, frameKey, node.x, node.y, node.frameSize, tex) : null;
+
+    if (frame) {
+      layer.addChild(frame);
+      drew = true;
+    }
+  }
+
+  if (!drew) {
+    const radius = Math.max(1.2, node.radius);
+    const disc = new Graphics().circle(node.x, node.y, radius).fill({
+      color: KIND_COLOR[node.kind] ?? 0xffffff,
+      alpha: node.allocated ? 1 : 0.4,
+    });
+    layer.addChild(disc);
+  }
+
+  if (node.kind === 'jewel' && node.jewel) {
+    const frame = node.frameSize > 0 ? node.frameSize : node.iconSize;
+    const color = RARITY_COLOR[node.jewel.rarity ?? ''] ?? 0xd6d6d6;
+    const iconUrl = node.jewel.icon;
+
+    const sprite = iconUrl ? urlSprite(iconUrl, node.x, node.y, frame * 0.62, tex) : null;
+
+    if (sprite) {
+      layer.addChild(sprite);
+    } else {
+      const radius = Math.max(2, frame * 0.2);
+      const gem = new Graphics().circle(node.x, node.y, radius).fill({ color });
+      layer.addChild(gem);
+    }
+  }
+}
+
+/** Build the hub: portrait, rotating active ring, ornate frame — or a vector stand-in. */
+function buildCentre(
+  layer: Container,
+  scene: Scene,
+  centreSprites: TreeViewProps['centreSprites'],
+  activeClassId: number | undefined,
+  tex: TexCtx,
+): void {
+  const { centre, ring, classes } = scene.centre;
+  const active = classes.find((cls) => cls.classId === activeClassId);
+
+  const portrait = centreSprites?.portrait;
+  const ringStatic = centreSprites?.ringStatic;
+  const ringActive = centreSprites?.ringActive;
+  const haveArt = Boolean(portrait || ringStatic || ringActive);
+
+  const portraitSprite = portrait ? centreSprite(portrait, centre.x, centre.y, ring.artRadius, 0, tex) : null;
+  const activeSprite = ringActive && active ? centreSprite(ringActive, centre.x, centre.y, ring.activeRadius, active.ringRotation, tex) : null;
+  const staticSprite = ringStatic ? centreSprite(ringStatic, centre.x, centre.y, ring.frameRadius, 0, tex) : null;
+
+  if (portraitSprite) {
+    layer.addChild(portraitSprite);
+  }
+
+  if (activeSprite) {
+    layer.addChild(activeSprite);
+  }
+
+  if (staticSprite) {
+    layer.addChild(staticSprite);
+  }
+
+  if (haveArt) {
+    return;
+  }
+
+  // Vector stand-in when no art is supplied.
+  const g = new Graphics();
+  g.circle(centre.x, centre.y, ring.frameRadius).stroke({ width: 3, color: 0xd9b86a, alpha: 0.22 });
+
+  if (active) {
+    const span = Math.PI / 5;
+    g.arc(centre.x, centre.y, ring.activeRadius, active.startAngle - span, active.startAngle + span).stroke({
+      width: 9,
+      color: 0xd9b86a,
+      cap: 'round',
+    });
+  }
+
+  g.circle(centre.x, centre.y, scene.centre.innerRadius).stroke({ width: 1.5, color: 0xd9b86a, alpha: 0.6 });
+  layer.addChild(g);
+}
+
+// ===========================================================================
+// Textures & sprites
+// ===========================================================================
+
+/**
+ * Texture-building context. Atlas bitmaps arrive as already-loaded
+ * `HTMLImageElement`s; centre-art and jewel URLs are loaded lazily into
+ * `images`. `sources` caches one `ImageSource` per bitmap, `textures` one
+ * sub-texture per sprite key.
+ */
+interface TexCtx {
+  textures: Map<string, Texture>;
+  sources: Map<string, ImageSource>;
+  images: Map<string, HTMLImageElement>;
+}
+
+/** One cached `ImageSource` per bitmap id (atlas name or URL). */
+function sourceFor(id: string, image: HTMLImageElement, tex: TexCtx): ImageSource {
+  let source = tex.sources.get(id);
+
+  if (!source) {
+    source = new ImageSource({ resource: image });
+    tex.sources.set(id, source);
+  }
+
+  return source;
+}
+
+/** A Pixi sprite for a manifest key, centred at (x, y) and sized to a world diameter. */
+function atlasSprite(resources: RenderResources, key: string, x: number, y: number, size: number, tex: TexCtx): Sprite | null {
+  const texture = atlasTexture(resources, key, tex);
+
+  if (!texture) {
+    return null;
+  }
+
+  return placedSprite(texture, x, y, size);
+}
+
+/** Resolve (and cache) a sub-texture for a manifest key. */
+function atlasTexture(resources: RenderResources, key: string, tex: TexCtx): Texture | null {
+  const cached = tex.textures.get(key);
+
+  if (cached) {
+    return cached;
+  }
+
+  const frame = resources.manifest.frames[key];
+
+  if (!frame) {
+    return null;
+  }
+
+  const image = resources.atlases[frame.atlas];
+
+  if (!(image instanceof HTMLImageElement)) {
+    return null;
+  }
+
+  const source = sourceFor(frame.atlas, image, tex);
+  const texture = new Texture({ source, frame: new Rectangle(frame.x, frame.y, frame.w, frame.h) });
+  tex.textures.set(key, texture);
+
+  return texture;
+}
+
+/**
+ * A centre sprite (URL + sub-rect) centred on the hub, sized to a world radius,
+ * rotated. Returns null until the source image has loaded (a later rebuild adds it).
+ */
+function centreSprite(rect: CentreSprite, cx: number, cy: number, radius: number, rotation: number, tex: TexCtx): Sprite | null {
+  const image = tex.images.get(rect.url);
+
+  if (!image) {
+    return null;
+  }
+
+  const key = `${rect.url}#${rect.sx},${rect.sy},${rect.sw},${rect.sh}`;
+  let texture = tex.textures.get(key);
+
+  if (!texture) {
+    texture = new Texture({ source: sourceFor(rect.url, image, tex), frame: new Rectangle(rect.sx, rect.sy, rect.sw, rect.sh) });
+    tex.textures.set(key, texture);
+  }
+
+  const sprite = placedSprite(texture, cx, cy, radius * 2);
+  sprite.rotation = rotation;
+
+  return sprite;
+}
+
+/** A sprite from a plain image URL, centred and sized (jewel item icons). Null until loaded. */
+function urlSprite(url: string, x: number, y: number, size: number, tex: TexCtx): Sprite | null {
+  const image = tex.images.get(url);
+
+  if (!image) {
+    return null;
+  }
+
+  let texture = tex.textures.get(url);
+
+  if (!texture) {
+    texture = new Texture({ source: sourceFor(url, image, tex) });
+    tex.textures.set(url, texture);
+  }
+
+  return placedSprite(texture, x, y, size);
+}
+
+/** A centred sprite at a world position, sized to a world diameter. */
+function placedSprite(texture: Texture, x: number, y: number, size: number): Sprite {
+  const sprite = new Sprite(texture);
+  sprite.anchor.set(0.5);
+  sprite.position.set(x, y);
+  sprite.setSize(size, size);
+
+  return sprite;
+}
+
+// ===========================================================================
+// Overlays (hover ring, search highlight, allocation preview) — world space
+// ===========================================================================
+
+/** Edge key matching the page's preview set: `min-max` of the two node ids. */
+function edgeKey(a: number, b: number): string {
+  return a < b ? `${a}-${b}` : `${b}-${a}`;
+}
+
+/**
+ * Redraw the overlay Graphics: the hover ring, the pulsing search-highlight
+ * rings, and the allocation preview rails. World space, so widths are divided by
+ * the viewport scale to stay a constant on-screen thickness.
+ */
+function drawOverlay(
+  g: Graphics | null,
+  scene: Scene,
+  viewport: Viewport | null,
+  hover: number | null,
+  highlight: Set<number> | null,
+  preview: AllocationPreview | null,
+): void {
+  if (!g || !viewport) {
+    return;
+  }
+
+  g.clear();
+  const scale = viewport.scale;
+  const px = (value: number): number => value / scale;
+
+  // Allocation preview rails (under the rings).
+  if (preview) {
+    const color = preview.kind === 'remove' ? 0xeb6060 : 0xffe296;
+
+    for (const conn of scene.connections) {
+      if (!preview.edges.has(edgeKey(conn.from, conn.to))) {
+        continue;
+      }
+
+      addConnPaths(g, [conn]);
+      g.stroke({ width: px(9), color, alpha: 0.38, cap: 'round' });
+      addConnPaths(g, [conn]);
+      g.stroke({ width: px(4), color, alpha: 0.97, cap: 'round' });
+    }
+  }
+
+  // Search highlight: soft glow + bright core, pulsing.
+  if (highlight && highlight.size > 0) {
+    const pulse = (Math.sin(performance.now() / 320) + 1) / 2;
+    const glowAlpha = 0.2 + pulse * 0.45;
+    const coreAlpha = 0.55 + pulse * 0.45;
+    const grow = pulse * 5;
+
+    for (const node of scene.nodes) {
+      if (!highlight.has(node.skill) || node.kind === 'mastery') {
+        continue;
+      }
+
+      const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + px(6 + grow);
+      g.circle(node.x, node.y, outline).stroke({ width: px(8), color: 0x3fae9f, alpha: glowAlpha });
+      g.circle(node.x, node.y, outline).stroke({ width: px(3), color: 0x7df9e0, alpha: coreAlpha });
+    }
+  }
+
+  // Hover ring.
+  if (hover !== null) {
+    const node = scene.nodes.find((candidate) => candidate.skill === hover);
+
+    if (node && node.kind !== 'mastery') {
+      const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + px(3);
+      g.circle(node.x, node.y, outline).stroke({ width: px(2), color: 0xffffff });
+    }
+  }
+}
+
+// ===========================================================================
+// Viewport math & hit-testing (unchanged from the Canvas2D renderer)
+// ===========================================================================
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+/** Project a world point to screen pixels under a viewport. */
+function worldToScreen(viewport: Viewport, x: number, y: number): { x: number; y: number } {
+  return { x: x * viewport.scale + viewport.tx, y: y * viewport.scale + viewport.ty };
 }
 
 /** The scale at which the main tree fits the viewport. */
@@ -586,13 +1028,9 @@ function fitScale(scene: Scene, width: number, height: number): number {
   return Math.min(width / worldWidth, height / worldHeight) * FIT_PADDING;
 }
 
-/**
- * Default view: centred on the hub (class portrait), zoomed so the portrait and
- * its nearest nodes fill the stage.
- */
+/** Default view: centred on the hub, zoomed so the portrait and nearby nodes fill the stage. */
 function centreViewport(scene: Scene, width: number, height: number): Viewport {
   const { centre, ring } = scene.centre;
-  // Window radius a bit larger than the portrait so nearby nodes show too.
   const windowRadius = Math.max(ring.artRadius * 1.6, 2000);
   const scale = Math.min(width, height) / (windowRadius * 2);
 
@@ -610,11 +1048,7 @@ function viewportForRect(rect: WorldRect, width: number, height: number): Viewpo
   return { tx: width / 2 - cx * scale, ty: height / 2 - cy * scale, scale };
 }
 
-/**
- * Keep the view sane: don't zoom out past ~the fit scale, and don't pan the main
- * tree fully off-screen (the world bounds include far-out ascendancy anchors, so
- * unclamped panning wanders into huge empty space).
- */
+/** Keep the view sane: don't zoom out past the fit scale, don't pan the tree off-screen. */
 function clampViewport(viewport: Viewport, scene: Scene, width: number, height: number): void {
   if (width <= 0 || height <= 0) {
     return;
@@ -624,187 +1058,17 @@ function clampViewport(viewport: Viewport, scene: Scene, width: number, height: 
 
   const { minX, minY, maxX, maxY } = scene.mainBounds;
   const { scale } = viewport;
-  // Keep at least this much of the tree's extent inside the viewport.
   const marginX = Math.min(width, (maxX - minX) * scale) * 0.5;
   const marginY = Math.min(height, (maxY - minY) * scale) * 0.5;
   viewport.tx = clamp(viewport.tx, width - marginX - maxX * scale, marginX - minX * scale);
   viewport.ty = clamp(viewport.ty, height - marginY - maxY * scale, marginY - minY * scale);
 }
 
-/** Vector debug render: hub, then edges, then nodes. */
-function drawVector(
-  ctx: CanvasRenderingContext2D,
-  screen: ScreenScene,
-  scene: Scene,
-  viewport: Viewport,
-  hover: number | null,
-  activeClassId: number | undefined,
-  centreSprites: TreeViewProps['centreSprites'],
-  images: Map<string, HTMLImageElement>,
-  resources: RenderResources | undefined,
-): void {
-  drawCentre(ctx, scene, viewport, activeClassId, centreSprites, images);
-
-  // Effect patterns (mastery/notable backgrounds), behind everything. Faint
-  // until the mastery is allocated, then lit to full strength — matching the
-  // in-game tree.
-  if (resources) {
-    for (const effect of screen.masteryEffects) {
-      const key = effectKeyFor(effect.patternKey);
-      ctx.globalAlpha = effect.active ? 1 : 0.15;
-      blitFromAtlas(ctx, resources, key, effect.x, effect.y, effect.size);
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  // Connections: vector arcs/lines as twin parallel rails with a gap, matching
-  // the in-game tree. Geometrically exact; ornate sprite art would need a
-  // kite-quad texture warp (WebGL).
-  ctx.lineCap = 'round';
-
-  // Inactive first, then active — active rails always sit on top. Two passes over
-  // the existing array rather than a sorted copy: this runs every animation frame
-  // during a pan, so the per-frame allocation + sort of ~1.5k connections is worth
-  // avoiding.
-  for (let pass = 0; pass < 2; pass++) {
-    const wantActive = pass === 1;
-
-    for (const conn of screen.connections) {
-      if (conn.active !== wantActive) {
-        continue;
-      }
-
-      ctx.beginPath();
-
-      if (conn.kind === 'arc' && conn.arc) {
-        ctx.arc(conn.arc.cx, conn.arc.cy, conn.arc.radius, conn.arc.startAngle, conn.arc.endAngle, conn.arc.clockwise);
-      } else {
-        ctx.moveTo(conn.a.x, conn.a.y);
-        ctx.lineTo(conn.b.x, conn.b.y);
-      }
-
-      strokeRail(ctx, conn.active, screen.scale);
-    }
-  }
-
-  // Nodes: real atlas art when supplied, else a vector disc.
-  for (const node of screen.nodes) {
-    const drew = resources ? blitNode(ctx, node, resources) : false;
-
-    if (!drew) {
-      const r = Math.max(1.2, node.radius);
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = node.allocated ? KIND_COLOR[node.kind] : withAlpha(KIND_COLOR[node.kind], 0.4);
-      ctx.fill();
-    }
-
-    // A socketed jewel: draw its item icon in the socket (rarity gem fallback).
-    if (node.kind === 'jewel' && node.jewel) {
-      drawJewelGem(ctx, node, images);
-    }
-
-    // Hover ring sized to the node's frame/icon, not its (large) footprint
-    // radius — masteries have no disc to outline, so skip them.
-    if (node.skill === hover && node.kind !== 'mastery') {
-      const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + 3;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, outline, 0, Math.PI * 2);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-  }
-}
-
-/**
- * Standing emphasis for a set of skills (name-search hits): a soft teal glow
- * under a bright core ring, sized to each node's frame like the hover ring. The
- * ring pulses — opacity and radius breathe on a time phase, so matches stay
- * eye-catching against the static tree. Masteries have no disc to outline, so
- * skip them. Driven by the highlight rAF loop, which redraws every frame.
- */
-function drawHighlight(ctx: CanvasRenderingContext2D, screen: ScreenScene, highlight: Set<number>): void {
-  const pulse = (Math.sin(performance.now() / 320) + 1) / 2; // 0..1, ~2s period
-  const glowAlpha = 0.2 + pulse * 0.45;
-  const coreAlpha = 0.55 + pulse * 0.45;
-  const grow = pulse * 5;
-
-  for (const node of screen.nodes) {
-    if (!highlight.has(node.skill) || node.kind === 'mastery') {
-      continue;
-    }
-
-    const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + 6 + grow;
-
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, outline, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(63, 174, 159, ${glowAlpha})`;
-    ctx.lineWidth = 8;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, outline, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(125, 249, 224, ${coreAlpha})`;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-  }
-}
-
-/** Edge key matching the page's preview set: `min-max` of the two node ids. */
-function edgeKey(a: number, b: number): string {
-  return a < b ? `${a}-${b}` : `${b}-${a}`;
-}
-
-/**
- * Draw the hover preview on top of the base render: the path's edges as a glowing
- * line and its nodes ringed. Gold for an allocate preview, red for a removal.
- */
-function drawPreview(ctx: CanvasRenderingContext2D, screen: ScreenScene, preview: AllocationPreview): void {
-  ctx.lineCap = 'round';
-
-  for (const conn of screen.connections) {
-    if (!preview.edges.has(edgeKey(conn.from, conn.to))) {
-      continue;
-    }
-
-    ctx.beginPath();
-
-    if (conn.kind === 'arc' && conn.arc) {
-      ctx.arc(conn.arc.cx, conn.arc.cy, conn.arc.radius, conn.arc.startAngle, conn.arc.endAngle, conn.arc.clockwise);
-    } else {
-      ctx.moveTo(conn.a.x, conn.a.y);
-      ctx.lineTo(conn.b.x, conn.b.y);
-    }
-
-    strokePreview(ctx, preview.kind, screen.scale);
-  }
-}
-
-/** Stroke the current path as a preview rail: a soft glow under a bright core. */
-function strokePreview(ctx: CanvasRenderingContext2D, kind: AllocationPreview['kind'], scale: number): void {
-  const color = kind === 'remove' ? 'rgba(235, 96, 96, 0.95)' : 'rgba(255, 226, 150, 0.98)';
-  const glow = kind === 'remove' ? 'rgba(235, 96, 96, 0.35)' : 'rgba(255, 226, 150, 0.4)';
-
-  ctx.strokeStyle = glow;
-  ctx.lineWidth = Math.max(3, 9 * scale);
-  ctx.stroke();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(1.5, 4 * scale);
-  ctx.stroke();
-}
-
 /**
  * Hit-test that accounts for the relocated active ascendancy disc: try its
  * nodes (translated into the hub) first, then the main tree via core's nodeAt.
  */
-function hitTest(
-  scene: Scene,
-  viewport: Viewport,
-  sx: number,
-  sy: number,
-  activeAscendancy: string | undefined,
-): number | null {
+function hitTest(scene: Scene, viewport: Viewport, sx: number, sy: number, activeAscendancy: string | undefined): number | null {
   if (activeAscendancy) {
     const disc = scene.centre.ascendancies.find((a) => a.id === activeAscendancy);
 
@@ -837,297 +1101,4 @@ function hitTest(
   }
 
   return nodeAt(scene, viewport, sx, sy);
-}
-
-/**
- * Draw the active ascendancy disc relocated into the hub: each of its nodes is
- * translated from the disc's world anchor to the centre, then projected and
- * blitted. Drawing them at their raw world anchor is the identity of this
- * transform.
- */
-function drawAscendancy(
-  ctx: CanvasRenderingContext2D,
-  scene: Scene,
-  viewport: Viewport,
-  activeAscendancy: string,
-  resources: RenderResources | undefined,
-  hover: number | null,
-  preview: AllocationPreview | null | undefined,
-): void {
-  const disc = scene.centre.ascendancies.find((a) => a.id === activeAscendancy);
-
-  if (!disc) {
-    return;
-  }
-
-  const { centre } = scene.centre;
-  const dx = centre.x - disc.worldAnchor.x;
-  const dy = centre.y - disc.worldAnchor.y;
-  const scale = viewport.scale;
-
-  // Edges first (under the nodes), relocated by the same translation.
-  ctx.lineCap = 'round';
-  // Inactive first, then active — active rails always sit on top.
-  const ascConnections = scene.connections
-    .filter((conn) => conn.ascendancy === activeAscendancy)
-    .sort((a, b) => Number(a.active) - Number(b.active));
-
-  for (const conn of ascConnections) {
-    const a = projectPoint(viewport, { x: conn.a.x + dx, y: conn.a.y + dy });
-    const b = projectPoint(viewport, { x: conn.b.x + dx, y: conn.b.y + dy });
-    ctx.beginPath();
-
-    if (conn.kind === 'arc' && conn.arc) {
-      const c = projectPoint(viewport, { x: conn.arc.cx + dx, y: conn.arc.cy + dy });
-      ctx.arc(c.x, c.y, conn.arc.radius * scale, conn.arc.startAngle, conn.arc.endAngle, conn.arc.clockwise);
-    } else {
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-    }
-
-    strokeAscendancyRail(ctx, conn.active, scale);
-  }
-
-  for (const node of scene.nodes) {
-    if (node.ascendancy !== activeAscendancy) {
-      continue;
-    }
-
-    const screen = projectPoint(viewport, { x: node.x + dx, y: node.y + dy });
-    const placed: ScreenNode = {
-      skill: node.skill,
-      x: screen.x,
-      y: screen.y,
-      kind: node.kind,
-      icon: node.icon,
-      iconSize: node.iconSize * scale,
-      frameSize: node.frameSize * scale,
-      radius: node.radius * scale,
-      allocated: node.allocated,
-    };
-    const drew = resources ? blitNode(ctx, placed, resources) : false;
-
-    if (!drew) {
-      ctx.beginPath();
-      ctx.arc(placed.x, placed.y, Math.max(1.5, placed.radius), 0, Math.PI * 2);
-      ctx.fillStyle = placed.allocated ? KIND_COLOR[placed.kind] : withAlpha(KIND_COLOR[placed.kind], 0.5);
-      ctx.fill();
-    }
-
-    if (node.skill === hover && node.kind !== 'mastery') {
-      const outline = (placed.frameSize > 0 ? placed.frameSize : placed.iconSize) / 2 + 3;
-      ctx.beginPath();
-      ctx.arc(placed.x, placed.y, outline, 0, Math.PI * 2);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-  }
-
-  // Hover preview on top, relocated like the edges: the gold path a click would
-  // allocate within the ascendancy, or the red set it would remove.
-  if (preview) {
-    ctx.lineCap = 'round';
-
-    for (const conn of ascConnections) {
-      if (!preview.edges.has(edgeKey(conn.from, conn.to))) {
-        continue;
-      }
-
-      ctx.beginPath();
-
-      if (conn.kind === 'arc' && conn.arc) {
-        const c = projectPoint(viewport, { x: conn.arc.cx + dx, y: conn.arc.cy + dy });
-        ctx.arc(c.x, c.y, conn.arc.radius * scale, conn.arc.startAngle, conn.arc.endAngle, conn.arc.clockwise);
-      } else {
-        const a = projectPoint(viewport, { x: conn.a.x + dx, y: conn.a.y + dy });
-        const b = projectPoint(viewport, { x: conn.b.x + dx, y: conn.b.y + dy });
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-      }
-
-      strokePreview(ctx, preview.kind, scale);
-    }
-  }
-}
-
-/**
- * Draw a socketed jewel inside its socket: the jewel's own item icon when its
- * art has loaded, otherwise a rarity-coloured gem disc as a fallback. The art is
- * tinted with a soft rarity glow so the socket reads as filled at a glance.
- */
-function drawJewelGem(ctx: CanvasRenderingContext2D, node: ScreenNode, images: Map<string, HTMLImageElement>): void {
-  const frame = node.frameSize > 0 ? node.frameSize : node.iconSize;
-  const color = RARITY_COLOR[node.jewel?.rarity ?? ''] ?? '#d6d6d6';
-  const iconUrl = node.jewel?.icon;
-  const art = iconUrl ? images.get(iconUrl) : undefined;
-
-  if (art) {
-    // Jewel item icons are square; fit them inside the ornate socket opening.
-    const size = frame * 0.62;
-    ctx.save();
-    ctx.shadowColor = withAlpha(color, 0.8);
-    ctx.shadowBlur = size * 0.35;
-    ctx.drawImage(art, node.x - size / 2, node.y - size / 2, size, size);
-    ctx.restore();
-
-    return;
-  }
-
-  const radius = Math.max(2, frame * 0.2);
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(node.x, node.y, radius, 0, TWO_PI);
-  const gradient = ctx.createRadialGradient(node.x, node.y, radius * 0.1, node.x, node.y, radius);
-  gradient.addColorStop(0, '#ffffff');
-  gradient.addColorStop(0.45, color);
-  gradient.addColorStop(1, withAlpha(color, 0.65));
-  ctx.fillStyle = gradient;
-  ctx.shadowColor = color;
-  ctx.shadowBlur = radius;
-  ctx.fill();
-  ctx.restore();
-}
-
-/** Blit a node's skill icon and overlay frame from the atlases. */
-function blitNode(ctx: CanvasRenderingContext2D, node: ScreenNode, resources: RenderResources): boolean {
-  // Masteries are drawn as their effect pattern, not as a node disc/icon.
-  if (node.kind === 'mastery') {
-    return true;
-  }
-
-  const iconKey = iconKeyFor(node.kind, node.icon, node.allocated);
-  const drewIcon = iconKey ? blitFromAtlas(ctx, resources, iconKey, node.x, node.y, node.iconSize) : false;
-  const frameKey = frameKeyFor(node.kind, node.allocated);
-  const drewFrame = frameKey ? blitFromAtlas(ctx, resources, frameKey, node.x, node.y, node.frameSize) : false;
-
-  // Drawing a frame counts as handled (e.g. an empty jewel socket has no icon).
-  return drewIcon || drewFrame;
-}
-
-/** Draw a manifest sprite centred at (cx, cy) at the given screen size. */
-function blitFromAtlas(
-  ctx: CanvasRenderingContext2D,
-  resources: RenderResources,
-  key: string,
-  cx: number,
-  cy: number,
-  size: number,
-): boolean {
-  const frame = resources.manifest.frames[key];
-
-  if (!frame) {
-    return false;
-  }
-
-  const img = resources.atlases[frame.atlas];
-
-  if (!img) {
-    return false;
-  }
-
-  ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, cx - size / 2, cy - size / 2, size, size);
-
-  return true;
-}
-
-const TWO_PI = Math.PI * 2;
-
-/**
- * Vector stand-in for the centre art: the ornate frame ring, a marker per class
- * at its rim position (`startAngle`), and a highlighted band pointing at the
- * active class — the visible proof of the core-derived rotation. Real atlas art
- * replaces this later; the geometry it sits on is identical.
- */
-function drawCentre(
-  ctx: CanvasRenderingContext2D,
-  scene: Scene,
-  viewport: Viewport,
-  activeClassId: number | undefined,
-  centreSprites: TreeViewProps['centreSprites'],
-  images: Map<string, HTMLImageElement>,
-): void {
-  const layout = scene.centre;
-  const c = projectPoint(viewport, layout.centre);
-  const scale = viewport.scale;
-  const active = layout.classes.find((cls) => cls.classId === activeClassId);
-
-  const portrait = centreSprites?.portrait;
-  const ringStatic = centreSprites?.ringStatic;
-  const ringActive = centreSprites?.ringActive;
-  const haveArt = Boolean(portrait || ringStatic || ringActive);
-
-  // Layers back-to-front: portrait, rotating active band, ornate frame.
-  if (portrait) {
-    blitCentre(ctx, images.get(portrait.url), portrait, c.x, c.y, layout.ring.artRadius * scale, 0);
-  }
-
-  if (ringActive && active) {
-    blitCentre(ctx, images.get(ringActive.url), ringActive, c.x, c.y, layout.ring.activeRadius * scale, active.ringRotation);
-  }
-
-  if (ringStatic) {
-    blitCentre(ctx, images.get(ringStatic.url), ringStatic, c.x, c.y, layout.ring.frameRadius * scale, 0);
-  }
-
-  if (haveArt) {
-    return;
-  }
-
-  // Vector stand-in when no art is supplied.
-  ctx.beginPath();
-  ctx.arc(c.x, c.y, layout.ring.frameRadius * scale, 0, TWO_PI);
-  ctx.strokeStyle = 'rgba(217, 184, 106, 0.22)';
-  ctx.lineWidth = Math.max(1, 3 * scale);
-  ctx.stroke();
-
-  if (active) {
-    const span = Math.PI / 5;
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, layout.ring.activeRadius * scale, active.startAngle - span, active.startAngle + span);
-    ctx.strokeStyle = '#d9b86a';
-    ctx.lineWidth = Math.max(2, 9 * scale);
-    ctx.lineCap = 'round';
-    ctx.stroke();
-  }
-
-  ctx.beginPath();
-  ctx.arc(c.x, c.y, layout.innerRadius * scale, 0, TWO_PI);
-  ctx.strokeStyle = 'rgba(217, 184, 106, 0.6)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-}
-
-/** Blit a centre sprite centred on the hub, sized to a screen radius, rotated. */
-function blitCentre(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement | undefined,
-  rect: CentreSprite,
-  cx: number,
-  cy: number,
-  radius: number,
-  rotation: number,
-): void {
-  if (!img) {
-    return;
-  }
-
-  ctx.save();
-  ctx.translate(cx, cy);
-
-  if (rotation !== 0) {
-    ctx.rotate(rotation);
-  }
-
-  ctx.drawImage(img, rect.sx, rect.sy, rect.sw, rect.sh, -radius, -radius, radius * 2, radius * 2);
-  ctx.restore();
-}
-
-function withAlpha(hex: string, alpha: number): string {
-  const value = parseInt(hex.slice(1), 16);
-  const r = (value >> 16) & 255;
-  const g = (value >> 8) & 255;
-  const b = value & 255;
-
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
