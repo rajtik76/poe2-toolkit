@@ -64,8 +64,11 @@ function arcCentre(
   const half = Math.sqrt(radius * radius - (dist / 2) ** 2);
   const sign = side < 0 ? -1 : 1;
 
-  // Midpoint offset along the unit perpendicular to AB.
-  return { x: (a.x + b.x) / 2 + (sign * half * -dy) / dist, y: (a.y + b.y) / 2 + (sign * half * dx) / dist };
+  // Midpoint offset along the unit perpendicular to AB. Handedness matches GGG's
+  // own renderer (Path of Building's `PassiveTree:BuildConnector`): with `a` the
+  // edge's owning node and `b` its target, `+perp·(dy,−dx)/dist`. The mirror of
+  // this (negating both) bows every arc the wrong way.
+  return { x: (a.x + b.x) / 2 + (sign * half * dy) / dist, y: (a.y + b.y) / 2 - (sign * half * dx) / dist };
 }
 
 const ASC_RADIUS = 1332;
