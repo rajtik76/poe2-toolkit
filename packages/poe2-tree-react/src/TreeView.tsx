@@ -245,6 +245,33 @@ export function TreeView({
     }
   }, [scene, activeClassId, activeAscendancy, centreSprites, resources, preview, highlight]);
 
+  // Coalesce repaints to one per animation frame. Pan and zoom can fire many
+  // pointer/wheel events per frame (coalesced moves, high-Hz mice); without this
+  // each one forced a full project + redraw, so the tree stuttered under drag.
+  // `drawRef` always points at the latest `draw`, keeping `scheduleDraw` stable.
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+  const rafRef = useRef<number | null>(null);
+  const scheduleDraw = useCallback(() => {
+    if (rafRef.current !== null) {
+      return;
+    }
+
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      drawRef.current();
+    });
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    },
+    [],
+  );
+
   // While a highlight set is active, drive its pulse by redrawing every frame.
   // Idle (no matches) keeps the tree static — no animation cost.
   useEffect(() => {
@@ -254,13 +281,13 @@ export function TreeView({
 
     let raf = 0;
     const tick = (): void => {
-      draw();
+      scheduleDraw();
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
 
     return () => cancelAnimationFrame(raf);
-  }, [highlight, draw]);
+  }, [highlight, scheduleDraw]);
 
   // Load centre sprite images; redraw as each arrives.
   useEffect(() => {
@@ -376,7 +403,7 @@ export function TreeView({
         drag.y = event.clientY;
         viewport.tx += dx;
         viewport.ty += dy;
-        draw();
+        scheduleDraw();
 
         return;
       }
@@ -389,10 +416,10 @@ export function TreeView({
         hoverRef.current = hit;
         const node = hit !== null ? scene.nodes.find((candidate) => candidate.skill === hit) : undefined;
         onNodeHover?.(hit, node ? projectPoint(viewport, { x: node.x, y: node.y }) : undefined);
-        draw();
+        scheduleDraw();
       }
     },
-    [scene, draw, onNodeHover, activeAscendancy],
+    [scene, scheduleDraw, onNodeHover, activeAscendancy],
   );
 
   const onPointerUp = useCallback(
@@ -448,10 +475,10 @@ export function TreeView({
       viewport.tx = px - (px - viewport.tx) * ratio;
       viewport.ty = py - (py - viewport.ty) * ratio;
       viewport.scale = scale;
-      draw();
+      scheduleDraw();
       forceRedraw((n) => n + 1);
     },
-    [draw],
+    [scheduleDraw],
   );
 
   useImperativeHandle(
@@ -633,18 +660,29 @@ function drawVector(
   // kite-quad texture warp (WebGL).
   ctx.lineCap = 'round';
 
-  // Inactive first, then active — active rails always sit on top.
-  for (const conn of [...screen.connections].sort((a, b) => Number(a.active) - Number(b.active))) {
-    ctx.beginPath();
+  // Inactive first, then active — active rails always sit on top. Two passes over
+  // the existing array rather than a sorted copy: this runs every animation frame
+  // during a pan, so the per-frame allocation + sort of ~1.5k connections is worth
+  // avoiding.
+  for (let pass = 0; pass < 2; pass++) {
+    const wantActive = pass === 1;
 
-    if (conn.kind === 'arc' && conn.arc) {
-      ctx.arc(conn.arc.cx, conn.arc.cy, conn.arc.radius, conn.arc.startAngle, conn.arc.endAngle, conn.arc.clockwise);
-    } else {
-      ctx.moveTo(conn.a.x, conn.a.y);
-      ctx.lineTo(conn.b.x, conn.b.y);
+    for (const conn of screen.connections) {
+      if (conn.active !== wantActive) {
+        continue;
+      }
+
+      ctx.beginPath();
+
+      if (conn.kind === 'arc' && conn.arc) {
+        ctx.arc(conn.arc.cx, conn.arc.cy, conn.arc.radius, conn.arc.startAngle, conn.arc.endAngle, conn.arc.clockwise);
+      } else {
+        ctx.moveTo(conn.a.x, conn.a.y);
+        ctx.lineTo(conn.b.x, conn.b.y);
+      }
+
+      strokeRail(ctx, conn.active, screen.scale);
     }
-
-    strokeRail(ctx, conn.active, screen.scale);
   }
 
   // Nodes: real atlas art when supplied, else a vector disc.
