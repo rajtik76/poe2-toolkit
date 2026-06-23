@@ -695,7 +695,9 @@ function buildScene(
     const disc = scene.centre.ascendancies.find((a) => a.id === activeAscendancy);
 
     if (disc) {
-      ascLayer.position.set(scene.centre.centre.x - disc.worldAnchor.x, scene.centre.centre.y - disc.worldAnchor.y);
+      const offsetX = scene.centre.centre.x - disc.worldAnchor.x;
+      const offsetY = scene.centre.centre.y - disc.worldAnchor.y;
+      ascLayer.position.set(offsetX, offsetY);
       const ascConns = scene.connections.filter((conn) => conn.ascendancy === activeAscendancy);
       const ascGraphics = new Graphics();
       buildConnections(ascGraphics, ascConns, true);
@@ -704,6 +706,12 @@ function buildScene(
       for (const node of scene.nodes) {
         if (node.ascendancy === activeAscendancy) {
           buildNode(ascLayer, node, resources, tex);
+
+          // Debug ids live on the (un-offset) label layer, so add the disc's
+          // relocation offset to land each label on its relocated node.
+          if (debugIds) {
+            labelLayer.addChild(idLabel(node.skill, node.x + offsetX, node.y + offsetY));
+          }
         }
       }
     }
