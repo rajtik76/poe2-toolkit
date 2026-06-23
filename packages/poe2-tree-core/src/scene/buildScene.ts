@@ -39,6 +39,12 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
     }
   }
 
+  // A conditional node (GGG `unlockConstraint`) is shown only once ALL its unlock
+  // nodes are allocated — matching PoB's checkUnlockConstraints. Non-conditional
+  // nodes are always revealed; a conditional node with no unlock nodes stays hidden.
+  const isRevealed = (node: TreeNode): boolean =>
+    !node.conditional || (node.unlockNodes !== undefined && node.unlockNodes.every((id) => allocated.has(id)));
+
   // Active class's per-node display overrides (the Witch's "Spell and Minion
   // Damage" for the generic "Spell Damage" node, etc.).
   const overridePairs = data.classes.find((cls) => cls.id === opts.allocation?.classId)?.overridePairs;
@@ -69,9 +75,8 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
     }
 
     // Conditional nodes (GGG `unlockConstraint`, e.g. Oracle-locked passives):
-    // the official tree never renders these — they only surface in-game when the
-    // constraint is met — so keep them out entirely.
-    if (node.conditional) {
+    // hidden until every unlock node is allocated, then revealed like in-game.
+    if (!isRevealed(node)) {
       continue;
     }
 
@@ -139,7 +144,7 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
         !target ||
         isClassStart(target) ||
         isHiddenSocket(target) ||
-        target.conditional ||
+        !isRevealed(target) ||
         node.isMastery ||
         target.isMastery
       ) {

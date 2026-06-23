@@ -110,6 +110,11 @@ export interface TreeNode {
   conditional?: boolean;
   /** Ascendancy id that unlocks this conditional node, when specified. */
   unlockAscendancy?: string;
+  /**
+   * Skill ids that must ALL be allocated for this conditional node to appear
+   * (GGG `unlockConstraint.nodes`). Absent/empty means it can't be revealed.
+   */
+  unlockNodes?: number[];
   /** Present on class-start nodes: names of the classes that start here. */
   classesStart?: string[];
 }

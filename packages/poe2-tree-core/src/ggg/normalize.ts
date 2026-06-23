@@ -259,6 +259,7 @@ function normalizeNode(
     ...(raw.isGenericAttribute && attributeOptions.length > 0 ? { options: attributeOptions } : {}),
     ...(raw.unlockConstraint ? { conditional: true } : {}),
     ...(raw.unlockConstraint?.ascendancy !== undefined ? { unlockAscendancy: raw.unlockConstraint.ascendancy } : {}),
+    ...(raw.unlockConstraint?.nodes?.length ? { unlockNodes: raw.unlockConstraint.nodes.map(Number) } : {}),
     ...(raw.classStartIndex && raw.classStartIndex.length > 0
       ? { classesStart: raw.classStartIndex.map((i) => classNames[i] ?? String(i)) }
       : {}),

@@ -98,6 +98,8 @@ interface PassiveSkillRow {
   Ascendancy?: number | null;
   Characters?: number[];
   FlavourText?: unknown;
+  /** Row indices of the passives that must be allocated for this node to appear. */
+  UnlockedBy?: number[];
 }
 
 interface StatRow { Id?: string }
@@ -133,6 +135,13 @@ export interface ExportNode {
   ascendancyId?: string;
   classStartIndex?: number[];
   flavourText?: unknown;
+  /**
+   * Allocation gate: GGG hides this node on the base tree until an unlocking
+   * passive is taken (e.g. the Oracle "The Unseen Path" clusters). `nodes` are
+   * the skill ids that unlock it; `ascendancy` is the ascendancy that owns them.
+   * Absent when the node is unconditional.
+   */
+  unlockConstraint?: { ascendancy?: string; nodes: number[] };
 }
 
 export interface ExportAscendancy { id: string; name: string; offsetX: number; offsetY: number }
@@ -378,6 +387,17 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     const classStart = characters.filter((i) => classRemap.has(i)).map((i) => classRemap.get(i)!);
     const mastery = isMasteryNode(row);
     const effect = mastery ? activeEffectImage(row) : undefined;
+    // Nodes GGG hides until an unlocking passive is allocated (e.g. Oracle's "The
+    // Unseen Path" clusters). `UnlockedBy` holds the unlocking rows by index; map
+    // them to skill ids and pick the ascendancy that owns them.
+    const unlockRows = (row.UnlockedBy ?? []).map((i) => PassiveSkills[i]).filter((r): r is PassiveSkillRow => r != null);
+    const unlockNodes = unlockRows.map((r) => r.PassiveSkillGraphId).filter((id): id is number => id != null);
+    const unlockAscendancy = unlockRows
+      .map((r) => (r.Ascendancy != null ? Ascendancy[r.Ascendancy]?.Name : undefined))
+      .find((name): name is string => Boolean(name));
+    const unlockConstraint = unlockNodes.length
+      ? { ...(unlockAscendancy ? { ascendancy: unlockAscendancy } : {}), nodes: unlockNodes }
+      : undefined;
     // A mastery's effect lights when any node it shares a `.psg` edge with (either
     // direction) is allocated. Masteries nothing points into never light, so they
     // get no activators. Pure data: when GGG re-wires the graph this just follows.
@@ -405,6 +425,7 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
       ...(row.IsAscendancyStartingNode ? { isAscendancyStart: true } : {}),
       ...(effect ? { activeEffectImage: effect } : {}),
       ...(ascId ? { ascendancyId: ascId } : {}),
+      ...(unlockConstraint ? { unlockConstraint } : {}),
       ...(classStart.length ? { classStartIndex: classStart } : {}),
       ...(row.FlavourText ? { flavourText: row.FlavourText } : {}),
     };
