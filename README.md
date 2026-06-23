@@ -13,14 +13,14 @@ Everything here is **code**. None of it bundles game data or art.
 ## Live demo and patch webhook
 
 A running instance of the passive tree built from these packages is live at
-**[poe.rajtik.com/tree](https://poe.rajtik.com/tree)** — the same `@poe2-toolkit/*`
+**[poe.rajtik.com/tree](https://poe.rajtik.com/tree)**, the same `@poe2-toolkit/*`
 core and React renderer in a real app.
 
 The same site also runs a **public patch webhook**: subscribe a URL and you get a
 signed `POST` the moment a new Path of Exile 2 client version is detected on GGG's
-patch server (`patch.pathofexile2.com`, polled every five minutes). No account, no
-polling on your side — deliveries are HMAC-SHA256 signed so you can verify they're
-genuine, and retried with backoff. Full docs at
+patch server (`patch.pathofexile2.com`, polled every five minutes). No account and
+no polling on your side; deliveries are HMAC-SHA256 signed so you can verify
+they're genuine, and retried with backoff. Full docs at
 **[poe.rajtik.com/patch-webhook](https://poe.rajtik.com/patch-webhook)**.
 
 ```bash
@@ -48,26 +48,25 @@ unsubscribe endpoints, and retry behavior.
 ## How it fits together
 
 ```
-                 ┌──────────────┐
-                 │  @poe2-toolkit/ggpk  │  fetch + decode GGPK / patch server
-                 └──────┬───────┘  (GgpkSource: table() / file())
-        ┌───────────────┼────────────────┐
-        ▼               ▼                ▼
-  tree/extractor   item/extractor   gem/extractor   ← extraction: data in, typed data out
-        │
-        ▼
-   tree/core  ──►  tree/react                        ← rendering: scene in, pixels out
+                    @poe2-toolkit/ggpk          fetch + decode GGPK / patch server
+                          |                     (GgpkSource: table() / file())
+        +-----------------+-----------------+
+        v                 v                 v
+  tree/extractor    item/extractor    gem/extractor    extraction: data in, typed data out
+        |
+        v
+   tree/core  -->  tree/react                          rendering: scene in, pixels out
 ```
 
 Acquisition happens once, in `@poe2-toolkit/ggpk`. Every extractor reads from the same
 source, so nothing is downloaded twice, and the extractors themselves stay
 agnostic to where the bytes come from.
 
-## <a name="code-only"></a>Code only — no game data
+## <a name="code-only"></a>Code only - no game data
 
 These packages ship code, not data. Each extractor either **returns formatted,
 typed data** to the caller or, via its CLI, **writes to a configurable output
-directory**. Nothing derived from the game is stored in this repository — not
+directory**. Nothing derived from the game is stored in this repository: not
 data, not art, not even test fixtures. The 1:1 verification fixtures live outside
 the repo and are located at test time through environment variables.
 
@@ -88,13 +87,6 @@ tests need a local GGPK extract and golden fixtures (both kept outside the repo)
 point `POE2_GGPK_EXTRACT`, `POE2_TREE_GOLDEN`, and `POE2_TREE_DATA` at them to run
 those locally. Without the variables, those tests skip.
 
-Enable the commit hooks once per clone (a `commit-msg` hook rejects messages that
-carry an AI-assistant trace):
-
-```sh
-git config core.hooksPath .githooks
-```
-
 ## Attributions and legal
 
 This is an unofficial, fan-made project. It is **not** affiliated with, endorsed
@@ -102,7 +94,7 @@ by, or sponsored by Grinding Gear Games.
 
 "Path of Exile" and "Path of Exile 2" are trademarks of Grinding Gear Games. All
 game content, data, and art are the property of Grinding Gear Games. This toolkit
-contains none of it — it reads data at run time from the official patch server
+contains none of it; it reads data at run time from the official patch server
 (or your own game files) and hands back the decoded result.
 
 GGPK access builds on [`pathofexile-dat`](https://github.com/SnosMe/poe-dat-viewer)
@@ -112,4 +104,4 @@ GGPK access builds on [`pathofexile-dat`](https://github.com/SnosMe/poe-dat-view
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT. See [LICENSE](./LICENSE).

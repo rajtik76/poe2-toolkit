@@ -30,4 +30,4 @@ full attribution is in the repository [NOTICE](../../NOTICE.md).
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT - see [LICENSE](./LICENSE).

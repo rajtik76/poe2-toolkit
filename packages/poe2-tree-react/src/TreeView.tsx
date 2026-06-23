@@ -187,6 +187,7 @@ export function TreeView({
   const highlightRef = useRef<Set<number> | null>(highlight ?? null);
   const previewRef = useRef<AllocationPreview | null>(preview ?? null);
   const highlightActiveRef = useRef(false);
+  const activeAscendancyRef = useRef(activeAscendancy);
   const rebuildRef = useRef<(() => void) | null>(null);
 
   // Apply the current viewport to the world container and refresh the overlay.
@@ -202,7 +203,15 @@ export function TreeView({
 
     world.scale.set(viewport.scale);
     world.position.set(viewport.tx, viewport.ty);
-    drawOverlay(overlayRef.current, sceneRef.current, viewport, hoverRef.current, highlightRef.current, previewRef.current);
+    drawOverlay(
+      overlayRef.current,
+      sceneRef.current,
+      viewport,
+      hoverRef.current,
+      highlightRef.current,
+      previewRef.current,
+      activeAscendancyRef.current,
+    );
 
     // Debug id labels are heavy; only show (and render) them once zoomed in far
     // enough to read them. Hidden, the whole layer is skipped — zero pan/zoom cost.
@@ -289,6 +298,7 @@ export function TreeView({
               hoverRef.current,
               highlightRef.current,
               previewRef.current,
+              activeAscendancyRef.current,
             );
           }
         });
@@ -318,8 +328,9 @@ export function TreeView({
     highlightRef.current = highlight ?? null;
     previewRef.current = preview ?? null;
     highlightActiveRef.current = Boolean(highlight && highlight.size > 0);
+    activeAscendancyRef.current = activeAscendancy;
     sync();
-  }, [scene, highlight, preview, sync]);
+  }, [scene, highlight, preview, activeAscendancy, sync]);
 
   // ---- Scene graph build ---------------------------------------------------
 
@@ -477,7 +488,7 @@ export function TreeView({
         hoverRef.current = hit;
         const node = hit !== null ? scene.nodes.find((candidate) => candidate.skill === hit) : undefined;
         onNodeHover?.(hit, node ? worldToScreen(viewport, node.x, node.y) : undefined);
-        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null);
+        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null, activeAscendancy);
       }
     },
     [scene, sync, onNodeHover, activeAscendancy, highlight, preview],
@@ -741,8 +752,12 @@ function buildConnections(g: Graphics, connections: Scene['connections'], ascend
     // Inactive ascendancy edges are a single solid black rail (matching the game).
     const gapColor = active ? RAIL_GAP_ACTIVE : ascendancyOnly ? null : RAIL_GAP_INACTIVE;
 
+    // Inactive ascendancy edges are a solid black rail; inactive main edges keep
+    // the bronze rail. Active edges use the gold gap colour as a single rail.
+    const railColor = active ? RAIL_GAP_ACTIVE : ascendancyOnly ? RAIL_GAP_INACTIVE : RAIL_COLOR;
+
     addConnPaths(g, want);
-    g.stroke({ width: gap + rail * 2, color: active ? RAIL_GAP_ACTIVE : RAIL_COLOR, cap: 'round' });
+    g.stroke({ width: gap + rail * 2, color: railColor, cap: 'round' });
 
     if (gapColor !== null) {
       addConnPaths(g, want);
@@ -751,16 +766,21 @@ function buildConnections(g: Graphics, connections: Scene['connections'], ascend
   }
 }
 
-/** Append every connection's path (line or arc) to the current Graphics path. */
-function addConnPaths(g: Graphics, connections: Scene['connections']): void {
+/**
+ * Append every connection's path (line or arc) to the current Graphics path,
+ * shifted by (ox, oy). The offset relocates an ascendancy disc's overlay paths
+ * into the hub, matching where its nodes are drawn (the overlay layer itself
+ * carries no transform).
+ */
+function addConnPaths(g: Graphics, connections: Scene['connections'], ox = 0, oy = 0): void {
   for (const conn of connections) {
     if (conn.kind === 'arc' && conn.arc) {
       const { cx, cy, radius, startAngle, endAngle, clockwise } = conn.arc;
-      g.moveTo(cx + radius * Math.cos(startAngle), cy + radius * Math.sin(startAngle));
-      g.arc(cx, cy, radius, startAngle, endAngle, clockwise);
+      g.moveTo(cx + ox + radius * Math.cos(startAngle), cy + oy + radius * Math.sin(startAngle));
+      g.arc(cx + ox, cy + oy, radius, startAngle, endAngle, clockwise);
     } else {
-      g.moveTo(conn.a.x, conn.a.y);
-      g.lineTo(conn.b.x, conn.b.y);
+      g.moveTo(conn.a.x + ox, conn.a.y + oy);
+      g.lineTo(conn.b.x + ox, conn.b.y + oy);
     }
   }
 }
@@ -1034,6 +1054,7 @@ function drawOverlay(
   hover: number | null,
   highlight: Set<number> | null,
   preview: AllocationPreview | null,
+  activeAscendancy?: string,
 ): void {
   if (!g || !viewport) {
     return;
@@ -1042,6 +1063,14 @@ function drawOverlay(
   g.clear();
   const scale = viewport.scale;
   const px = (value: number): number => value / scale;
+
+  // The active ascendancy's nodes are drawn relocated into the hub; its overlay
+  // (preview/highlight/hover) must carry the same offset or it lands far away.
+  const disc = activeAscendancy ? scene.centre.ascendancies.find((a) => a.id === activeAscendancy) : undefined;
+  const ascOx = disc ? scene.centre.centre.x - disc.worldAnchor.x : 0;
+  const ascOy = disc ? scene.centre.centre.y - disc.worldAnchor.y : 0;
+  const offsetFor = (ascendancy?: string): [number, number] =>
+    ascendancy && ascendancy === activeAscendancy ? [ascOx, ascOy] : [0, 0];
 
   // Allocation preview rails (under the rings). Widths are world units (like the
   // base rails), clamped to a small on-screen minimum — matching the Canvas2D
@@ -1056,9 +1085,10 @@ function drawOverlay(
         continue;
       }
 
-      addConnPaths(g, [conn]);
+      const [ox, oy] = offsetFor(conn.ascendancy);
+      addConnPaths(g, [conn], ox, oy);
       g.stroke({ width: Math.max(9, px(3)), color, alpha: glow, cap: 'round' });
-      addConnPaths(g, [conn]);
+      addConnPaths(g, [conn], ox, oy);
       g.stroke({ width: Math.max(4, px(1.5)), color, alpha: core, cap: 'round' });
     }
   }
@@ -1075,9 +1105,10 @@ function drawOverlay(
         continue;
       }
 
+      const [ox, oy] = offsetFor(node.ascendancy);
       const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + px(6 + grow);
-      g.circle(node.x, node.y, outline).stroke({ width: px(8), color: 0x3fae9f, alpha: glowAlpha });
-      g.circle(node.x, node.y, outline).stroke({ width: px(3), color: 0x7df9e0, alpha: coreAlpha });
+      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(8), color: 0x3fae9f, alpha: glowAlpha });
+      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(3), color: 0x7df9e0, alpha: coreAlpha });
     }
   }
 
@@ -1086,8 +1117,9 @@ function drawOverlay(
     const node = scene.nodes.find((candidate) => candidate.skill === hover);
 
     if (node && node.kind !== 'mastery') {
+      const [ox, oy] = offsetFor(node.ascendancy);
       const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + px(3);
-      g.circle(node.x, node.y, outline).stroke({ width: px(2), color: 0xffffff });
+      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(2), color: 0xffffff });
     }
   }
 }

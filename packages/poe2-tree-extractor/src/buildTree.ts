@@ -14,7 +14,7 @@ import { buildStatIndex, renderBlock   } from '@poe2-toolkit/ggpk';
 import type {GgpkSource, StatIndex} from '@poe2-toolkit/ggpk';
 
 import { parsePsg } from './psg.js';
-import type { Psg } from './psg.js';
+import type { Psg, PsgNode } from './psg.js';
 
 // Orbit radii derived from the live tree (zero spread per orbit; angle formula
 // matched 5150/5150 baked positions). Index = orbit.
@@ -24,7 +24,7 @@ const ORBIT_RADII = [0, 82, 164, 334, 488, 657, 839, 250, 1076, 1320];
 const LINE_SENTINEL = 2147483647;
 
 /** World position of a graph node from its group anchor + orbit ring + slot. */
-function orbitPosition(psg: Psg, node: { group: number; orbit: number; orbitIndex: number }): { x: number; y: number } {
+export function orbitPosition(psg: Psg, node: { group: number; orbit: number; orbitIndex: number }): { x: number; y: number } {
   const group = psg.groups[node.group];
 
   if (!group) {
@@ -43,7 +43,7 @@ function orbitPosition(psg: Psg, node: { group: number; orbit: number; orbitInde
  * sign of the per-edge orbit word) selects. Null when no such circle exists (the
  * points are coincident or further apart than the diameter) — then it's a line.
  */
-function arcCentre(
+export function arcCentre(
   a: { x: number; y: number },
   b: { x: number; y: number },
   radius: number,
@@ -69,6 +69,36 @@ function arcCentre(
   // edge's owning node and `b` its target, `+perp·(dy,−dx)/dist`. The mirror of
   // this (negating both) bows every arc the wrong way.
   return { x: (a.x + b.x) / 2 + (sign * half * dy) / dist, y: (a.y + b.y) / 2 - (sign * half * dx) / dist };
+}
+
+/**
+ * Arc centre for one directed `.psg` edge (`owner` -> `other`, raw `orbit` word),
+ * or null when the edge is a straight line. Mirrors PoB's `BuildConnector`:
+ *  - sentinel orbit            -> line;
+ *  - `0`                       -> ring arc, but only for a same-group same-orbit
+ *                                 pair (centred on the group); else a spoke (line);
+ *  - `±N`                      -> a curved connector between ANY two nodes (incl.
+ *                                 cross-group), radius `ORBIT_RADII[N]`, the sign
+ *                                 choosing the bow side.
+ */
+export function edgeArcCentre(psg: Psg, owner: PsgNode, other: PsgNode | undefined, orbit: number): { x: number; y: number } | null {
+  const group = psg.groups[owner.group];
+
+  if (!group || !other || orbit === LINE_SENTINEL) {
+    return null;
+  }
+
+  if (orbit === 0) {
+    if (other.group === owner.group && other.orbit === owner.orbit && owner.orbit > 0) {
+      return { x: group.x, y: group.y };
+    }
+
+    return null;
+  }
+
+  const radius = ORBIT_RADII[Math.abs(orbit)] ?? 0;
+
+  return arcCentre(orbitPosition(psg, owner), orbitPosition(psg, other), radius, Math.sign(orbit));
 }
 
 const ASC_RADIUS = 1332;
@@ -108,6 +138,32 @@ interface PassiveSkillRow {
 
 interface SkillGemRow { BaseItemType?: number | null }
 interface BaseItemTypeRow { Name?: string }
+
+/**
+ * Lines for effects a node describes outside `Stats`: a granted skill (resolved
+ * `GrantedSkill` -> SkillGems -> BaseItemTypes name) or granted passive points.
+ * Matches PoB's passivetree export, so e.g. "Converging Paths" reads
+ * "Grants Skill: Moment of Vulnerability" and a point node "Grants 1 Passive
+ * Skill Point". Empty when the node has neither.
+ */
+export function grantedStats(row: PassiveSkillRow, skillGems: SkillGemRow[], baseItemTypes: BaseItemTypeRow[]): string[] {
+  const lines: string[] = [];
+
+  if (row.GrantedSkill != null) {
+    const gem = skillGems[row.GrantedSkill];
+    const name = gem?.BaseItemType != null ? baseItemTypes[gem.BaseItemType]?.Name : undefined;
+
+    if (name) {
+      lines.push(`Grants Skill: ${name}`);
+    }
+  }
+
+  if (row.SkillPointsGranted && row.SkillPointsGranted > 0) {
+    lines.push(`Grants ${row.SkillPointsGranted} Passive Skill Point`);
+  }
+
+  return lines;
+}
 
 interface StatRow { Id?: string }
 interface MasteryGroupRow { Art?: number | null }
@@ -271,30 +327,6 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     return renderBlock(statIdx, statIds, vals as number[]).lines.map((line) => line.replace(/\\n/g, '\n'));
   }
 
-  /**
-   * Lines for effects a node describes outside `Stats`: a granted skill (resolved
-   * SkillGems -> BaseItemTypes name) or granted passive points. Matches PoB's
-   * passivetree export, so e.g. "Converging Paths" reads "Grants Skill: ...".
-   */
-  function grantedStats(row: PassiveSkillRow): string[] {
-    const lines: string[] = [];
-
-    if (row.GrantedSkill != null) {
-      const gem = SkillGems[row.GrantedSkill];
-      const name = gem?.BaseItemType != null ? BaseItemTypes[gem.BaseItemType]?.Name : undefined;
-
-      if (name) {
-        lines.push(`Grants Skill: ${name}`);
-      }
-    }
-
-    if (row.SkillPointsGranted && row.SkillPointsGranted > 0) {
-      lines.push(`Grants ${row.SkillPointsGranted} Passive Skill Point`);
-    }
-
-    return lines;
-  }
-
   // A mastery's cluster all carry MasteryGroup; the mastery node itself grants
   // nothing (no stats) and isn't a notable/keystone.
   function isMasteryNode(row: PassiveSkillRow): boolean {
@@ -340,8 +372,6 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   const edges: ExportEdge[] = [];
 
   for (const node of psg.nodes) {
-    const group = psg.groups[node.group];
-
     for (const target of node.connections) {
       addEdge(node.skillId, target.id);
       addEdge(target.id, node.skillId);
@@ -353,26 +383,7 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
       incoming.get(target.id)!.add(node.skillId);
 
       const other = psgById.get(target.id);
-
-      if (!group || !other || target.orbit === LINE_SENTINEL) {
-        continue; // missing or explicit-line edge -> straight
-      }
-
-      let centre: { x: number; y: number } | null = null;
-
-      if (target.orbit === 0) {
-        // Default ring arc: same group AND same orbit only, centred on the group
-        // (PoB BuildConnector case B). Any other `0` edge is a straight spoke.
-        if (other.group === node.group && other.orbit === node.orbit && node.orbit > 0) {
-          centre = { x: group.x, y: group.y };
-        }
-      } else {
-        // Explicit curved connector (PoB case A): a circle of the orbit's radius
-        // through both nodes, on the side the sign selects. No same-group check —
-        // GGG bows these across groups too; the world positions already differ.
-        const radius = ORBIT_RADII[Math.abs(target.orbit)] ?? 0;
-        centre = arcCentre(orbitPosition(psg, node), orbitPosition(psg, other), radius, Math.sign(target.orbit));
-      }
+      const centre = edgeArcCentre(psg, node, other, target.orbit);
 
       if (centre) {
         edges.push({
@@ -444,7 +455,7 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
       skill: pnode.skillId,
       name: row.Name ?? '',
       icon: row.Icon_DDSFile ?? '',
-      stats: [...renderStats(row), ...grantedStats(row)],
+      stats: [...renderStats(row), ...grantedStats(row, SkillGems, BaseItemTypes)],
       group: pnode.group,
       orbit: pnode.orbit,
       orbitIndex: pnode.orbitIndex,

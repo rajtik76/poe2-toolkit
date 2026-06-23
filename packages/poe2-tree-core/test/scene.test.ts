@@ -74,15 +74,20 @@ function arcData(): TreeData {
 describe('placeConnection', () => {
   const data = arcData();
 
-  it('arcs along the group orbit (same group + orbit), centred on the group', () => {
-    const c = placeConnection(data, 1, 2);
+  it('arcs around the given arc centre, recovering the radius from the endpoints', () => {
+    // The extractor supplies the arc centre per edge (here the group centre);
+    // without one placeConnection draws a straight line (no geometric guessing).
+    const c = placeConnection(data, 1, 2, { x: 0, y: 0 });
     expect(c.kind).toBe('arc');
-    // radius is recovered from the baked endpoint distance to the group centre
     expect(c.arc?.radius).toBeCloseTo(82, 6);
     expect(c.arc?.cx).toBeCloseTo(0, 6);
     expect(c.arc?.cy).toBeCloseTo(0, 6);
     expect(c.a).toEqual({ x: 0, y: -82 });
     expect(c.b).toEqual({ x: 82, y: 0 });
+  });
+
+  it('draws a straight line when no arc centre is supplied (same group + orbit)', () => {
+    expect(placeConnection(data, 1, 2).kind).toBe('line');
   });
 
   it('draws a straight line between nodes of different groups', () => {

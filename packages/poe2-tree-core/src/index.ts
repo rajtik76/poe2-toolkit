@@ -58,6 +58,8 @@ export {
   ascendancyStartNode,
   buildAscendancyGraph,
   buildTreeGraph,
+  clearAscendancyAllocation,
+  freshAllocation,
   pathToNode,
   reachable,
   removalSet,

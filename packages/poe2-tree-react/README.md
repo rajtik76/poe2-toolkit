@@ -7,8 +7,13 @@
 
 React renderer for the Path of Exile 2 passive tree. It's a thin view layer on
 top of [`@poe2-toolkit/tree-core`](../poe2-tree-core): the core works out where
-everything goes, and this package draws it and runs the canvas, panning,
-zooming, hovering, and clicking.
+everything goes, and this package draws it on a **WebGL canvas (via PixiJS)** and
+runs panning, zooming, hovering, and clicking.
+
+The whole tree is built once as a Pixi scene graph in world space; pan and zoom
+only move the world container's transform, so the GPU recomposites without
+re-rasterising any sprites. That keeps a full-tree pan/zoom smooth even where a
+Canvas2D `drawImage` would fall back to the CPU.
 
 It does no geometry of its own. Positions, sizes, rotations, the hub layout, and
 hit-testing all come from the core. If you ever catch this package computing a
@@ -26,7 +31,7 @@ happens to use.
 | Concern | Owner |
 |---|---|
 | node positions, sizes, hub geometry, arcs, hit-test math | core |
-| canvas, device-pixel sizing, draw loop, layer order | this package |
+| WebGL canvas (PixiJS), device-pixel sizing, scene graph, layer order | this package |
 | pan, zoom, wheel, fullscreen, pointer hover and click | this package |
 | loading atlas bitmaps, colors, tooltips, surrounding UI | you |
 
@@ -36,7 +41,8 @@ happens to use.
 npm install @poe2-toolkit/tree-react @poe2-toolkit/tree-core
 ```
 
-React 18 or newer is a peer dependency.
+React 18 or newer is a peer dependency. PixiJS (`pixi.js` v8) is a direct
+dependency, pulled in automatically. It's the WebGL backend.
 
 ## Usage
 
@@ -102,13 +108,17 @@ The hub artwork (class portrait and ornate ring) comes in through the optional
   activeAscendancy={ascId}      // relocates that ascendancy disc into the hub
   centreSprites={centreSprites} // optional portrait + ring artwork
   preview={preview}             // hover highlight: pending add (gold) / remove (red)
+  highlight={searchHits}        // skill ids to ring with a standing teal ring (e.g. search hits)
   focus={worldRect}             // pass a fresh rect to pan + zoom-fit to it
   wheelZoom                     // turn on wheel zoom (off by default)
+  debugIds                      // overlay each node's skill id (debug; off by default)
   controls={controlsRef}        // imperative zoomIn() / zoomOut()
   onNodeClick={(skill, screen) => …}
   onNodeDoubleClick={(skill) => …}
   onNodeHover={(skill, screen) => …}
   onInteractStart={() => …}     // a press started on the canvas (e.g. close popovers)
+  className={className}         // forwarded to the canvas wrapper element
+  style={style}                 // forwarded to the canvas wrapper element
 />
 ```
 
@@ -133,25 +143,6 @@ This package won't:
 - claim to be the only frontend. A Vue, Svelte, or Livewire renderer on the same
   contract is every bit as valid.
 
-## Local development
-
-In-repo, this package finds `@poe2-toolkit/tree-core` two ways:
-
-- typecheck and build read it through a `tsconfig` `paths` entry that points at
-  the sibling source, so there's no build or link step;
-- `npm install` links the sibling through the `file:../poe2-tree-core`
-  dependency.
-
-When you split this out into its own repo, change two things: drop the `paths`
-block in `tsconfig.json`, and swap the `@poe2-toolkit/tree-core` dependency from
-`file:../poe2-tree-core` to a published version like `^0.1.0`.
-
-```sh
-npm install
-npm run typecheck
-npm run build
-```
-
 ## Attributions and legal
 
 This is an unofficial, fan-made project, **not** affiliated with, endorsed by, or
@@ -162,4 +153,4 @@ Gear Games for making Path of Exile 2. See the repository [NOTICE](../../NOTICE.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT. See [LICENSE](./LICENSE).

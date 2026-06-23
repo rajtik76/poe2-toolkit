@@ -7,10 +7,19 @@
  * clicks through {@link toggleAllocation}.
  */
 
-import type { TreeData, TreeNode } from '../types.js';
+import type { BuildAllocation, TreeData, TreeNode } from '../types.js';
 
 /** Adjacency list of the walkable tree: node id -> connected node ids. */
 export type TreeGraph = Map<number, Set<number>>;
+
+/**
+ * A blank allocation for a class: no nodes and no ascendancy. Switching class
+ * must deactivate everything (the previous class's tree and ascendancy paths are
+ * meaningless under a new start), so the planner resets to this on class change.
+ */
+export function freshAllocation(classId: number): BuildAllocation {
+  return { classId, allocated: [] };
+}
 
 /**
  * Walkable for pathing: real main-tree nodes plus the class-start roots.
@@ -285,6 +294,16 @@ export function toggleAllocation(
  *
  * Returns the new full allocated set (main tree + this ascendancy's nodes).
  */
+/**
+ * Drop every allocated node that belongs to `ascendancy`, keeping the main tree
+ * and any other ascendancy untouched. Switching ascendancy must deactivate the
+ * previous one's nodes (you can only path one ascendancy), so the planner calls
+ * this with the OLD ascendancy before activating the new one.
+ */
+export function clearAscendancyAllocation(data: TreeData, allocated: Iterable<number>, ascendancy: string): number[] {
+  return [...allocated].filter((id) => data.nodes[id]?.ascendancyName !== ascendancy);
+}
+
 export function toggleAscendancyAllocation(
   data: TreeData,
   ascendancy: string,

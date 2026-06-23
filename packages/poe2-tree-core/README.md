@@ -26,7 +26,7 @@ const screen = project(scene, viewport, { width: 1280, height: 720 });
 // `screen` is pixel-space: walk the arrays and blit. No math left for the view.
 ```
 
-The engine entry point is **source-agnostic** — it works against the `TreeData`
+The engine entry point is **source-agnostic**: it works against the `TreeData`
 contract and never imports anything GGG-specific. Turning a particular export
 into `TreeData` is a separate, swappable adapter; the one for GGG's official
 `data.json` lives in the `@poe2-toolkit/tree-core/ggg` subpath.
@@ -56,7 +56,7 @@ and they tend to hard-code node sizes and positions as magic constants. The goal
 here is the opposite: **from the input data alone, the engine knows exactly where
 everything is and how big it is.** Sizes, connections, and the central hub
 geometry are derived from the source data, never hand-tuned. "Looks like the
-game" becomes a property of the data, not of each author's eyeballing.
+game" becomes a property of the data, not of each author's guesswork.
 
 The package is deliberately split into two halves so the geometry can be reused
 anywhere:
@@ -79,17 +79,17 @@ The engine is a small pipeline. Each stage has one job and a plain data contract
 between it and the next:
 
 ```
-your data ──adapter──▶ TreeData ──buildScene──▶ Scene ──project──▶ ScreenScene
-                       (source)                  (world)            (pixels)
+your data --[adapter]--> TreeData --[buildScene]--> Scene --[project]--> ScreenScene
+                         (source)                    (world)             (pixels)
 ```
 
-1. **Adapter** — turn a source export into the clean
+1. **Adapter:** turn a source export into the clean
    [`TreeData`](#the-data-model-treedata) contract. The engine ships one adapter,
    `normalizeGggTree(raw, version)` from `@poe2-toolkit/tree-core/ggg`, for GGG's official
    `data.json`. It is the only code that knows GGG's field names and quirks, and
    it is tolerant by design: optional fields come and go across patches, and
    missing data never throws. To support another source, write another adapter
-   that returns `TreeData` — nothing downstream changes.
+   that returns `TreeData`, and nothing downstream changes.
 
 2. **`buildScene(data, { allocation })`** assembles a render-ready
    [`Scene`](#the-output-scene): every node positioned and sized in world space,
@@ -180,6 +180,7 @@ interface TreeNode {
   options?: NodeOption[];          // attribute nodes: Str / Dex / Int choices
   conditional?: boolean;           // hidden unless unlocked (e.g. by ascendancy)
   unlockAscendancy?: string;
+  unlockNodes?: number[];          // ids that must all be allocated to reveal it
   classesStart?: string[];         // class-start node: which classes start here
 }
 ```
@@ -213,7 +214,8 @@ interface Scene {
 Each `PlacedNode` carries its world centre, icon and frame diameters, a hit-test
 radius, its `kind` (`normal`, `notable`, `keystone`, `mastery`, `jewel`,
 `attribute`, `classStart`, `ascendancyStart`, `ascendancyNormal`,
-`ascendancyNotable`), whether it is allocated, and its owning ascendancy if any.
+`ascendancyNotable`), whether it is allocated, its owning ascendancy if any, and
+any jewel socketed into it.
 
 > Use `mainBounds`, not `bounds`, to frame the initial view. Ascendancy discs sit
 > thousands of world units out from the main tree, so fitting `bounds` would
@@ -223,9 +225,9 @@ radius, its `kind` (`normal`, `notable`, `keystone`, `mastery`, `jewel`,
 
 There are two spaces, and the boundary between them is `project`:
 
-- **World space** — the tree's own coordinate system, as it comes out of
+- **World space:** the tree's own coordinate system, as it comes out of
   `buildScene`. Stable, view-independent.
-- **Screen space** — pixels, after applying a `Viewport`
+- **Screen space:** pixels, after applying a `Viewport`
   (`screen = world * scale + (tx, ty)`).
 
 ```ts
@@ -236,10 +238,10 @@ const screen = project(scene, viewport, { width, height });
 
 Going the other way:
 
-- `projectPoint(viewport, point)` — world point to pixels.
-- `screenToWorld(viewport, sx, sy)` — pixels to a world point.
-- `nodeAt(scene, viewport, sx, sy)` — the skill id under a pixel, or `null`
-  (topmost node whose footprint contains the point). Masteries and ascendancy
+- `projectPoint(viewport, point)`: world point to pixels.
+- `screenToWorld(viewport, sx, sy)`: pixels to a world point.
+- `nodeAt(scene, viewport, sx, sy)`: the skill id under a pixel, or `null`
+  (the closest node whose footprint contains the point). Masteries and ascendancy
   nodes are excluded from hit-testing.
 
 `project` culls to the viewport and drops nodes whose projected radius is below
@@ -255,7 +257,7 @@ and are deliberately absent.
 
 ```ts
 interface BuildAllocation {
-  classId?: number;                // matches ClassDef.id; only the editable planner needs it (class start node for pathing)
+  classId?: number;                // matches ClassDef.id; only the editable planner needs it (to find the class start node for pathing)
   ascendId?: string;               // matches AscendancyDef.id, e.g. "Lich"
   allocated: number[];             // allocated skill ids
   attributeChoices?: Record<number, 'str' | 'dex' | 'int'>;
@@ -287,10 +289,10 @@ const next = toggleAllocation(data, classStartNode, new Set(allocated), clickedS
 
 The model:
 
-- **Allocate** — clicking an unallocated node allocates the shortest path to it
+- **Allocate:** clicking an unallocated node allocates the shortest path to it
   from the class start (plus the current allocation). `pathToNode` is the
   underlying breadth-first search.
-- **Remove** — clicking an allocated node removes everything beyond it (the nodes
+- **Remove:** clicking an allocated node removes everything beyond it (the nodes
   that lose their connection to the start once it is cut) and keeps the clicked
   node, which shortens the path back to that node. If nothing lies beyond it (the
   node is a tip), the node itself is removed. `removalSet` computes exactly which
@@ -337,10 +339,12 @@ Everything the engine computes is derived from the data. The rules worth knowing
 - **The 2× rule.** The game draws each sprite at twice its native width, centred
   on the node, so the world diameter is `2 × targetWidth`. `buildScene` folds the
   factor in; the renderer just scales by the viewport.
-- **Connections are lines or arcs.** GGG's `edges` table marks which edges are
-  arcs and gives the arc centre directly; those become a minor arc around that
-  centre. Edges whose endpoints share a group orbit fall back to an arc around
-  the group centre. Everything else is a straight line.
+- **Connections are lines or arcs.** Each edge carries its arc centre when it
+  bows; the renderer sweeps the minor arc around that centre, and draws a straight
+  line when there is none. The centre comes from GGG's `edges` table (`orbitX`/`orbitY`);
+  the renderer sweeps the shorter arc around it (handedness matching Path of
+  Building's `BuildConnector`), and curved connectors span different groups too,
+  not just same-orbit chords. No geometric guessing from shared group/orbit.
 - **The hub rotates per class.** The central gold ring rotates to point at the
   active class. The rotation is derived from the direction of the class's start
   node: `ringRotation = π/2 + atan2(start.y − cy, start.x − cx)`. That same
@@ -355,15 +359,15 @@ Everything the engine computes is derived from the data. The rules worth knowing
 `buildScene` drops a few things that exist in the data but are not part of the
 playable, drawn tree, to match what the official tree shows:
 
-- **Class-start nodes** — invisible launch points; their edges would dangle.
-- **Hidden special sockets** — the "Sinister Jewel Socket" decorations, which the
+- **Class-start nodes:** invisible launch points; their edges would dangle.
+- **Hidden special sockets:** the "Sinister Jewel Socket" decorations, which the
   official tree never draws.
-- **Conditional nodes** — entries gated by `unlockConstraint` (such as the
-  Oracle-only passives), which surface in-game only when their constraint is met
-  and are absent from the default tree.
-- **Mastery edges** — masteries render as a background pattern, not a connectable
+- **Conditional nodes:** entries gated by `unlockConstraint` (such as the
+  Oracle-only passives). Hidden on the default tree and revealed (with their
+  edges) once all their unlock nodes are allocated, matching the game.
+- **Mastery edges:** masteries render as a background pattern, not a connectable
   node, so edges to and from them are dropped.
-- **Main-tree ↔ ascendancy edges** — the ascendancy is a separate, relocated
+- **Main-tree to ascendancy edges:** the ascendancy is a separate, relocated
   panel, so the link crossing that boundary is not drawn.
 
 These are skipped in the scene; the data still contains them.
@@ -401,7 +405,9 @@ These are skipped in the scene; the data still contains them.
 | `classifyNode` | Node's render `kind`. |
 | `nodeTargetSize` | Derived icon/overlay/effect sizes. |
 | `chosenAttributeOption` | The Str/Dex/Int option a build picked for a node. |
+| `classOverrideNode` | The node a class shows at a position (per-class name/stats/icon override). |
 | `allocatedBounds` | World bounds of the allocated nodes. |
+| `allocatedBoundsWithCentre` | Allocated bounds grown to include the centre hub (for framing a fresh import). |
 | `classBounds` | World bounds of a class's tree sector. |
 
 **Interactive editing**
@@ -416,11 +422,13 @@ These are skipped in the scene; the data still contains them.
 | `buildAscendancyGraph` | Adjacency graph of one ascendancy. |
 | `ascendancyStartNode` | An ascendancy's pathing root. |
 | `toggleAscendancyAllocation` | Edit within one ascendancy's subgraph. |
+| `clearAscendancyAllocation` | Drop one ascendancy's allocated nodes (on ascendancy switch). |
+| `freshAllocation` | A blank allocation for a class (on class switch). |
 
 All types are exported from the main entry as well (`TreeData`, `TreeNode`,
 `Scene`, `PlacedNode`, `BuildAllocation`, `Viewport`, `ScreenScene`,
-`SpriteManifest`, and the rest). The GGG raw shape `GggTreeJson` is exported from
-the `@poe2-toolkit/tree-core/ggg` subpath.
+`SpriteManifest`, `TreeGraph`, `NodeSize`, and the rest). The GGG raw shape
+`GggTreeJson` is exported from the `@poe2-toolkit/tree-core/ggg` subpath.
 
 ## Design principles
 
@@ -442,7 +450,7 @@ the `@poe2-toolkit/tree-core/ggg` subpath.
 MIT.
 
 Path of Exile 2 and its passive-tree data are © Grinding Gear Games. This package
-ships **no game art or data** — only code. Consumers supply the tree data and
+ships **no game art or data**, only code. Consumers supply the tree data and
 graphics themselves and are responsible for their own use of GGG's assets. This
 project is not affiliated with or endorsed by Grinding Gear Games.
 

@@ -27,8 +27,8 @@ Node 18+. ESM only. TypeScript types are included.
 
 ## The contract
 
-Everything is built around one small interface — the boundary an extractor
-depends on, and the only thing that knows where bytes come from:
+Everything is built around one small interface, the boundary an extractor
+depends on and the only thing that knows where bytes come from:
 
 ```ts
 interface GgpkSource {
@@ -68,12 +68,16 @@ Producing the decoded tables is a one-time step with `pathofexile-dat`'s own CLI
 point `tablesDir` at its output. Connecting to the network is deferred to the
 first file or sprite request, so table reads only touch local disk.
 
+`cdnHost` is optional and defaults to the PoE2 patch server
+(`https://patch-poe2.poecdn.com`); override it to point at a mirror. The bundle
+cache lives in a `<patch>/` subdirectory of `cacheDir`.
+
 On top of `GgpkSource`, the CDN source adds image fetching for art-heavy
 extraction:
 
 ```ts
 interface GgpkImageSource {
-  /** Decode a DDS by its GGPK path (BC1/BC3/BC7), cached. */
+  /** Decode a DDS by its GGPK path (BC1/BC2/BC3/BC7), cached. */
   dds(path: string): Promise<RgbaImage | null>;
   /** Resolve a UIImages logical name to its backing DDS and rect. */
   resolveSprite(name: string): Promise<SpriteRef | null>;
@@ -95,6 +99,12 @@ one place rather than being reimplemented per extractor:
 | `buildStatIndex(csd)` | Parse a `stat_descriptions.csd` (UTF-16 text) into a per-stat index. |
 | `renderBlock(index, statIds, values)` | Render numeric `(stat, value)` pairs into human-readable lines. |
 
+`buildStatIndex` returns a `StatIndex`; pass it to `renderBlock` along with
+parallel `statIds`/`values` arrays. `renderBlock` returns a `RenderedBlock` with
+`lines` (the rendered text) and `unresolved` (any stat ids with no matching
+block). `RgbaImage` (`{ width, height, rgba }`) is the shape returned by every
+image decoder. All of these types are exported.
+
 All of it is pure TypeScript with no native dependencies, which keeps extraction
 portable across machines and CI.
 
@@ -107,5 +117,5 @@ between major versions, so `pathofexile-dat` is pinned as a dependency. See
 
 ## License
 
-MIT — see [LICENSE](./LICENSE). Not affiliated with Grinding Gear Games; see
+MIT. See [LICENSE](./LICENSE). Not affiliated with Grinding Gear Games; see
 [NOTICE](../../NOTICE.md).
