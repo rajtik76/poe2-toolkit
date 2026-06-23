@@ -100,7 +100,14 @@ interface PassiveSkillRow {
   FlavourText?: unknown;
   /** Row indices of the passives that must be allocated for this node to appear. */
   UnlockedBy?: number[];
+  /** SkillGems row index of a skill this node grants (no `Stats` line of its own). */
+  GrantedSkill?: number | null;
+  /** Passive skill points this node grants. */
+  SkillPointsGranted?: number;
 }
+
+interface SkillGemRow { BaseItemType?: number | null }
+interface BaseItemTypeRow { Name?: string }
 
 interface StatRow { Id?: string }
 interface MasteryGroupRow { Art?: number | null }
@@ -221,6 +228,10 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   const Ascendancy = (await source.table('Ascendancy')) as unknown as AscendancyRow[];
   const JewelSlots = (await source.table('PassiveJewelSlots')) as JewelSlotRow[];
   const ClassOverrides = (await source.table('ClassPassiveSkillOverrides')) as unknown as ClassOverrideRow[];
+  // Some nodes describe themselves via a granted skill or passive points rather
+  // than `Stats`; resolve the skill's display name through SkillGems -> BaseItemTypes.
+  const SkillGems = (await source.table('SkillGems')) as SkillGemRow[];
+  const BaseItemTypes = (await source.table('BaseItemTypes')) as BaseItemTypeRow[];
 
   // Combined stat index: the passive file `include`s the base one, but the
   // parser doesn't follow includes — merge both, passive entries win on conflict.
@@ -258,6 +269,30 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
 
     // GGG templates carry literal "\n" for multi-line stats; make it a real newline.
     return renderBlock(statIdx, statIds, vals as number[]).lines.map((line) => line.replace(/\\n/g, '\n'));
+  }
+
+  /**
+   * Lines for effects a node describes outside `Stats`: a granted skill (resolved
+   * SkillGems -> BaseItemTypes name) or granted passive points. Matches PoB's
+   * passivetree export, so e.g. "Converging Paths" reads "Grants Skill: ...".
+   */
+  function grantedStats(row: PassiveSkillRow): string[] {
+    const lines: string[] = [];
+
+    if (row.GrantedSkill != null) {
+      const gem = SkillGems[row.GrantedSkill];
+      const name = gem?.BaseItemType != null ? BaseItemTypes[gem.BaseItemType]?.Name : undefined;
+
+      if (name) {
+        lines.push(`Grants Skill: ${name}`);
+      }
+    }
+
+    if (row.SkillPointsGranted && row.SkillPointsGranted > 0) {
+      lines.push(`Grants ${row.SkillPointsGranted} Passive Skill Point`);
+    }
+
+    return lines;
   }
 
   // A mastery's cluster all carry MasteryGroup; the mastery node itself grants
@@ -409,7 +444,7 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
       skill: pnode.skillId,
       name: row.Name ?? '',
       icon: row.Icon_DDSFile ?? '',
-      stats: renderStats(row),
+      stats: [...renderStats(row), ...grantedStats(row)],
       group: pnode.group,
       orbit: pnode.orbit,
       orbitIndex: pnode.orbitIndex,
