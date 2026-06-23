@@ -250,7 +250,9 @@ export function TreeView({
   // each one forced a full project + redraw, so the tree stuttered under drag.
   // `drawRef` always points at the latest `draw`, keeping `scheduleDraw` stable.
   const drawRef = useRef(draw);
-  drawRef.current = draw;
+  useEffect(() => {
+    drawRef.current = draw;
+  }, [draw]);
   const rafRef = useRef<number | null>(null);
   const scheduleDraw = useCallback(() => {
     if (rafRef.current !== null) {
