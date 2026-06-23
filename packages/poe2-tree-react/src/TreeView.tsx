@@ -1,12 +1,12 @@
-import type { NodeKind, Scene, ScreenNode, ScreenScene, Viewport, WorldRect } from '@poe2-tree/core';
-import { nodeAt, project, projectPoint, screenToWorld } from '@poe2-tree/core';
+import type { NodeKind, Scene, ScreenNode, ScreenScene, Viewport, WorldRect } from '@poe2-toolkit/tree-core';
+import { nodeAt, project, projectPoint, screenToWorld } from '@poe2-toolkit/tree-core';
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, Ref } from 'react';
 import type { RenderResources } from './resources.js';
 import { effectKeyFor, frameKeyFor, iconKeyFor } from './spriteKeys.js';
 
 export interface TreeViewProps {
-  /** Computed geometry from `@poe2-tree/core`'s `buildScene`. */
+  /** Computed geometry from `@poe2-toolkit/tree-core`'s `buildScene`. */
   scene: Scene;
   /** Atlas bitmaps + manifest. Omit for the vector debug render (no GGG art). */
   resources?: RenderResources;
@@ -165,7 +165,7 @@ const RARITY_COLOR: Record<string, string> = {
 /**
  * Thin canvas view over a core `Scene`. It owns nothing geometric — pan, zoom,
  * device-pixel sizing, the draw loop, and hover hit-testing only. Positions,
- * sizes, projection and hit-testing all come from `@poe2-tree/core`.
+ * sizes, projection and hit-testing all come from `@poe2-toolkit/tree-core`.
  *
  * Without `resources` it renders a vector debug view (nodes as discs, edges as
  * lines/arcs, the hub opening as a ring) — enough to see the geometry before any

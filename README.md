@@ -13,7 +13,7 @@ Everything here is **code**. None of it bundles game data or art.
 ## Live demo and patch webhook
 
 A running instance of the passive tree built from these packages is live at
-**[poe.rajtik.com/tree](https://poe.rajtik.com/tree)** — the same `@poe2-tree/*`
+**[poe.rajtik.com/tree](https://poe.rajtik.com/tree)** — the same `@poe2-toolkit/*`
 core and React renderer in a real app.
 
 The same site also runs a **public patch webhook**: subscribe a URL and you get a
@@ -38,18 +38,18 @@ unsubscribe endpoints, and retry behavior.
 
 | Package | What it does | Status |
 | --- | --- | --- |
-| [`@poe2/ggpk`](./packages/poe2-ggpk) | Shared GGPK / patch-server access and the format decoders (images, stat descriptions) every extractor reuses. The only package that touches the network. | Ready |
-| [`@poe2-tree/extractor`](./packages/poe2-tree-extractor) | Builds the passive-tree data and sprite atlases from a GGPK source. | Ready |
-| [`@poe2-tree/core`](./packages/poe2-tree-core) | Headless geometry engine: tree data in, a fully positioned scene out. | Ready |
-| [`@poe2-tree/react`](./packages/poe2-tree-react) | React renderer that draws what the core computed and owns pan/zoom/interaction. | Ready |
-| [`@poe2-item/extractor`](./packages/poe2-item-extractor) | Builds item data and icons from a GGPK source. | WIP |
-| [`@poe2-gem/extractor`](./packages/poe2-gem-extractor) | Builds gem data and icons from a GGPK source. | WIP |
+| [`@poe2-toolkit/ggpk`](./packages/poe2-ggpk) | Shared GGPK / patch-server access and the format decoders (images, stat descriptions) every extractor reuses. The only package that touches the network. | Ready |
+| [`@poe2-toolkit/tree-extractor`](./packages/poe2-tree-extractor) | Builds the passive-tree data and sprite atlases from a GGPK source. | Ready |
+| [`@poe2-toolkit/tree-core`](./packages/poe2-tree-core) | Headless geometry engine: tree data in, a fully positioned scene out. | Ready |
+| [`@poe2-toolkit/tree-react`](./packages/poe2-tree-react) | React renderer that draws what the core computed and owns pan/zoom/interaction. | Ready |
+| [`@poe2-toolkit/item-extractor`](./packages/poe2-item-extractor) | Builds item data and icons from a GGPK source. | WIP |
+| [`@poe2-toolkit/gem-extractor`](./packages/poe2-gem-extractor) | Builds gem data and icons from a GGPK source. | WIP |
 
 ## How it fits together
 
 ```
                  ┌──────────────┐
-                 │  @poe2/ggpk  │  fetch + decode GGPK / patch server
+                 │  @poe2-toolkit/ggpk  │  fetch + decode GGPK / patch server
                  └──────┬───────┘  (GgpkSource: table() / file())
         ┌───────────────┼────────────────┐
         ▼               ▼                ▼
@@ -59,7 +59,7 @@ unsubscribe endpoints, and retry behavior.
    tree/core  ──►  tree/react                        ← rendering: scene in, pixels out
 ```
 
-Acquisition happens once, in `@poe2/ggpk`. Every extractor reads from the same
+Acquisition happens once, in `@poe2-toolkit/ggpk`. Every extractor reads from the same
 source, so nothing is downloaded twice, and the extractors themselves stay
 agnostic to where the bytes come from.
 

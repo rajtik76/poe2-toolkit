@@ -1,6 +1,6 @@
-# @poe2-item/extractor
+# @poe2-toolkit/item-extractor
 
-[![npm](https://img.shields.io/npm/v/@poe2-item/extractor.svg)](https://www.npmjs.com/package/@poe2-item/extractor)
+[![npm](https://img.shields.io/npm/v/@poe2-toolkit/item-extractor.svg)](https://www.npmjs.com/package/@poe2-toolkit/item-extractor)
 [![status: WIP](https://img.shields.io/badge/status-work%20in%20progress-orange.svg)](#)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
@@ -11,8 +11,8 @@ patch server.
 > currently throws. This package exists to reserve its place in the toolkit and
 > document the intended shape.
 
-It will mirror [`@poe2-tree/extractor`](../poe2-tree-extractor): source-agnostic,
-built on a [`@poe2/ggpk`](../poe2-ggpk) source, returning formatted data rather
+It will mirror [`@poe2-toolkit/tree-extractor`](../poe2-tree-extractor): source-agnostic,
+built on a [`@poe2-toolkit/ggpk`](../poe2-ggpk) source, returning formatted data rather
 than writing into the package. Planned coverage: base item types, their stats,
 and their icons.
 

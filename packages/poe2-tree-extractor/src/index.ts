@@ -1,14 +1,14 @@
 /**
- * @poe2-tree/extractor — builds the Path of Exile 2 passive-tree data and sprite
- * atlases from a {@link GgpkSource}, in the shape `@poe2-tree/core` consumes.
+ * @poe2-toolkit/tree-extractor — builds the Path of Exile 2 passive-tree data and sprite
+ * atlases from a {@link GgpkSource}, in the shape `@poe2-toolkit/tree-core` consumes.
  *
  * The package is source-agnostic: it never downloads anything itself. Pass any
- * `@poe2/ggpk` source (the CDN-backed `createCdnSource`, or your own) and it
+ * `@poe2-toolkit/ggpk` source (the CDN-backed `createCdnSource`, or your own) and it
  * returns the `data.json` payload, the four sprite atlases, and the centre art —
  * all as plain data, ready to write wherever you publish them.
  */
 
-import type { GgpkSource } from '@poe2/ggpk';
+import type { GgpkSource } from '@poe2-toolkit/ggpk';
 
 import { buildCentre  } from './buildCentre.js';
 import type {CentreSource} from './buildCentre.js';
@@ -40,7 +40,7 @@ export type { CentreSource } from './buildCentre.js';
 
 /** Everything the extractor produces for one tree version. */
 export interface TreeBundle {
-  /** The `data.json` payload (`@poe2-tree/core`'s normalize input). */
+  /** The `data.json` payload (`@poe2-toolkit/tree-core`'s normalize input). */
   data: TreeExport;
   /** The four sprite atlases plus a report of what packed or was skipped. */
   graphics: GraphicsResult;

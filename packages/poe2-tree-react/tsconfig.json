@@ -20,9 +20,9 @@
       "//": [
         "Local-dev only: resolve the sibling core package straight from source",
         "so typecheck works without a build/link. Delete this `paths` block on",
-        "extraction — `@poe2-tree/core` is then a plain published dependency."
+        "extraction — `@poe2-toolkit/tree-core` is then a plain published dependency."
       ],
-      "@poe2-tree/core": ["../poe2-tree-core/src/index.ts"]
+      "@poe2-toolkit/tree-core": ["../poe2-tree-core/src/index.ts"]
     }
   },
   "include": ["src", "test"]

@@ -1,6 +1,6 @@
-# @poe2/ggpk
+# @poe2-toolkit/ggpk
 
-[![npm](https://img.shields.io/npm/v/@poe2/ggpk.svg)](https://www.npmjs.com/package/@poe2/ggpk)
+[![npm](https://img.shields.io/npm/v/@poe2-toolkit/ggpk.svg)](https://www.npmjs.com/package/@poe2-toolkit/ggpk)
 [![types included](https://img.shields.io/badge/types-included-blue.svg)](#)
 [![ESM only](https://img.shields.io/badge/module-ESM-f7df1e.svg)](#)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -20,7 +20,7 @@ decoded result; it never bundles or redistributes anything from the game.
 ## Install
 
 ```sh
-npm install @poe2/ggpk
+npm install @poe2-toolkit/ggpk
 ```
 
 Node 18+. ESM only. TypeScript types are included.
@@ -52,7 +52,7 @@ JSON files and pulls raw files and sprites from the patch CDN on demand, caching
 them on disk.
 
 ```ts
-import { createCdnSource } from '@poe2/ggpk';
+import { createCdnSource } from '@poe2-toolkit/ggpk';
 
 const source = await createCdnSource({
   patch: '4.5.3.1.7',          // GGPK patch version

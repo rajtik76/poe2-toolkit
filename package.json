@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @poe2/ggpk && npm run build -w @poe2-tree/core && npm run build -w @poe2-tree/react && npm run build -w @poe2-tree/extractor && npm run build -w @poe2-item/extractor && npm run build -w @poe2-gem/extractor",
+    "build": "npm run build -w @poe2-toolkit/ggpk && npm run build -w @poe2-toolkit/tree-core && npm run build -w @poe2-toolkit/tree-react && npm run build -w @poe2-toolkit/tree-extractor && npm run build -w @poe2-toolkit/item-extractor && npm run build -w @poe2-toolkit/gem-extractor",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint packages",

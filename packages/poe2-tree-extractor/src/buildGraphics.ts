@@ -8,7 +8,7 @@
  * cannot serve is skipped and reported, never pulled from a vendored asset.
  */
 
-import type { GgpkImageSource, GgpkSource } from '@poe2/ggpk';
+import type { GgpkImageSource, GgpkSource } from '@poe2-toolkit/ggpk';
 
 import { desaturate, packAtlas   } from './atlas.js';
 import type {AtlasSprite, PackedAtlas} from './atlas.js';

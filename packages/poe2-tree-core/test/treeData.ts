@@ -3,7 +3,7 @@
  *
  * That file carries derived GGG game data (node names, stats, geometry), so it
  * is not part of this repo. Point `POE2_TREE_DATA` at a local `data.json` (for
- * example one produced by `@poe2-tree/extractor`) to run these tests; without
+ * example one produced by `@poe2-toolkit/tree-extractor`) to run these tests; without
  * it, the suites that need it are skipped.
  */
 

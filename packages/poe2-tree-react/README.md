@@ -1,12 +1,12 @@
-# @poe2-tree/react
+# @poe2-toolkit/tree-react
 
-[![npm](https://img.shields.io/npm/v/@poe2-tree/react.svg)](https://www.npmjs.com/package/@poe2-tree/react)
+[![npm](https://img.shields.io/npm/v/@poe2-toolkit/tree-react.svg)](https://www.npmjs.com/package/@poe2-toolkit/tree-react)
 [![types: TypeScript](https://img.shields.io/badge/types-TypeScript-3178c6.svg)](src/index.ts)
 [![React 18+](https://img.shields.io/badge/react-18%2B-61dafb.svg)](https://react.dev)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 React renderer for the Path of Exile 2 passive tree. It's a thin view layer on
-top of [`@poe2-tree/core`](../poe2-tree-core): the core works out where
+top of [`@poe2-toolkit/tree-core`](../poe2-tree-core): the core works out where
 everything goes, and this package draws it and runs the canvas, panning,
 zooming, hovering, and clicking.
 
@@ -33,7 +33,7 @@ happens to use.
 ## Install
 
 ```sh
-npm install @poe2-tree/react @poe2-tree/core
+npm install @poe2-toolkit/tree-react @poe2-toolkit/tree-core
 ```
 
 React 18 or newer is a peer dependency.
@@ -45,9 +45,9 @@ core's GGG adapter to get a `TreeData`, build a `Scene` from it, and hand that t
 `TreeView`.
 
 ```tsx
-import { buildScene } from '@poe2-tree/core';
-import { normalizeGggTree } from '@poe2-tree/core/ggg';
-import { TreeView } from '@poe2-tree/react';
+import { buildScene } from '@poe2-toolkit/tree-core';
+import { normalizeGggTree } from '@poe2-toolkit/tree-core/ggg';
+import { TreeView } from '@poe2-toolkit/tree-react';
 
 // Normalize GGG's data.json into the engine's TreeData (once per tree).
 const data = normalizeGggTree(rawGggExport, '0_5');
@@ -135,7 +135,7 @@ This package won't:
 
 ## Local development
 
-In-repo, this package finds `@poe2-tree/core` two ways:
+In-repo, this package finds `@poe2-toolkit/tree-core` two ways:
 
 - typecheck and build read it through a `tsconfig` `paths` entry that points at
   the sibling source, so there's no build or link step;
@@ -143,7 +143,7 @@ In-repo, this package finds `@poe2-tree/core` two ways:
   dependency.
 
 When you split this out into its own repo, change two things: drop the `paths`
-block in `tsconfig.json`, and swap the `@poe2-tree/core` dependency from
+block in `tsconfig.json`, and swap the `@poe2-toolkit/tree-core` dependency from
 `file:../poe2-tree-core` to a published version like `^0.1.0`.
 
 ```sh

@@ -7,8 +7,8 @@
  * skipped, never pulled from a vendored GGG sheet.
  */
 
-import { encodePng   } from '@poe2/ggpk';
-import type {GgpkImageSource, GgpkSource} from '@poe2/ggpk';
+import { encodePng   } from '@poe2-toolkit/ggpk';
+import type {GgpkImageSource, GgpkSource} from '@poe2-toolkit/ggpk';
 
 interface CharacterRow { Name: string; PassiveTreeImage?: string }
 interface AscendancyRow { Name?: string; Character?: number | null; Disabled?: boolean; PassiveTreeImage?: string }

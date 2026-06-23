@@ -1,6 +1,6 @@
 {
-  "name": "@poe2/ggpk",
-  "version": "0.0.0",
+  "name": "@poe2-toolkit/ggpk",
+  "version": "0.1.0",
   "description": "Access layer for Path of Exile 2's official GGPK / patch server: fetches and decodes game tables and raw files, and decodes GGPK image and stat-description formats. The shared base every PoE2 data extractor builds on.",
   "keywords": [
     "path-of-exile",
@@ -43,5 +43,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

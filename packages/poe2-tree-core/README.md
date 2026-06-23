@@ -1,6 +1,6 @@
-# @poe2-tree/core
+# @poe2-toolkit/tree-core
 
-[![npm](https://img.shields.io/npm/v/@poe2-tree/core.svg)](https://www.npmjs.com/package/@poe2-tree/core)
+[![npm](https://img.shields.io/npm/v/@poe2-toolkit/tree-core.svg)](https://www.npmjs.com/package/@poe2-toolkit/tree-core)
 [![types included](https://img.shields.io/badge/types-included-blue.svg)](#)
 [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](#)
 [![ESM only](https://img.shields.io/badge/module-ESM-f7df1e.svg)](#)
@@ -14,11 +14,11 @@ Pure TypeScript, zero runtime dependencies, no DOM, no canvas, no framework.
 
 > **Live demo:** this engine drives the passive tree at
 > [poe.rajtik.com/tree](https://poe.rajtik.com/tree) (rendered via
-> [`@poe2-tree/react`](../poe2-tree-react)).
+> [`@poe2-toolkit/tree-react`](../poe2-tree-react)).
 
 ```ts
-import { buildScene, project } from '@poe2-tree/core';
-import { normalizeGggTree } from '@poe2-tree/core/ggg'; // data adapter, opt-in
+import { buildScene, project } from '@poe2-toolkit/tree-core';
+import { normalizeGggTree } from '@poe2-toolkit/tree-core/ggg'; // data adapter, opt-in
 
 const data = normalizeGggTree(rawDataJson, '0_5');
 const scene = buildScene(data, { allocation });
@@ -29,7 +29,7 @@ const screen = project(scene, viewport, { width: 1280, height: 720 });
 The engine entry point is **source-agnostic** — it works against the `TreeData`
 contract and never imports anything GGG-specific. Turning a particular export
 into `TreeData` is a separate, swappable adapter; the one for GGG's official
-`data.json` lives in the `@poe2-tree/core/ggg` subpath.
+`data.json` lives in the `@poe2-toolkit/tree-core/ggg` subpath.
 
 ## Contents
 
@@ -61,14 +61,14 @@ game" becomes a property of the data, not of each author's eyeballing.
 The package is deliberately split into two halves so the geometry can be reused
 anywhere:
 
-- **`@poe2-tree/core`** (this package) does all the math and owns no pixels.
-- A thin view adapter (e.g. `@poe2-tree/react`) draws what core computed and owns
+- **`@poe2-toolkit/tree-core`** (this package) does all the math and owns no pixels.
+- A thin view adapter (e.g. `@poe2-toolkit/tree-react`) draws what core computed and owns
   no math. The same `Scene` contract is open to Vue, Svelte, or any other view.
 
 ## Install
 
 ```sh
-npm install @poe2-tree/core
+npm install @poe2-toolkit/tree-core
 ```
 
 ESM only. Node 18+. Ships its own `.d.ts`.
@@ -85,7 +85,7 @@ your data ──adapter──▶ TreeData ──buildScene──▶ Scene ──
 
 1. **Adapter** — turn a source export into the clean
    [`TreeData`](#the-data-model-treedata) contract. The engine ships one adapter,
-   `normalizeGggTree(raw, version)` from `@poe2-tree/core/ggg`, for GGG's official
+   `normalizeGggTree(raw, version)` from `@poe2-toolkit/tree-core/ggg`, for GGG's official
    `data.json`. It is the only code that knows GGG's field names and quirks, and
    it is tolerant by design: optional fields come and go across patches, and
    missing data never throws. To support another source, write another adapter
@@ -108,8 +108,8 @@ view framing).
 ## Quick start
 
 ```ts
-import { buildScene, project, nodeAt, toggleAllocation } from '@poe2-tree/core';
-import { normalizeGggTree } from '@poe2-tree/core/ggg';
+import { buildScene, project, nodeAt, toggleAllocation } from '@poe2-toolkit/tree-core';
+import { normalizeGggTree } from '@poe2-toolkit/tree-core/ggg';
 
 // 1. Normalize the official export once (cache the result per tree version).
 const data = normalizeGggTree(rawDataJson, '0_5');
@@ -275,7 +275,7 @@ For a build editor, the allocation helpers turn clicks into a new allocated set.
 They are pure graph functions, free of any rendering concern.
 
 ```ts
-import { buildTreeGraph, toggleAllocation } from '@poe2-tree/core';
+import { buildTreeGraph, toggleAllocation } from '@poe2-toolkit/tree-core';
 
 // Build the walkable adjacency graph once and reuse it across clicks.
 const graph = buildTreeGraph(data);
@@ -370,14 +370,14 @@ These are skipped in the scene; the data still contains them.
 
 ## API reference
 
-**Pipeline** (from `@poe2-tree/core`)
+**Pipeline** (from `@poe2-toolkit/tree-core`)
 
 | Export | Signature | Purpose |
 | --- | --- | --- |
 | `buildScene` | `(data: TreeData, opts?: SceneOptions) => Scene` | World-space, render-ready scene. |
 | `project` | `(scene: Scene, viewport: Viewport, size: Size) => ScreenScene` | Project + cull to pixels. |
 
-**Source adapter** (from `@poe2-tree/core/ggg`)
+**Source adapter** (from `@poe2-toolkit/tree-core/ggg`)
 
 | Export | Signature | Purpose |
 | --- | --- | --- |
@@ -420,7 +420,7 @@ These are skipped in the scene; the data still contains them.
 All types are exported from the main entry as well (`TreeData`, `TreeNode`,
 `Scene`, `PlacedNode`, `BuildAllocation`, `Viewport`, `ScreenScene`,
 `SpriteManifest`, and the rest). The GGG raw shape `GggTreeJson` is exported from
-the `@poe2-tree/core/ggg` subpath.
+the `@poe2-toolkit/tree-core/ggg` subpath.
 
 ## Design principles
 
@@ -429,7 +429,7 @@ the `@poe2-tree/core/ggg` subpath.
 - **Pure and headless.** Zero runtime dependencies. No DOM, no canvas, no
   framework. Every function is a deterministic transform over plain data.
 - **Source-agnostic core.** The engine entry point knows only the `TreeData`
-  contract; data-source adapters live in their own subpaths (`@poe2-tree/core/ggg`
+  contract; data-source adapters live in their own subpaths (`@poe2-toolkit/tree-core/ggg`
   today). Swapping or adding a source touches nothing downstream.
 - **One boundary, many producers.** The engine takes an allocation and nothing
   more. Import/export formats, OAuth, and manual editors all just produce that

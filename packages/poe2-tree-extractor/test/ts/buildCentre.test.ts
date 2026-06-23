@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createCdnSource } from '@poe2/ggpk';
+import { createCdnSource } from '@poe2-toolkit/ggpk';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 

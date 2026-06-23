@@ -1,6 +1,6 @@
 {
-  "name": "@poe2-tree/core",
-  "version": "0.0.0",
+  "name": "@poe2-toolkit/tree-core",
+  "version": "0.1.0",
   "description": "Headless, framework-agnostic geometry engine for the Path of Exile 2 passive tree. Data in, game-accurate scene out. Positions and sizes derived from the source data, never hand-tuned.",
   "keywords": [
     "path-of-exile",
@@ -43,5 +43,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

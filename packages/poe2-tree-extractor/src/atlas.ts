@@ -3,7 +3,7 @@
  * frame-map the renderer reads (`{ frames: { key: { frame: { x, y, w, h } } } }`).
  */
 
-import { encodePng } from '@poe2/ggpk';
+import { encodePng } from '@poe2-toolkit/ggpk';
 
 /** A decoded sprite to place in an atlas, keyed by its renderer atlas key. */
 export interface AtlasSprite {

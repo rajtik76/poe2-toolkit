@@ -13,7 +13,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { createCdnSource } from '@poe2/ggpk';
+import { createCdnSource } from '@poe2-toolkit/ggpk';
 
 import { extractTree } from './index.js';
 

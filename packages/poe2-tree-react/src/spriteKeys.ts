@@ -8,7 +8,7 @@
  * Supplying a different atlas set means swapping this one module.
  */
 
-import type { NodeKind } from '@poe2-tree/core';
+import type { NodeKind } from '@poe2-toolkit/tree-core';
 
 /**
  * Skill-icon atlas key for a node, or null when the node has no skill icon

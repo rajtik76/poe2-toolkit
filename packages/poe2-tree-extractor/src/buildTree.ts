@@ -1,6 +1,6 @@
 /**
  * Builds the passive-tree `data.json` from GGPK tables + the `.psg` graph, in
- * the shape `@poe2-tree/core`'s `normalizeGggTree` expects. Source of truth:
+ * the shape `@poe2-toolkit/tree-core`'s `normalizeGggTree` expects. Source of truth:
  * GGPK only.
  *
  * Linkage (verified): a node's `skill` = PassiveSkillGraphId; the `.psg` keys
@@ -10,8 +10,8 @@
  * stat-description files.
  */
 
-import { buildStatIndex, renderBlock   } from '@poe2/ggpk';
-import type {GgpkSource, StatIndex} from '@poe2/ggpk';
+import { buildStatIndex, renderBlock   } from '@poe2-toolkit/ggpk';
+import type {GgpkSource, StatIndex} from '@poe2-toolkit/ggpk';
 
 import { parsePsg } from './psg.js';
 

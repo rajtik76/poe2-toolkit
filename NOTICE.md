@@ -6,7 +6,7 @@ License (see [LICENSE](./LICENSE)).
 ## Third-party software
 
 This toolkit depends on **[pathofexile-dat](https://github.com/SnosMe/poe-dat-viewer)**,
-Copyright (c) SnosMe, licensed under the MIT License. `@poe2/ggpk` uses it to
+Copyright (c) SnosMe, licensed under the MIT License. `@poe2-toolkit/ggpk` uses it to
 fetch and decode the official Path of Exile 2 GGPK / patch-server bundles.
 
 ## Path of Exile 2 and Grinding Gear Games

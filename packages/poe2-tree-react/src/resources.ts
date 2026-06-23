@@ -1,4 +1,4 @@
-import type { SpriteManifest } from '@poe2-tree/core';
+import type { SpriteManifest } from '@poe2-toolkit/tree-core';
 
 /**
  * Graphics handed to the renderer. The core produced the `manifest` (native

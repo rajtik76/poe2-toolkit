@@ -1,5 +1,5 @@
 /**
- * @poe2/ggpk — the shared access layer for Path of Exile 2's official GGPK /
+ * @poe2-toolkit/ggpk — the shared access layer for Path of Exile 2's official GGPK /
  * patch server. Provides the {@link GgpkSource} boundary plus the format
  * decoders (images, stat descriptions) every PoE2 extractor reuses.
  */

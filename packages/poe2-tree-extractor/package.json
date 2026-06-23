@@ -1,7 +1,7 @@
 {
-  "name": "@poe2-tree/extractor",
-  "version": "0.0.0",
-  "description": "Builds the Path of Exile 2 passive-tree data and sprite atlases straight from the official GGPK / patch server, in the shape @poe2-tree/core consumes. Code only — ships no game data or art.",
+  "name": "@poe2-toolkit/tree-extractor",
+  "version": "0.1.0",
+  "description": "Builds the Path of Exile 2 passive-tree data and sprite atlases straight from the official GGPK / patch server, in the shape @poe2-toolkit/tree-core consumes. Code only — ships no game data or art.",
   "keywords": [
     "path-of-exile",
     "poe2",
@@ -37,7 +37,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@poe2/ggpk": "*"
+    "@poe2-toolkit/ggpk": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -46,5 +46,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
