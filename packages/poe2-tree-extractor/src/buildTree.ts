@@ -288,9 +288,9 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   //  - the int32 sentinel  -> a straight line (e.g. a same-orbit chord, "Shockproof");
   //  - `0`                 -> arc along the shared orbit (same group + orbit only),
   //                           centred on the group; any other endpoints are a spoke;
-  //  - `±N` (1..9)         -> a curved connector between any two same-group nodes,
-  //                           radius `ORBIT_RADII[N]`, the sign choosing which of the
-  //                           two equidistant centres (which way the arc bows).
+  //  - `±N` (1..9)         -> a curved connector between ANY two nodes (cross-group
+  //                           included, matching GGG/PoB), radius `ORBIT_RADII[N]`,
+  //                           the sign choosing which equidistant centre (arc bow).
   // The arc centre is resolved here (the renderer just sweeps the short way A->B
   // around it) so nothing downstream has to guess from shared group/orbit.
   const edges: ExportEdge[] = [];
@@ -310,20 +310,22 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
 
       const other = psgById.get(target.id);
 
-      if (!group || !other || other.group !== node.group || target.orbit === LINE_SENTINEL) {
-        continue; // cross-group, missing, or explicit-line edge -> straight
+      if (!group || !other || target.orbit === LINE_SENTINEL) {
+        continue; // missing or explicit-line edge -> straight
       }
 
       let centre: { x: number; y: number } | null = null;
 
       if (target.orbit === 0) {
-        // Default: only a same-orbit ring arc, centred on the group.
-        if (other.orbit === node.orbit && node.orbit > 0) {
+        // Default ring arc: same group AND same orbit only, centred on the group
+        // (PoB BuildConnector case B). Any other `0` edge is a straight spoke.
+        if (other.group === node.group && other.orbit === node.orbit && node.orbit > 0) {
           centre = { x: group.x, y: group.y };
         }
       } else {
-        // Explicit curved connector: a circle of the orbit's radius through both
-        // nodes, on the side the sign selects.
+        // Explicit curved connector (PoB case A): a circle of the orbit's radius
+        // through both nodes, on the side the sign selects. No same-group check —
+        // GGG bows these across groups too; the world positions already differ.
         const radius = ORBIT_RADII[Math.abs(target.orbit)] ?? 0;
         centre = arcCentre(orbitPosition(psg, node), orbitPosition(psg, other), radius, Math.sign(target.orbit));
       }
