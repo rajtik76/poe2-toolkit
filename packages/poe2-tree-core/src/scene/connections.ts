@@ -25,34 +25,15 @@ export function placeConnection(
   const b = nodePosition(data, toSkill);
   const line: PlacedConnection = { from: fromSkill, to: toSkill, kind: 'line', a, b, active };
 
-  // Preferred: GGG's explicit arc centre.
+  // An edge is an arc only when the `.psg` says so, carried here as the explicit
+  // arc centre (the owning orbit's group centre). Without one it's a straight
+  // line — no geometric guessing, which used to mis-arc same-orbit chords (the
+  // "Shockproof" half-moon) the graph data draws straight.
   if (arcCentre) {
     const radius = Math.hypot(a.x - arcCentre.x, a.y - arcCentre.y);
 
     if (radius > 0) {
       return toArc(fromSkill, toSkill, a, b, arcCentre, radius, 0, active);
-    }
-  }
-
-  // Fallback: endpoints on the same group orbit arc around the group centre.
-  const fromNode = data.nodes[fromSkill];
-  const toNode = data.nodes[toSkill];
-
-  if (
-    fromNode &&
-    toNode &&
-    fromNode.group === toNode.group &&
-    fromNode.orbit === toNode.orbit &&
-    fromNode.orbit > 0
-  ) {
-    const group = data.groups[fromNode.group];
-
-    if (group) {
-      const radius = Math.hypot(a.x - group.x, a.y - group.y);
-
-      if (radius > 0) {
-        return toArc(fromSkill, toSkill, a, b, { x: group.x, y: group.y }, radius, fromNode.orbit, active);
-      }
     }
   }
 

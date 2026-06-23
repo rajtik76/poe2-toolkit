@@ -1,6 +1,6 @@
 import type { Scene, Viewport, WorldRect } from '@poe2-toolkit/tree-core';
 import { nodeAt, screenToWorld } from '@poe2-toolkit/tree-core';
-import { Application, Container, Graphics, ImageSource, Rectangle, Sprite, Texture } from 'pixi.js';
+import { Application, BitmapText, Container, Graphics, ImageSource, Rectangle, Sprite, Texture } from 'pixi.js';
 import { useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, Ref } from 'react';
 import type { RenderResources } from './resources.js';
@@ -63,6 +63,8 @@ export interface TreeViewProps {
    * Unlike `onNodeHover`, this is a persistent set drawn until it changes.
    */
   highlight?: Set<number> | null;
+  /** Debug: draw each node's skill id over it, to cross-check geometry/edges. */
+  debugIds?: boolean;
   className?: string;
   style?: CSSProperties;
 }
@@ -92,6 +94,8 @@ export interface CentreSprite {
 
 const MIN_SCALE = 0.02;
 const MAX_SCALE = 4;
+/** Below this zoom the debug id labels are hidden (a tiny, costly, unreadable mess). */
+const LABEL_MIN_SCALE = 0.35;
 const ZOOM_STEP = 1.3;
 const ZOOM_SENSITIVITY = 0.0015;
 const FIT_PADDING = 0.92;
@@ -150,10 +154,17 @@ export function TreeView({
   wheelZoom,
   focus,
   highlight,
+  debugIds,
   className,
   style,
 }: TreeViewProps): React.JSX.Element {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // The host element Pixi renders into. We own a wrapper <div> (stable across
+  // renders) and let Pixi create its own <canvas> inside it, rather than handing
+  // Pixi a React-owned <canvas>. A canvas hosts exactly one WebGL context for its
+  // lifetime, so sharing one element across React StrictMode's dev double-mount
+  // makes the second Application inherit the first's torn-down context. A private
+  // canvas per Application keeps each mount's context independent.
+  const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const worldRef = useRef<Container | null>(null);
   // World-space layers, back-to-front.
@@ -163,6 +174,7 @@ export function TreeView({
   const nodeLayerRef = useRef<Container | null>(null);
   const ascLayerRef = useRef<Container | null>(null);
   const overlayRef = useRef<Graphics | null>(null);
+  const labelLayerRef = useRef<Container | null>(null);
 
   const viewportRef = useRef<Viewport | null>(null);
   const hoverRef = useRef<number | null>(null);
@@ -191,23 +203,33 @@ export function TreeView({
     world.scale.set(viewport.scale);
     world.position.set(viewport.tx, viewport.ty);
     drawOverlay(overlayRef.current, sceneRef.current, viewport, hoverRef.current, highlightRef.current, previewRef.current);
+
+    // Debug id labels are heavy; only show (and render) them once zoomed in far
+    // enough to read them. Hidden, the whole layer is skipped — zero pan/zoom cost.
+    if (labelLayerRef.current) {
+      labelLayerRef.current.visible = viewport.scale > LABEL_MIN_SCALE;
+    }
   }, []);
 
   // ---- Pixi application lifecycle -----------------------------------------
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const container = containerRef.current;
 
-    if (!canvas) {
+    if (!container) {
       return;
     }
 
-    let cancelled = false;
+    let disposed = false;
     const app = new Application();
-
-    void app
+    // Keep the init promise so cleanup can await it before destroying — the init
+    // is async, so a StrictMode (or fast remount) cleanup can fire while it's
+    // still pending. Awaiting guarantees the WebGL context this instance creates
+    // is always released, never leaked.
+    const ready = app
       .init({
-        canvas,
+        // Pixi creates and owns the <canvas>; we append it below. No `canvas`
+        // option, so each Application gets a private element + WebGL context.
         backgroundAlpha: 0,
         antialias: true,
         resolution: window.devicePixelRatio || 1,
@@ -215,15 +237,24 @@ export function TreeView({
         // autoDensity would set explicit px and fight it, leaving a gap + scrollbar.
         autoDensity: false,
         preference: 'webgl',
-        width: canvas.clientWidth || 800,
-        height: canvas.clientHeight || 600,
+        width: container.clientWidth || 800,
+        height: container.clientHeight || 600,
       })
       .then(() => {
-        if (cancelled) {
-          app.destroy(true);
-
+        // StrictMode runs this effect twice in dev (mount → cleanup → mount). If
+        // cleanup already ran, abandon this stale instance; its teardown is owned
+        // by the cleanup's awaited `destroy`.
+        if (disposed) {
           return;
         }
+
+        const view = app.canvas;
+        view.style.position = 'absolute';
+        view.style.inset = '0';
+        view.style.display = 'block';
+        view.style.width = '100%';
+        view.style.height = '100%';
+        container.appendChild(view);
 
         const world = new Container();
         const centreLayer = new Container();
@@ -232,7 +263,9 @@ export function TreeView({
         const nodeLayer = new Container();
         const ascLayer = new Container();
         const overlay = new Graphics();
-        world.addChild(centreLayer, effectLayer, connLayer, nodeLayer, ascLayer, overlay);
+        const labelLayer = new Container();
+        labelLayer.visible = false;
+        world.addChild(centreLayer, effectLayer, connLayer, nodeLayer, ascLayer, overlay, labelLayer);
         app.stage.addChild(world);
 
         appRef.current = app;
@@ -243,6 +276,7 @@ export function TreeView({
         nodeLayerRef.current = nodeLayer;
         ascLayerRef.current = ascLayer;
         overlayRef.current = overlay;
+        labelLayerRef.current = labelLayer;
         readyRef.current = true;
 
         // Pulse the highlight rings each frame while a highlight set is active.
@@ -263,13 +297,17 @@ export function TreeView({
       });
 
     return () => {
-      cancelled = true;
+      disposed = true;
       readyRef.current = false;
 
-      if (appRef.current) {
-        appRef.current.destroy(true, { children: true });
+      if (appRef.current === app) {
         appRef.current = null;
       }
+
+      // Wait for init to settle, then destroy this instance — releasing its WebGL
+      // context and removing its canvas (`removeView`), whether or not init had
+      // finished when cleanup fired.
+      void ready.then(() => app.destroy(true, { children: true }));
     };
   }, []);
 
@@ -297,6 +335,7 @@ export function TreeView({
         connLayer: connLayerRef.current,
         nodeLayer: nodeLayerRef.current,
         ascLayer: ascLayerRef.current,
+        labelLayer: labelLayerRef.current,
       },
       scene,
       resources,
@@ -304,17 +343,18 @@ export function TreeView({
       activeClassId,
       activeAscendancy,
       texRef.current,
+      debugIds ?? false,
     );
 
     // Centre the view on first build, then keep it across rebuilds.
-    const canvas = canvasRef.current;
+    const canvas = containerRef.current;
 
     if (canvas && !viewportRef.current && canvas.clientWidth > 0) {
       viewportRef.current = centreViewport(scene, canvas.clientWidth, canvas.clientHeight);
     }
 
     sync();
-  }, [scene, resources, centreSprites, activeClassId, activeAscendancy, sync]);
+  }, [scene, resources, centreSprites, activeClassId, activeAscendancy, debugIds, sync]);
 
   useEffect(() => {
     rebuildRef.current = rebuild;
@@ -356,7 +396,7 @@ export function TreeView({
   // ---- Sizing --------------------------------------------------------------
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = containerRef.current;
 
     if (!canvas) {
       return;
@@ -389,7 +429,7 @@ export function TreeView({
   // ---- Pointer interaction -------------------------------------------------
 
   const onPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    (event: ReactPointerEvent<HTMLDivElement>) => {
       event.currentTarget.setPointerCapture(event.pointerId);
       dragRef.current = { x: event.clientX, y: event.clientY, moved: false };
       onInteractStart?.();
@@ -398,7 +438,7 @@ export function TreeView({
   );
 
   const onPointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    (event: ReactPointerEvent<HTMLDivElement>) => {
       const viewport = viewportRef.current;
 
       if (!viewport) {
@@ -444,7 +484,7 @@ export function TreeView({
   );
 
   const onPointerUp = useCallback(
-    (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    (event: ReactPointerEvent<HTMLDivElement>) => {
       event.currentTarget.releasePointerCapture(event.pointerId);
       const drag = dragRef.current;
       dragRef.current = null;
@@ -464,7 +504,7 @@ export function TreeView({
   );
 
   const onDoubleClick = useCallback(
-    (event: ReactMouseEvent<HTMLCanvasElement>) => {
+    (event: ReactMouseEvent<HTMLDivElement>) => {
       const viewport = viewportRef.current;
 
       if (!viewport || !onNodeDoubleClick) {
@@ -495,7 +535,7 @@ export function TreeView({
       viewport.ty = py - (py - viewport.ty) * ratio;
       viewport.scale = scale;
 
-      const canvas = canvasRef.current;
+      const canvas = containerRef.current;
 
       if (canvas) {
         clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight);
@@ -510,14 +550,14 @@ export function TreeView({
     controls,
     () => ({
       zoomIn: () => {
-        const canvas = canvasRef.current;
+        const canvas = containerRef.current;
 
         if (canvas) {
           zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, ZOOM_STEP);
         }
       },
       zoomOut: () => {
-        const canvas = canvasRef.current;
+        const canvas = containerRef.current;
 
         if (canvas) {
           zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1 / ZOOM_STEP);
@@ -528,7 +568,7 @@ export function TreeView({
   );
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = containerRef.current;
 
     if (!canvas || !wheelZoom) {
       return;
@@ -550,7 +590,7 @@ export function TreeView({
       return;
     }
 
-    const canvas = canvasRef.current;
+    const canvas = containerRef.current;
 
     if (!canvas || canvas.clientWidth <= 0 || canvas.clientHeight <= 0) {
       return;
@@ -564,10 +604,13 @@ export function TreeView({
   }, [focus]);
 
   return (
-    <canvas
-      ref={canvasRef}
+    <div
+      ref={containerRef}
       className={className}
-      style={{ touchAction: 'none', cursor: 'grab', display: 'block', width: '100%', height: '100%', background: '#000000', ...style }}
+      // Pixi's <canvas> is appended here, absolutely filling this box. The wrapper
+      // is the stable, React-owned host that carries sizing + pointer handlers, so
+      // swapping Pixi's canvas underneath (StrictMode remounts) never disturbs it.
+      style={{ position: 'relative', overflow: 'hidden', touchAction: 'none', cursor: 'grab', width: '100%', height: '100%', background: '#000000', ...style }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -590,6 +633,7 @@ interface Layers {
   connLayer: Graphics | null;
   nodeLayer: Container | null;
   ascLayer: Container | null;
+  labelLayer: Container | null;
 }
 
 /** (Re)build the whole world scene graph from the scene + resources. */
@@ -601,10 +645,11 @@ function buildScene(
   activeClassId: number | undefined,
   activeAscendancy: string | undefined,
   tex: TexCtx,
+  debugIds: boolean,
 ): void {
-  const { centreLayer, effectLayer, connLayer, nodeLayer, ascLayer } = layers;
+  const { centreLayer, effectLayer, connLayer, nodeLayer, ascLayer, labelLayer } = layers;
 
-  if (!centreLayer || !effectLayer || !connLayer || !nodeLayer || !ascLayer) {
+  if (!centreLayer || !effectLayer || !connLayer || !nodeLayer || !ascLayer || !labelLayer) {
     return;
   }
 
@@ -612,6 +657,7 @@ function buildScene(
   effectLayer.removeChildren().forEach((child) => child.destroy());
   nodeLayer.removeChildren().forEach((child) => child.destroy());
   ascLayer.removeChildren().forEach((child) => child.destroy());
+  labelLayer.removeChildren().forEach((child) => child.destroy());
   connLayer.clear();
 
   buildCentre(centreLayer, scene, centreSprites, activeClassId, tex);
@@ -637,6 +683,10 @@ function buildScene(
     }
 
     buildNode(nodeLayer, node, resources, tex);
+
+    if (debugIds) {
+      labelLayer.addChild(idLabel(node.skill, node.x, node.y));
+    }
   }
 
   // Active ascendancy disc: its nodes relocated into the hub. The originals stay
@@ -931,6 +981,30 @@ function placedSprite(texture: Texture, x: number, y: number, size: number): Spr
   return sprite;
 }
 
+/**
+ * Debug: a node's skill id drawn over it on a black plate for legibility, world
+ * space. BitmapText shares one glyph atlas across every label, so thousands batch
+ * into a few draw calls (plain `Text` rasterises a texture per label and tanks
+ * zoom/pan).
+ */
+function idLabel(skill: number, x: number, y: number): Container {
+  const label = new BitmapText({
+    text: String(skill),
+    style: { fontFamily: 'monospace', fontSize: 22, fill: 0xffe066 },
+  });
+  label.anchor.set(0.5);
+
+  const plate = new Graphics()
+    .rect(-label.width / 2 - 4, -label.height / 2 - 2, label.width + 8, label.height + 4)
+    .fill({ color: 0x000000, alpha: 0.72 });
+
+  const group = new Container();
+  group.addChild(plate, label);
+  group.position.set(x, y);
+
+  return group;
+}
+
 // ===========================================================================
 // Overlays (hover ring, search highlight, allocation preview) — world space
 // ===========================================================================
@@ -961,9 +1035,13 @@ function drawOverlay(
   const scale = viewport.scale;
   const px = (value: number): number => value / scale;
 
-  // Allocation preview rails (under the rings).
+  // Allocation preview rails (under the rings). Widths are world units (like the
+  // base rails), clamped to a small on-screen minimum — matching the Canvas2D
+  // `max(3, 9 * scale)` / `max(1.5, 4 * scale)` so the path tracks the zoom.
   if (preview) {
     const color = preview.kind === 'remove' ? 0xeb6060 : 0xffe296;
+    const glow = preview.kind === 'remove' ? 0.35 : 0.4;
+    const core = preview.kind === 'remove' ? 0.95 : 0.98;
 
     for (const conn of scene.connections) {
       if (!preview.edges.has(edgeKey(conn.from, conn.to))) {
@@ -971,9 +1049,9 @@ function drawOverlay(
       }
 
       addConnPaths(g, [conn]);
-      g.stroke({ width: px(9), color, alpha: 0.38, cap: 'round' });
+      g.stroke({ width: Math.max(9, px(3)), color, alpha: glow, cap: 'round' });
       addConnPaths(g, [conn]);
-      g.stroke({ width: px(4), color, alpha: 0.97, cap: 'round' });
+      g.stroke({ width: Math.max(4, px(1.5)), color, alpha: core, cap: 'round' });
     }
   }
 

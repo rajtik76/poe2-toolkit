@@ -9,6 +9,17 @@
  * `docs/reference/PSG_FORMAT.md`.
  */
 
+/**
+ * One outgoing edge: the target node plus the raw per-edge `orbit` value the
+ * `.psg` carries. The magnitude (1..9) is the orbit ring the edge arcs along and
+ * the sign is the sweep direction; `0` and the `int32` sentinel (`2147483647`)
+ * mean a straight line. Captured verbatim — interpretation lives downstream.
+ */
+export interface PsgConnection {
+  id: number;
+  orbit: number;
+}
+
 /** One node in the passive graph. */
 export interface PsgNode {
   /** PassiveSkillGraphId — joins to the passive tables and the tree's `skill`. */
@@ -19,8 +30,8 @@ export interface PsgNode {
   orbit: number;
   /** Slot index along the orbit. */
   orbitIndex: number;
-  /** Skill ids this node points to (the edge is stored once, directed). */
-  connections: number[];
+  /** Edges this node points to (each stored once, directed), with arc geometry. */
+  connections: PsgConnection[];
 }
 
 /** One orbit cluster: a world anchor plus its member nodes. */
@@ -29,8 +40,19 @@ export interface PsgGroup {
   y: number;
   /** Proxy groups exist only to anchor geometry and hold no real passives. */
   isProxy: boolean;
+  /** Raw group flag word (purpose not yet decoded; captured, not discarded). */
+  flag: number;
+  /** Second raw group word (purpose not yet decoded; captured, not discarded). */
+  unknown1: number;
   /** Member skill ids, in file order. */
   nodes: number[];
+}
+
+/** One graph root (class start / anchor) with its raw curvature word. */
+export interface PsgRoot {
+  id: number;
+  /** Raw curvature word (purpose not yet decoded; captured, not discarded). */
+  curvature: number;
 }
 
 /** The fully parsed passive skill graph. */
@@ -39,8 +61,8 @@ export interface Psg {
   graphType: number;
   /** Slot count per orbit ring; index = orbit. */
   passivesPerOrbit: number[];
-  /** Root node ids (class starts and similar anchors). */
-  roots: number[];
+  /** Root nodes (class starts and similar anchors) with raw curvature. */
+  roots: PsgRoot[];
   groups: PsgGroup[];
   /** Every node, flattened across all groups, in file order. */
   nodes: PsgNode[];
@@ -90,11 +112,10 @@ export function parsePsg(buf: Uint8Array): Psg {
     throw new Error(`unrealistic root_length ${rootLength}`);
   }
 
-  const roots: number[] = [];
+  const roots: PsgRoot[] = [];
 
   for (let i = 0; i < rootLength; i++) {
-    roots.push(u32());
-    u32(); // curvature, unused
+    roots.push({ id: u32(), curvature: u32() });
   }
 
   const groupLength = u32();
@@ -104,8 +125,8 @@ export function parsePsg(buf: Uint8Array): Psg {
   for (let g = 0; g < groupLength; g++) {
     const x = f32();
     const y = f32();
-    u32(); // flag
-    u32(); // unknown1
+    const flag = u32();
+    const unknown1 = u32();
     const isProxy = u8() === 1;
     const passiveLength = u32();
     const groupNodeIds: number[] = [];
@@ -115,18 +136,17 @@ export function parsePsg(buf: Uint8Array): Psg {
       const orbit = u32();
       const orbitIndex = u32();
       const connectionsLength = u32();
-      const connections: number[] = [];
+      const connections: PsgConnection[] = [];
 
       for (let c = 0; c < connectionsLength; c++) {
-        connections.push(u32());
-        i32(); // orbit of the connection, unused
+        connections.push({ id: u32(), orbit: i32() });
       }
 
       nodes.push({ skillId, group: g, orbit, orbitIndex, connections });
       groupNodeIds.push(skillId);
     }
 
-    groups.push({ x, y, isProxy, nodes: groupNodeIds });
+    groups.push({ x, y, isProxy, flag, unknown1, nodes: groupNodeIds });
   }
 
   if (o !== buf.byteLength) {

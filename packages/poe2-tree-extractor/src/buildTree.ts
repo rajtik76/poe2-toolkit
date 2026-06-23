@@ -14,10 +14,59 @@ import { buildStatIndex, renderBlock   } from '@poe2-toolkit/ggpk';
 import type {GgpkSource, StatIndex} from '@poe2-toolkit/ggpk';
 
 import { parsePsg } from './psg.js';
+import type { Psg } from './psg.js';
 
 // Orbit radii derived from the live tree (zero spread per orbit; angle formula
 // matched 5150/5150 baked positions). Index = orbit.
 const ORBIT_RADII = [0, 82, 164, 334, 488, 657, 839, 250, 1076, 1320];
+
+/** The int32 the `.psg` writes as a per-edge orbit when the edge is a straight line. */
+const LINE_SENTINEL = 2147483647;
+
+/** World position of a graph node from its group anchor + orbit ring + slot. */
+function orbitPosition(psg: Psg, node: { group: number; orbit: number; orbitIndex: number }): { x: number; y: number } {
+  const group = psg.groups[node.group];
+
+  if (!group) {
+    return { x: 0, y: 0 };
+  }
+
+  const radius = ORBIT_RADII[node.orbit] ?? 0;
+  const segments = psg.passivesPerOrbit[node.orbit] || 1;
+  const angle = (2 * Math.PI * node.orbitIndex) / segments;
+
+  return { x: group.x + radius * Math.sin(angle), y: group.y - radius * Math.cos(angle) };
+}
+
+/**
+ * Centre of the radius-`R` circle through `a` and `b`, on the side `side` (the
+ * sign of the per-edge orbit word) selects. Null when no such circle exists (the
+ * points are coincident or further apart than the diameter) — then it's a line.
+ */
+function arcCentre(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  radius: number,
+  side: number,
+): { x: number; y: number } | null {
+  if (radius <= 0) {
+    return null;
+  }
+
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dist = Math.hypot(dx, dy);
+
+  if (dist === 0 || dist > 2 * radius) {
+    return null;
+  }
+
+  const half = Math.sqrt(radius * radius - (dist / 2) ** 2);
+  const sign = side < 0 ? -1 : 1;
+
+  // Midpoint offset along the unit perpendicular to AB.
+  return { x: (a.x + b.x) / 2 + (sign * half * -dy) / dist, y: (a.y + b.y) / 2 + (sign * half * dx) / dist };
+}
 
 const ASC_RADIUS = 1332;
 
@@ -94,7 +143,30 @@ export interface ExportClass {
   overridePairs: Record<number, number>;
 }
 
-export interface ExportGroup { x: number; y: number; orbits: number[]; nodes: number[] }
+export interface ExportGroup {
+  x: number;
+  y: number;
+  orbits: number[];
+  nodes: number[];
+  /** Raw `.psg` group words; purpose not yet decoded, kept so nothing is lost. */
+  flag: number;
+  unknown1: number;
+}
+
+/** A directed arc edge: the orbit it follows and that orbit's world centre. */
+export interface ExportEdge {
+  from: number;
+  to: number;
+  orbit: number;
+  orbitX: number;
+  orbitY: number;
+}
+
+/** A graph root with its raw `.psg` curvature word (kept verbatim). */
+export interface ExportRoot {
+  id: number;
+  curvature: number;
+}
 
 /** The full `data.json` payload. */
 export interface TreeExport {
@@ -102,7 +174,8 @@ export interface TreeExport {
   classes: ExportClass[];
   groups: Record<number, ExportGroup>;
   nodes: Record<number, ExportNode>;
-  edges: never[];
+  edges: ExportEdge[];
+  roots: ExportRoot[];
   skillOverrides: Record<number, Record<string, unknown>>;
   jewelSlots: number[];
   min_x: number;
@@ -206,16 +279,61 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     adjacency.get(a)!.add(b);
   };
 
-  for (const node of psg.nodes) {
-    for (const target of node.connections) {
-      addEdge(node.skillId, target);
-      addEdge(target, node.skillId);
+  const psgById = new Map(psg.nodes.map((node) => [node.skillId, node]));
 
-      if (!incoming.has(target)) {
-        incoming.set(target, new Set());
+  // Per-edge arc geometry, decoded from the `.psg`'s raw per-edge orbit word:
+  //  - the int32 sentinel  -> a straight line (e.g. a same-orbit chord, "Shockproof");
+  //  - `0`                 -> arc along the shared orbit (same group + orbit only),
+  //                           centred on the group; any other endpoints are a spoke;
+  //  - `±N` (1..9)         -> a curved connector between any two same-group nodes,
+  //                           radius `ORBIT_RADII[N]`, the sign choosing which of the
+  //                           two equidistant centres (which way the arc bows).
+  // The arc centre is resolved here (the renderer just sweeps the short way A->B
+  // around it) so nothing downstream has to guess from shared group/orbit.
+  const edges: ExportEdge[] = [];
+
+  for (const node of psg.nodes) {
+    const group = psg.groups[node.group];
+
+    for (const target of node.connections) {
+      addEdge(node.skillId, target.id);
+      addEdge(target.id, node.skillId);
+
+      if (!incoming.has(target.id)) {
+        incoming.set(target.id, new Set());
       }
 
-      incoming.get(target)!.add(node.skillId);
+      incoming.get(target.id)!.add(node.skillId);
+
+      const other = psgById.get(target.id);
+
+      if (!group || !other || other.group !== node.group || target.orbit === LINE_SENTINEL) {
+        continue; // cross-group, missing, or explicit-line edge -> straight
+      }
+
+      let centre: { x: number; y: number } | null = null;
+
+      if (target.orbit === 0) {
+        // Default: only a same-orbit ring arc, centred on the group.
+        if (other.orbit === node.orbit && node.orbit > 0) {
+          centre = { x: group.x, y: group.y };
+        }
+      } else {
+        // Explicit curved connector: a circle of the orbit's radius through both
+        // nodes, on the side the sign selects.
+        const radius = ORBIT_RADII[Math.abs(target.orbit)] ?? 0;
+        centre = arcCentre(orbitPosition(psg, node), orbitPosition(psg, other), radius, Math.sign(target.orbit));
+      }
+
+      if (centre) {
+        edges.push({
+          from: node.skillId,
+          to: target.id,
+          orbit: Math.abs(target.orbit),
+          orbitX: Number(centre.x.toFixed(3)),
+          orbitY: Number(centre.y.toFixed(3)),
+        });
+      }
     }
   }
 
@@ -306,6 +424,8 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
       y: Number(group.y.toFixed(3)),
       orbits: [...orbits].sort((a, b) => a - b),
       nodes: group.nodes,
+      flag: group.flag,
+      unknown1: group.unknown1,
     };
   });
 
@@ -444,7 +564,8 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     classes,
     groups,
     nodes,
-    edges: [],
+    edges,
+    roots: psg.roots.map((root) => ({ id: root.id, curvature: root.curvature })),
     skillOverrides,
     jewelSlots,
     min_x: Math.round(minX),
