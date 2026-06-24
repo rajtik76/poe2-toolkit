@@ -116,6 +116,7 @@ The hub artwork (class portrait and ornate ring) comes in through the optional
   focus={worldRect}             // pass a fresh rect to pan + zoom-fit to it
   wheelZoom                     // turn on wheel zoom (off by default)
   debugIds                      // overlay each node's skill id (debug; off by default)
+  zoom={{ maxScale, minFitFactor, overscroll }} // tune zoom-in cap, zoom-out floor, pan slack
   controls={controlsRef}        // imperative zoomIn() / zoomOut()
   onNodeClick={(skill, screen) => …}
   onNodeDoubleClick={(skill) => …}
@@ -127,7 +128,12 @@ The hub artwork (class portrait and ornate ring) comes in through the optional
 ```
 
 Exported types: `TreeViewProps`, `TreeViewControls`, `AllocationPreview`,
-`CentreSprite`, `RenderResources`.
+`CentreSprite`, `ZoomLimits`, `RenderResources`.
+
+`zoom` tunes the view extents, each field optional: `maxScale` caps zoom-in,
+`minFitFactor` is the zoom-out floor as a multiple of the fit-the-whole-tree
+scale (1 stops you zooming out past the whole tree), and `overscroll` is how far
+past the edges you can pan. Omit `zoom` for the defaults (4, 0.85, 0.5).
 
 For external +/- buttons, reach for the imperative handle on `controls`:
 

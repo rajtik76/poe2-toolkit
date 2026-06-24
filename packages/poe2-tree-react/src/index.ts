@@ -7,6 +7,6 @@
  */
 
 export { TreeView } from './TreeView.js';
-export type { TreeViewProps, TreeViewControls, AllocationPreview, CentreSprite } from './TreeView.js';
+export type { TreeViewProps, TreeViewControls, AllocationPreview, CentreSprite, ZoomLimits } from './TreeView.js';
 export type { RenderResources } from './resources.js';
 export { iconKeyFor, frameKeyFor, effectKeyFor, arcConnectorKeyFor, lineConnectorKeyFor } from './spriteKeys.js';

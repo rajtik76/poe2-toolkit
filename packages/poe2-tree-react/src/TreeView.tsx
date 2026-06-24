@@ -65,8 +65,34 @@ export interface TreeViewProps {
   highlight?: Set<number> | null;
   /** Debug: draw each node's skill id over it, to cross-check geometry/edges. */
   debugIds?: boolean;
+  /** Zoom and pan extents. Omit any field to keep its default. */
+  zoom?: ZoomLimits;
   className?: string;
   style?: CSSProperties;
+}
+
+/** Tunable zoom and pan extents (all optional; see defaults on each field). */
+export interface ZoomLimits {
+  /** Hard zoom-in cap as a world scale. Default 4. */
+  maxScale?: number;
+  /**
+   * Zoom-out floor as a multiple of the fit-the-whole-tree scale. 1 means you
+   * cannot zoom out past seeing the whole tree; below 1 leaves empty margin
+   * around it. Default 0.85.
+   */
+  minFitFactor?: number;
+  /**
+   * How far past the tree's edges you may pan, as a fraction of the viewport.
+   * Smaller keeps the tree tighter in frame. Default 0.5.
+   */
+  overscroll?: number;
+}
+
+/** {@link ZoomLimits} with every field resolved to a concrete value. */
+interface ResolvedZoom {
+  maxScale: number;
+  minFitFactor: number;
+  overscroll: number;
 }
 
 /** Imperative handle exposed via `controls` for external zoom buttons. */
@@ -93,7 +119,10 @@ export interface CentreSprite {
 }
 
 const MIN_SCALE = 0.02;
+/** Defaults for {@link ZoomLimits}. */
 const MAX_SCALE = 4;
+const DEFAULT_MIN_FIT = 0.85;
+const DEFAULT_OVERSCROLL = 0.5;
 /** Below this zoom the debug id labels are hidden (a tiny, costly, unreadable mess). */
 const LABEL_MIN_SCALE = 0.35;
 const ZOOM_STEP = 1.3;
@@ -158,6 +187,7 @@ export function TreeView({
   focus,
   highlight,
   debugIds,
+  zoom,
   className,
   style,
 }: TreeViewProps): React.JSX.Element {
@@ -192,6 +222,15 @@ export function TreeView({
   const highlightActiveRef = useRef(false);
   const activeAscendancyRef = useRef(activeAscendancy);
   const rebuildRef = useRef<(() => void) | null>(null);
+
+  // Resolved zoom/pan extents, in a ref so the ticker, callbacks and clamp all
+  // read the current values without re-subscribing. Kept current in the effect
+  // below (never assigned during render).
+  const limitsRef = useRef<ResolvedZoom>({
+    maxScale: MAX_SCALE,
+    minFitFactor: DEFAULT_MIN_FIT,
+    overscroll: DEFAULT_OVERSCROLL,
+  });
 
   // Apply the current viewport to the world container and refresh the overlay.
   // O(1) — no sprite touches. Stable (reads refs), so panning/zooming never
@@ -332,8 +371,13 @@ export function TreeView({
     previewRef.current = preview ?? null;
     highlightActiveRef.current = Boolean(highlight && highlight.size > 0);
     activeAscendancyRef.current = activeAscendancy;
+    limitsRef.current = {
+      maxScale: zoom?.maxScale ?? MAX_SCALE,
+      minFitFactor: zoom?.minFitFactor ?? DEFAULT_MIN_FIT,
+      overscroll: zoom?.overscroll ?? DEFAULT_OVERSCROLL,
+    };
     sync();
-  }, [scene, highlight, preview, activeAscendancy, sync]);
+  }, [scene, highlight, preview, activeAscendancy, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
 
   // ---- Scene graph build ---------------------------------------------------
 
@@ -430,7 +474,7 @@ export function TreeView({
       if (!viewportRef.current) {
         viewportRef.current = centreViewport(scene, width, height);
       } else {
-        clampViewport(viewportRef.current, scene, width, height);
+        clampViewport(viewportRef.current, scene, width, height, limitsRef.current);
       }
 
       sync();
@@ -479,6 +523,15 @@ export function TreeView({
         drag.y = event.clientY;
         viewport.tx += dx;
         viewport.ty += dy;
+
+        // Clamp the pan so the tree can't be dragged off-screen — without this
+        // the canvas feels boundless and you lose the tree entirely.
+        const canvas = containerRef.current;
+
+        if (canvas) {
+          clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight, limitsRef.current);
+        }
+
         sync();
 
         return;
@@ -543,7 +596,7 @@ export function TreeView({
         return;
       }
 
-      const scale = clamp(viewport.scale * factor, MIN_SCALE, MAX_SCALE);
+      const scale = clamp(viewport.scale * factor, MIN_SCALE, limitsRef.current.maxScale);
       const ratio = scale / viewport.scale;
       viewport.tx = px - (px - viewport.tx) * ratio;
       viewport.ty = py - (py - viewport.ty) * ratio;
@@ -552,7 +605,7 @@ export function TreeView({
       const canvas = containerRef.current;
 
       if (canvas) {
-        clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight);
+        clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight, limitsRef.current);
       }
 
       sync();
@@ -611,7 +664,7 @@ export function TreeView({
     }
 
     const viewport = viewportForRect(focus, canvas.clientWidth, canvas.clientHeight);
-    clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight);
+    clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight, limitsRef.current);
     viewportRef.current = viewport;
     sync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1176,17 +1229,17 @@ function viewportForRect(rect: WorldRect, width: number, height: number): Viewpo
 }
 
 /** Keep the view sane: don't zoom out past the fit scale, don't pan the tree off-screen. */
-function clampViewport(viewport: Viewport, scene: Scene, width: number, height: number): void {
+function clampViewport(viewport: Viewport, scene: Scene, width: number, height: number, limits: ResolvedZoom): void {
   if (width <= 0 || height <= 0) {
     return;
   }
 
-  viewport.scale = clamp(viewport.scale, fitScale(scene, width, height) * 0.85, MAX_SCALE);
+  viewport.scale = clamp(viewport.scale, fitScale(scene, width, height) * limits.minFitFactor, limits.maxScale);
 
   const { minX, minY, maxX, maxY } = scene.mainBounds;
   const { scale } = viewport;
-  const marginX = Math.min(width, (maxX - minX) * scale) * 0.5;
-  const marginY = Math.min(height, (maxY - minY) * scale) * 0.5;
+  const marginX = Math.min(width, (maxX - minX) * scale) * limits.overscroll;
+  const marginY = Math.min(height, (maxY - minY) * scale) * limits.overscroll;
   viewport.tx = clamp(viewport.tx, width - marginX - maxX * scale, marginX - minX * scale);
   viewport.ty = clamp(viewport.ty, height - marginY - maxY * scale, marginY - minY * scale);
 }
