@@ -21,7 +21,7 @@ import { parseShaManifest, readJson  } from '../helpers';
 import type {ManifestEntry} from '../helpers';
 import { CACHE_DIR, GOLDEN_DIR, PATCH, TABLES_DIR, goldenArtAvailable, inputsAvailable } from '../pipeline';
 
-const ATLAS_NAMES: (keyof TreeAtlases)[] = ['skills', 'skills-disabled', 'frame', 'mastery-effect-active'];
+const ATLAS_NAMES: (keyof TreeAtlases)[] = ['skills', 'frame', 'mastery-effect-active'];
 
 const sha = (buf: Uint8Array): string => createHash('sha256').update(buf).digest('hex');
 

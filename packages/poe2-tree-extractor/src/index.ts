@@ -20,7 +20,7 @@ import type {TreeExport} from './buildTree.js';
 export { parsePsg } from './psg.js';
 export type { Psg, PsgNode, PsgGroup } from './psg.js';
 
-export { packAtlas, desaturate } from './atlas.js';
+export { packAtlas } from './atlas.js';
 export type { AtlasSprite, AtlasFrame, PackedAtlas } from './atlas.js';
 
 export { buildTree } from './buildTree.js';

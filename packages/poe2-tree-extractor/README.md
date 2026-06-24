@@ -49,14 +49,13 @@ const { data, graphics, centre } = await extractTree(source);
 | Field | Type | What it is |
 | --- | --- | --- |
 | `data` | `TreeExport` | The `data.json` payload, `@poe2-toolkit/tree-core`'s normalize input (nodes, groups, classes, arc edges, roots, jewel slots, attribute choices). |
-| `graphics` | `GraphicsResult` | The four sprite atlases (`skills`, `skills-disabled`, `frame`, `mastery-effect-active`), each a packed PNG plus its frame-map, with a report of what packed or was skipped. |
+| `graphics` | `GraphicsResult` | The three sprite atlases (`skills`, `frame`, `mastery-effect-active`), each a packed PNG plus its frame-map, with a report of what packed or was skipped. |
 | `centre` | `Record<string, Buffer>` | Centre art keyed by output name (`portrait-ranger`, `ascendancy-deadeye`, `ring-static`, ...), each a PNG buffer. |
 
 The individual steps are exported too, if you only need one:
 `buildTree(source)`, `buildGraphics(source, data)`, `buildCentre(source)`. The
 lower-level pieces are exported as well: `parsePsg` (the `.psg` graph parser) and
-`packAtlas` / `desaturate` (the atlas packer and the inactive-icon grayscale
-pass), along with their types.
+`packAtlas` (the atlas packer), along with their types.
 
 ## CLI: write the bundle to disk
 
@@ -71,7 +70,7 @@ poe2-tree-extract \
   --out ./out/tree
 ```
 
-All four flags are required. It writes `data.json`, the four atlases as
+All four flags are required. It writes `data.json`, the three atlases as
 `assets/<name>.png` + `<name>.json`, and the centre art as `centre/<name>.png`.
 Output is PNG + JSON; converting the PNGs to WebP for the web is a separate
 publish step left to you.
@@ -89,8 +88,10 @@ publish step left to you.
   passive, and each directed `.psg` edge becomes an arc with its world centre
   resolved up front so the renderer just sweeps it.
 - **Sprites** are decoded from GGPK DDS art and packed into atlases keyed exactly
-  as the renderer expects. A sprite the source cannot serve is skipped and
-  reported, never pulled from a vendored asset.
+  as the renderer expects. Skill icons pack a single colour sprite per node; the
+  unallocated/dimmed look is a render-time tint (a grey multiply, the game's own
+  approach), not a baked desaturated copy. A sprite the source cannot serve is
+  skipped and reported, never pulled from a vendored asset.
 
 Released PoE2 classes and ascendancies only; the GGPK's leftover PoE1 placeholder
 classes are filtered out from the data.

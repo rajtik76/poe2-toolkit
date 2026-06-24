@@ -107,6 +107,9 @@ const RAIL_COLOR = 0x7d6836;
 const RAIL_GAP_ACTIVE = 0xfcde86;
 const RAIL_GAP_INACTIVE = 0x000000;
 
+/** Multiply tint for unallocated node icons: 50% grey = half brightness, hue kept. */
+const ICON_DIM = 0x808080;
+
 /** Vector palette by node kind, used when no atlas art is supplied. */
 const KIND_COLOR: Record<string, number> = {
   normal: 0x3a5b54,
@@ -794,10 +797,16 @@ function buildNode(layer: Container, node: Scene['nodes'][number], resources: Re
   let drew = false;
 
   if (resources) {
-    const iconKey = iconKeyFor(node.kind, node.icon, node.allocated);
+    const iconKey = iconKeyFor(node.kind, node.icon);
     const icon = iconKey ? atlasSprite(resources, iconKey, node.x, node.y, node.iconSize, tex) : null;
 
     if (icon) {
+      // Unallocated nodes draw the same colour icon dimmed, as the game does: a
+      // 50% grey multiply (no desaturation — hue is kept, brightness halved).
+      if (!node.allocated) {
+        icon.tint = ICON_DIM;
+      }
+
       layer.addChild(icon);
       drew = true;
     }

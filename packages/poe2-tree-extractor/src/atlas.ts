@@ -65,16 +65,3 @@ export function packAtlas(sprites: AtlasSprite[], maxWidth = 2048): PackedAtlas 
 
   return { png: encodePng(sheetWidth, sheetHeight, sheet), frames };
 }
-
-/** Grayscale (luminance) copy, alpha preserved — the dimmed/inactive look. */
-export function desaturate(rgba: Uint8Array): Uint8Array {
-  const out = new Uint8Array(rgba.length);
-
-  for (let i = 0; i < rgba.length; i += 4) {
-    const lum = Math.round(0.299 * rgba[i]! + 0.587 * rgba[i + 1]! + 0.114 * rgba[i + 2]!);
-    out[i] = out[i + 1] = out[i + 2] = lum;
-    out[i + 3] = rgba[i + 3]!;
-  }
-
-  return out;
-}

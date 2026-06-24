@@ -17,16 +17,17 @@ import type { NodeKind } from '@poe2-toolkit/tree-core';
  * GGG keys icons as `<variant>:<path>`, where `<path>` is the node's icon path
  * straight from the data (e.g. `Art/2DArt/SkillIcons/passives/Foo.png`).
  */
-export function iconKeyFor(kind: NodeKind, icon: string, allocated: boolean): string | null {
+export function iconKeyFor(kind: NodeKind, icon: string): string | null {
   if (!icon || kind === 'mastery' || kind === 'ascendancyStart') {
     return null;
   }
 
   const variant = kind === 'keystone' ? 'keystone' : kind === 'notable' || kind === 'ascendancyNotable' ? 'notable' : 'normal';
 
-  // Allocated icons come from the `skills` atlas (Active); unallocated ones from
-  // `skills-disabled` (Inactive, desaturated).
-  return `${variant}${allocated ? 'Active' : 'Inactive'}:${icon}`;
+  // One colour icon per node (the `skills` atlas, Active). The unallocated dim
+  // is a render-time tint, not a separate sprite — matching how the game draws
+  // it (a multiply over the same icon), so there is no Inactive variant.
+  return `${variant}Active:${icon}`;
 }
 
 /**

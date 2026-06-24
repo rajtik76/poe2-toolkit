@@ -1,8 +1,10 @@
 /**
  * Builds the passive-tree sprite atlases from GGPK art, in the shape the
- * renderer reads: skill icons (`skills` + desaturated `skills-disabled`), node
- * frames (`frame`), and mastery effect patterns (`mastery-effect-active`).
- * Atlas keys mirror the engine's `spriteKeys`. Source: GGPK only.
+ * renderer reads: skill icons (`skills`), node frames (`frame`), and mastery
+ * effect patterns (`mastery-effect-active`). One colour icon per node; the
+ * unallocated/dimmed look is a render-time tint (matching the game), so no
+ * separate disabled atlas is baked. Atlas keys mirror the engine's
+ * `spriteKeys`. Source: GGPK only.
  *
  * Unlike the legacy script this has no GGG-export fallback: a sprite the source
  * cannot serve is skipped and reported, never pulled from a vendored asset.
@@ -10,14 +12,13 @@
 
 import type { GgpkImageSource, GgpkSource } from '@poe2-toolkit/ggpk';
 
-import { desaturate, packAtlas   } from './atlas.js';
+import { packAtlas } from './atlas.js';
 import type {AtlasSprite, PackedAtlas} from './atlas.js';
 import type { ExportNode, TreeExport } from './buildTree.js';
 
-/** The four atlases this build produces, keyed by atlas name. */
+/** The three atlases this build produces, keyed by atlas name. */
 export interface TreeAtlases {
   skills: PackedAtlas;
-  'skills-disabled': PackedAtlas;
   frame: PackedAtlas;
   'mastery-effect-active': PackedAtlas;
 }
@@ -68,7 +69,9 @@ function variantOf(node: ExportNode): string | null {
 }
 
 export async function buildGraphics(source: GraphicsSource, tree: TreeExport): Promise<GraphicsResult> {
-  // --- skill icons: skills (active) + skills-disabled (desaturated) ----------
+  // --- skill icons: one colour atlas (`skills`) -----------------------------
+  // The unallocated dimming is a render-time tint, not a baked desaturation, so
+  // this packs a single colour sprite per node icon.
 
   // icon-path -> variant; first node wins, same icon shares a variant.
   const wanted = new Map<string, { variant: string; icon: string }>();
@@ -92,7 +95,6 @@ export async function buildGraphics(source: GraphicsSource, tree: TreeExport): P
   }
 
   const active: AtlasSprite[] = [];
-  const inactive: AtlasSprite[] = [];
   let iconsMissing = 0;
 
   for (const { variant, icon } of wanted.values()) {
@@ -104,7 +106,6 @@ export async function buildGraphics(source: GraphicsSource, tree: TreeExport): P
     }
 
     active.push({ key: `${variant}Active:${icon}`, width: img.width, height: img.height, rgba: img.rgba });
-    inactive.push({ key: `${variant}Inactive:${icon}`, width: img.width, height: img.height, rgba: desaturate(img.rgba) });
   }
 
   // --- node frames: frame atlas ----------------------------------------------
@@ -176,7 +177,6 @@ export async function buildGraphics(source: GraphicsSource, tree: TreeExport): P
   // 16383px cap.
   const atlases: TreeAtlases = {
     'skills': packAtlas(active),
-    'skills-disabled': packAtlas(inactive),
     'frame': packAtlas(frameSprites),
     'mastery-effect-active': packAtlas(masterySprites, 6000),
   };

@@ -20,10 +20,9 @@ interface AtlasJson {
   frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }>;
 }
 
-/** The four atlas frame-maps and the sprite count each pinned to. */
+/** The three atlas frame-maps and the sprite count each pinned to. */
 const ATLASES: { name: string; frames: number }[] = [
   { name: 'skills', frames: 674 },
-  { name: 'skills-disabled', frames: 674 },
   { name: 'frame', frames: 17 },
   { name: 'mastery-effect-active', frames: 56 },
 ];

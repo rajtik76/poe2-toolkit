@@ -95,6 +95,10 @@ different atlas set comes down to swapping that one file. Leave `resources` out
 and you get a plain vector render of discs and rails, which is handy for
 debugging without art.
 
+A node has one colour icon. Unallocated nodes draw that same icon dimmed with a
+50% grey multiply tint at draw time, the game's own look, so you supply a single
+skill-icon atlas, not a separate inactive one.
+
 The hub artwork (class portrait and ornate ring) comes in through the optional
 `centreSprites` prop. Skip it and the hub falls back to a vector placeholder.
 
