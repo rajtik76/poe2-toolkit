@@ -63,6 +63,13 @@ export interface TreeViewProps {
    * Unlike `onNodeHover`, this is a persistent set drawn until it changes.
    */
   highlight?: Set<number> | null;
+  /**
+   * Look of the {@link highlight} rings — colours, widths and pulse. The
+   * renderer owns the draw (it alone holds the WebGL context and the relocated
+   * ascendancy transform); this only tunes its appearance. Omit any field to
+   * keep its default; omit the whole prop for the standing teal pulse.
+   */
+  highlightStyle?: HighlightStyle;
   /** Debug: draw each node's skill id over it, to cross-check geometry/edges. */
   debugIds?: boolean;
   /** Zoom and pan extents. Omit any field to keep its default. */
@@ -95,6 +102,48 @@ interface ResolvedZoom {
   overscroll: number;
 }
 
+/**
+ * Tunable look of the search-highlight rings (all optional; see defaults on
+ * each field). Two concentric strokes are drawn per matched node: a soft wide
+ * `glow` and a bright thin `core`, both pulsing in alpha and radius.
+ */
+export interface HighlightStyle {
+  /** Soft outer ring colour. Default `0x3fae9f` (teal). */
+  glowColor?: number;
+  /** Bright inner ring colour. Default `0x7df9e0` (light teal). */
+  coreColor?: number;
+  /** Outer ring stroke width, on-screen px. Default 8. */
+  glowWidth?: number;
+  /** Inner ring stroke width, on-screen px. Default 3. */
+  coreWidth?: number;
+  /** Gap between the node's frame and the ring, on-screen px. Default 6. */
+  radius?: number;
+  /**
+   * Pulse period divisor in ms (larger = slower). Default 320. Set to 0 for a
+   * still ring (no per-frame redraw — the ring is drawn once and left).
+   */
+  pulseMs?: number;
+  /** Extra radius added at the pulse peak, on-screen px. Default 5. */
+  pulseGrow?: number;
+  /** Outer ring alpha range `[trough, peak]` over the pulse. Default `[0.2, 0.65]`. */
+  glowAlpha?: [number, number];
+  /** Inner ring alpha range `[trough, peak]` over the pulse. Default `[0.55, 1]`. */
+  coreAlpha?: [number, number];
+}
+
+/** {@link HighlightStyle} with every field resolved to a concrete value. */
+interface ResolvedHighlightStyle {
+  glowColor: number;
+  coreColor: number;
+  glowWidth: number;
+  coreWidth: number;
+  radius: number;
+  pulseMs: number;
+  pulseGrow: number;
+  glowAlpha: [number, number];
+  coreAlpha: [number, number];
+}
+
 /** Imperative handle exposed via `controls` for external zoom buttons. */
 export interface TreeViewControls {
   zoomIn: () => void;
@@ -123,6 +172,19 @@ const MIN_SCALE = 0.02;
 const MAX_SCALE = 4;
 const DEFAULT_MIN_FIT = 0.85;
 const DEFAULT_OVERSCROLL = 0.5;
+
+/** Defaults for {@link HighlightStyle} — the standing teal search pulse. */
+const DEFAULT_HIGHLIGHT: ResolvedHighlightStyle = {
+  glowColor: 0x3fae9f,
+  coreColor: 0x7df9e0,
+  glowWidth: 8,
+  coreWidth: 3,
+  radius: 6,
+  pulseMs: 320,
+  pulseGrow: 5,
+  glowAlpha: [0.2, 0.65],
+  coreAlpha: [0.55, 1],
+};
 /** Below this zoom the debug id labels are hidden (a tiny, costly, unreadable mess). */
 const LABEL_MIN_SCALE = 0.35;
 const ZOOM_STEP = 1.3;
@@ -186,6 +248,7 @@ export function TreeView({
   wheelZoom,
   focus,
   highlight,
+  highlightStyle,
   debugIds,
   zoom,
   className,
@@ -232,6 +295,10 @@ export function TreeView({
     overscroll: DEFAULT_OVERSCROLL,
   });
 
+  // Resolved highlight look, in a ref so the ticker and sync read current values
+  // without re-subscribing. Kept current in the effect below (never during render).
+  const highlightStyleRef = useRef<ResolvedHighlightStyle>(DEFAULT_HIGHLIGHT);
+
   // Apply the current viewport to the world container and refresh the overlay.
   // O(1) — no sprite touches. Stable (reads refs), so panning/zooming never
   // rebuilds the scene graph.
@@ -253,6 +320,7 @@ export function TreeView({
       highlightRef.current,
       previewRef.current,
       activeAscendancyRef.current,
+      highlightStyleRef.current,
     );
 
     // Debug id labels are heavy; only show (and render) them once zoomed in far
@@ -341,6 +409,7 @@ export function TreeView({
               highlightRef.current,
               previewRef.current,
               activeAscendancyRef.current,
+              highlightStyleRef.current,
             );
           }
         });
@@ -369,7 +438,21 @@ export function TreeView({
     sceneRef.current = scene;
     highlightRef.current = highlight ?? null;
     previewRef.current = preview ?? null;
-    highlightActiveRef.current = Boolean(highlight && highlight.size > 0);
+    const resolvedStyle: ResolvedHighlightStyle = {
+      glowColor: highlightStyle?.glowColor ?? DEFAULT_HIGHLIGHT.glowColor,
+      coreColor: highlightStyle?.coreColor ?? DEFAULT_HIGHLIGHT.coreColor,
+      glowWidth: highlightStyle?.glowWidth ?? DEFAULT_HIGHLIGHT.glowWidth,
+      coreWidth: highlightStyle?.coreWidth ?? DEFAULT_HIGHLIGHT.coreWidth,
+      radius: highlightStyle?.radius ?? DEFAULT_HIGHLIGHT.radius,
+      pulseMs: highlightStyle?.pulseMs ?? DEFAULT_HIGHLIGHT.pulseMs,
+      pulseGrow: highlightStyle?.pulseGrow ?? DEFAULT_HIGHLIGHT.pulseGrow,
+      glowAlpha: highlightStyle?.glowAlpha ?? DEFAULT_HIGHLIGHT.glowAlpha,
+      coreAlpha: highlightStyle?.coreAlpha ?? DEFAULT_HIGHLIGHT.coreAlpha,
+    };
+    highlightStyleRef.current = resolvedStyle;
+    // Only run the per-frame pulse redraw when a set is present AND it animates;
+    // a still ring (pulseMs 0) is drawn once by the sync() below, no ticker cost.
+    highlightActiveRef.current = Boolean(highlight && highlight.size > 0 && resolvedStyle.pulseMs > 0);
     activeAscendancyRef.current = activeAscendancy;
     limitsRef.current = {
       maxScale: zoom?.maxScale ?? MAX_SCALE,
@@ -377,7 +460,7 @@ export function TreeView({
       overscroll: zoom?.overscroll ?? DEFAULT_OVERSCROLL,
     };
     sync();
-  }, [scene, highlight, preview, activeAscendancy, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
+  }, [scene, highlight, highlightStyle, preview, activeAscendancy, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
 
   // ---- Scene graph build ---------------------------------------------------
 
@@ -544,7 +627,7 @@ export function TreeView({
         hoverRef.current = hit;
         const node = hit !== null ? scene.nodes.find((candidate) => candidate.skill === hit) : undefined;
         onNodeHover?.(hit, node ? worldToScreen(viewport, node.x, node.y) : undefined);
-        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null, activeAscendancy);
+        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null, activeAscendancy, highlightStyleRef.current);
       }
     },
     [scene, sync, onNodeHover, activeAscendancy, highlight, preview],
@@ -1116,7 +1199,8 @@ function drawOverlay(
   hover: number | null,
   highlight: Set<number> | null,
   preview: AllocationPreview | null,
-  activeAscendancy?: string,
+  activeAscendancy: string | undefined,
+  highlightStyle: ResolvedHighlightStyle,
 ): void {
   if (!g || !viewport) {
     return;
@@ -1155,12 +1239,15 @@ function drawOverlay(
     }
   }
 
-  // Search highlight: soft glow + bright core, pulsing.
+  // Search highlight: soft glow + bright core, pulsing. Look is caller-tunable
+  // via the resolved highlightStyle; pulseMs 0 freezes it at the peak.
   if (highlight && highlight.size > 0) {
-    const pulse = (Math.sin(performance.now() / 320) + 1) / 2;
-    const glowAlpha = 0.2 + pulse * 0.45;
-    const coreAlpha = 0.55 + pulse * 0.45;
-    const grow = pulse * 5;
+    const hs = highlightStyle;
+    const pulse = hs.pulseMs > 0 ? (Math.sin(performance.now() / hs.pulseMs) + 1) / 2 : 1;
+    const lerp = (range: [number, number]): number => range[0] + pulse * (range[1] - range[0]);
+    const glowAlpha = lerp(hs.glowAlpha);
+    const coreAlpha = lerp(hs.coreAlpha);
+    const grow = pulse * hs.pulseGrow;
 
     for (const node of scene.nodes) {
       if (!highlight.has(node.skill) || node.kind === 'mastery') {
@@ -1168,9 +1255,9 @@ function drawOverlay(
       }
 
       const [ox, oy] = offsetFor(node.ascendancy);
-      const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + px(6 + grow);
-      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(8), color: 0x3fae9f, alpha: glowAlpha });
-      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(3), color: 0x7df9e0, alpha: coreAlpha });
+      const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + px(hs.radius + grow);
+      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(hs.glowWidth), color: hs.glowColor, alpha: glowAlpha });
+      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(hs.coreWidth), color: hs.coreColor, alpha: coreAlpha });
     }
   }
 

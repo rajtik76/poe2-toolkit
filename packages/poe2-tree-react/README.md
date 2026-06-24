@@ -113,6 +113,7 @@ The hub artwork (class portrait and ornate ring) comes in through the optional
   centreSprites={centreSprites} // optional portrait + ring artwork
   preview={preview}             // hover highlight: pending add (gold) / remove (red)
   highlight={searchHits}        // skill ids to ring with a standing teal ring (e.g. search hits)
+  highlightStyle={ringStyle}    // tune the highlight rings' colours, widths and pulse
   focus={worldRect}             // pass a fresh rect to pan + zoom-fit to it
   wheelZoom                     // turn on wheel zoom (off by default)
   debugIds                      // overlay each node's skill id (debug; off by default)
@@ -128,7 +129,13 @@ The hub artwork (class portrait and ornate ring) comes in through the optional
 ```
 
 Exported types: `TreeViewProps`, `TreeViewControls`, `AllocationPreview`,
-`CentreSprite`, `ZoomLimits`, `RenderResources`.
+`CentreSprite`, `ZoomLimits`, `HighlightStyle`, `RenderResources`.
+
+`highlightStyle` tunes the look of the `highlight` rings, each field optional:
+`glowColor` / `coreColor` (the soft outer and bright inner ring), `glowWidth` /
+`coreWidth`, `radius` (gap from the node frame), `pulseMs` (period; 0 for a still
+ring), `pulseGrow` (extra radius at the peak), and `glowAlpha` / `coreAlpha`
+(`[trough, peak]`). Omit the prop for the standing teal pulse.
 
 `zoom` tunes the view extents, each field optional: `maxScale` caps zoom-in,
 `minFitFactor` is the zoom-out floor as a multiple of the fit-the-whole-tree
