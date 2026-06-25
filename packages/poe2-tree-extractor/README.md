@@ -36,13 +36,17 @@ import { createCdnSource } from '@poe2-toolkit/ggpk';
 import { extractTree } from '@poe2-toolkit/tree-extractor';
 
 const source = await createCdnSource({
-  patch: '4.5.3.1.7',
+  patch: '4.5.4.1',
   tablesDir: './tables/English',
   cacheDir: './.cache',
 });
 
 const { data, graphics, centre } = await extractTree(source);
 ```
+
+> `patch` is whatever version the patch server currently serves — the value above
+> is only illustrative and will age. The CDN serves just the current patch, so a
+> stale version 404s; pass the one you actually want to extract.
 
 `extractTree(source)` returns a `TreeBundle`:
 
@@ -64,13 +68,14 @@ When you do want files, the bundled CLI writes the whole bundle to a
 
 ```sh
 poe2-tree-extract \
-  --patch 4.5.3.1.7 \
+  --patch 4.5.4.1 \
   --tables ./tables/English \
   --cache ./.cache \
   --out ./out/tree
 ```
 
-All four flags are required. It writes `data.json`, the three atlases as
+All four flags are required (`--patch` is illustrative above — pass the version
+the patch server currently serves). It writes `data.json`, the three atlases as
 `assets/<name>.png` + `<name>.json`, and the centre art as `centre/<name>.png`.
 Output is PNG + JSON; converting the PNGs to WebP for the web is a separate
 publish step left to you.
