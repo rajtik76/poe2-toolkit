@@ -172,6 +172,9 @@ interface CharacterRow { Name: string; BaseStrength: number; BaseDexterity: numb
 interface AscendancyRow { Id: string; Name?: string; Character?: number | null; Disabled?: boolean }
 interface JewelSlotRow { Slot?: number | null }
 interface ClassOverrideRow { SkillToOverride: number; Override: number; CharacterToOverrideFor: number }
+interface QuestStaticRewardRow { QuestFlag?: number | null; WeaponPassives?: number | null }
+interface ExperienceLevelRow { Level?: number | null }
+interface QuestFlagRow { Id?: string | null }
 
 // --- exported tree shape -----------------------------------------------------
 
@@ -257,6 +260,18 @@ export interface TreeExport {
   min_y: number;
   max_x: number;
   max_y: number;
+  /**
+   * Points spendable on the main (always-active) tree at the level cap: one per
+   * level after the first, plus every campaign weapon-set passive point. Derived
+   * from GGPK (ExperienceLevels + QuestStaticRewards), not a hardcoded constant.
+   */
+  maxBasicPoints: number;
+  /**
+   * Points a single weapon set can diverge by: the campaign weapon-set passive
+   * grant. Each of the two weapon sets gets this many set-specific allocations
+   * on top of the shared main tree. Sourced from GGPK QuestStaticRewards.
+   */
+  maxWeaponSetPoints: number;
 }
 
 /** Read a UTF-16 `.csd` stat-description file from the source into a string. */
@@ -284,6 +299,9 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   const Ascendancy = (await source.table('Ascendancy')) as unknown as AscendancyRow[];
   const JewelSlots = (await source.table('PassiveJewelSlots')) as JewelSlotRow[];
   const ClassOverrides = (await source.table('ClassPassiveSkillOverrides')) as unknown as ClassOverrideRow[];
+  const QuestStaticRewards = (await source.table('QuestStaticRewards')) as QuestStaticRewardRow[];
+  const ExperienceLevels = (await source.table('ExperienceLevels')) as ExperienceLevelRow[];
+  const QuestFlags = (await source.table('QuestFlags')) as QuestFlagRow[];
   // Some nodes describe themselves via a granted skill or passive points rather
   // than `Stats`; resolve the skill's display name through SkillGems -> BaseItemTypes.
   const SkillGems = (await source.table('SkillGems')) as SkillGemRow[];
@@ -631,6 +649,23 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     maxY = Math.max(maxY, n.y as number);
   }
 
+  // --- passive-point budget --------------------------------------------------
+  //
+  // Level points: one per level above the first, so (maxLevel - 1), read from
+  // ExperienceLevels. Weapon-set quest points: every weapon-set passive point a
+  // campaign quest grants, from QuestStaticRewards. A handful of grants come
+  // from optional, non-campaign content (fishing, logbook runes) the budget
+  // ignores — Path of Building excludes them too — so those flags are filtered
+  // out by id. Both feed the budget straight from GGPK tables.
+  const NON_CAMPAIGN_WEAPON_GRANT = /logbook|fish/i;
+  const flagId = (index?: number | null): string => (index != null ? QuestFlags[index]?.Id ?? '' : '');
+  const maxLevel = ExperienceLevels.reduce((max, row) => Math.max(max, row.Level ?? 0), 0);
+  const maxWeaponSetPoints = QuestStaticRewards.reduce(
+    (sum, row) => (NON_CAMPAIGN_WEAPON_GRANT.test(flagId(row.QuestFlag)) ? sum : sum + (row.WeaponPassives ?? 0)),
+    0,
+  );
+  const maxBasicPoints = Math.max(0, maxLevel - 1) + maxWeaponSetPoints;
+
   return {
     tree: 'Default',
     classes,
@@ -644,5 +679,7 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     min_y: Math.round(minY),
     max_x: Math.round(maxX),
     max_y: Math.round(maxY),
+    maxBasicPoints,
+    maxWeaponSetPoints,
   };
 }

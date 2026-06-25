@@ -156,6 +156,11 @@ export interface AllocationPreview {
   nodes: Set<number>;
   /** Edge keys as `min-max` of the two node ids. */
   edges: Set<string>;
+  /**
+   * Weapon set an `add` preview would allocate into (1 or 2); absent means basic.
+   * Tints the planned path in the set's colour so it matches the paint mode.
+   */
+  weaponSet?: 1 | 2;
 }
 
 /** A sprite to draw at the hub: source image URL + the sub-rect to crop. */
@@ -197,6 +202,16 @@ const RAIL_GAP = 4.8;
 const RAIL_COLOR = 0x7d6836;
 const RAIL_GAP_ACTIVE = 0xfcde86;
 const RAIL_GAP_INACTIVE = 0x000000;
+
+/**
+ * Tint for weapon-set allocations: set I green, set II blue, keeping the basic
+ * tree on its gold rail. Applied to set nodes' frames and their active rails so
+ * each weapon set reads apart in the single combined view.
+ */
+const WEAPON_SET_COLOR: Record<1 | 2, number> = {
+  1: 0x4fbf7a,
+  2: 0x4fa8ff,
+};
 
 /** Multiply tint for unallocated node icons: 50% grey = half brightness, hue kept. */
 const ICON_DIM = 0x808080;
@@ -873,35 +888,41 @@ function buildConnections(g: Graphics, connections: Scene['connections'], ascend
   const gap = RAIL_GAP;
   const rail = RAIL_WIDTH;
 
-  // Inactive first (under), then active (on top). For each state a wide rail
-  // stroke then a narrow gap stroke gives the twin-rail look.
-  for (const active of [false, true]) {
-    const want = connections.filter((conn) => {
-      if (ascendancyOnly === false && conn.ascendancy) {
-        return false;
-      }
+  const visible = (conn: Scene['connections'][number]): boolean =>
+    !(ascendancyOnly === false && conn.ascendancy);
 
-      return conn.active === active;
-    });
+  // Inactive rails first (under): bronze for the main tree, solid black for
+  // ascendancy edges.
+  const inactive = connections.filter((conn) => visible(conn) && !conn.active);
+
+  if (inactive.length > 0) {
+    addConnPaths(g, inactive);
+    g.stroke({ width: gap + rail * 2, color: ascendancyOnly ? RAIL_GAP_INACTIVE : RAIL_COLOR, cap: 'round' });
+
+    if (!ascendancyOnly) {
+      addConnPaths(g, inactive);
+      g.stroke({ width: gap, color: RAIL_GAP_INACTIVE, cap: 'round' });
+    }
+  }
+
+  // Active rails on top, drawn per weapon set so each reads in its own colour:
+  // basic gold first, then the two sets over it (the set II overlay stays
+  // visible even where it shares geometry with the basic tree).
+  const active = connections.filter((conn) => visible(conn) && conn.active);
+
+  for (const set of [undefined, 1, 2] as const) {
+    const want = active.filter((conn) => conn.weaponSet === set);
 
     if (want.length === 0) {
       continue;
     }
 
-    // Inactive ascendancy edges are a single solid black rail (matching the game).
-    const gapColor = active ? RAIL_GAP_ACTIVE : ascendancyOnly ? null : RAIL_GAP_INACTIVE;
-
-    // Inactive ascendancy edges are a solid black rail; inactive main edges keep
-    // the bronze rail. Active edges use the gold gap colour as a single rail.
-    const railColor = active ? RAIL_GAP_ACTIVE : ascendancyOnly ? RAIL_GAP_INACTIVE : RAIL_COLOR;
+    const color = set === undefined ? RAIL_GAP_ACTIVE : WEAPON_SET_COLOR[set];
 
     addConnPaths(g, want);
-    g.stroke({ width: gap + rail * 2, color: railColor, cap: 'round' });
-
-    if (gapColor !== null) {
-      addConnPaths(g, want);
-      g.stroke({ width: gap, color: gapColor, cap: 'round' });
-    }
+    g.stroke({ width: gap + rail * 2, color, cap: 'round' });
+    addConnPaths(g, want);
+    g.stroke({ width: gap, color, cap: 'round' });
   }
 }
 
@@ -951,6 +972,12 @@ function buildNode(layer: Container, node: Scene['nodes'][number], resources: Re
     const frame = frameKey ? atlasSprite(resources, frameKey, node.x, node.y, node.frameSize, tex) : null;
 
     if (frame) {
+      // Tint a weapon-set node's frame so it reads apart from the gold basic
+      // tree; basic nodes keep the untinted frame.
+      if (node.allocated && node.weaponSet) {
+        frame.tint = WEAPON_SET_COLOR[node.weaponSet];
+      }
+
       layer.addChild(frame);
       drew = true;
     }
@@ -1222,20 +1249,48 @@ function drawOverlay(
   // base rails), clamped to a small on-screen minimum — matching the Canvas2D
   // `max(3, 9 * scale)` / `max(1.5, 4 * scale)` so the path tracks the zoom.
   if (preview) {
-    const color = preview.kind === 'remove' ? 0xeb6060 : 0xffe296;
-    const glow = preview.kind === 'remove' ? 0.35 : 0.4;
-    const core = preview.kind === 'remove' ? 0.95 : 0.98;
+    const remove = preview.kind === 'remove';
+    // Add preview takes the paint mode's tint (gold basic, set colours for I/II);
+    // removal is always red.
+    const color = remove ? 0xeb6060 : preview.weaponSet ? WEAPON_SET_COLOR[preview.weaponSet] : 0xffe296;
+    const glow = remove ? 0.35 : 0.4;
+    const core = remove ? 0.95 : 0.98;
+    // The removal line matches the active rail's full width (gap + rail*2) so it
+    // reads as thick as the gold connector it would cut; the add preview stays a
+    // slimmer guide.
+    const glowWidth = remove ? RAIL_GAP + RAIL_WIDTH * 3 : Math.max(9, px(3));
+    const coreWidth = remove ? RAIL_GAP + RAIL_WIDTH * 2 : Math.max(4, px(1.5));
 
     for (const conn of scene.connections) {
       if (!preview.edges.has(edgeKey(conn.from, conn.to))) {
         continue;
       }
 
+      // A removal only cuts lit rails: never paint a dim (inactive) connector red,
+      // even if a removed node happens to touch one.
+      if (remove && !conn.active) {
+        continue;
+      }
+
       const [ox, oy] = offsetFor(conn.ascendancy);
       addConnPaths(g, [conn], ox, oy);
-      g.stroke({ width: Math.max(9, px(3)), color, alpha: glow, cap: 'round' });
+      g.stroke({ width: glowWidth, color, alpha: glow, cap: 'round' });
       addConnPaths(g, [conn], ox, oy);
-      g.stroke({ width: Math.max(4, px(1.5)), color, alpha: core, cap: 'round' });
+      g.stroke({ width: coreWidth, color, alpha: core, cap: 'round' });
+    }
+
+    // Ring every node the click removes, so the preview matches the deletion 1:1
+    // even for a lone tip that has no edge between two removed nodes.
+    if (remove) {
+      for (const node of scene.nodes) {
+        if (!preview.nodes.has(node.skill)) {
+          continue;
+        }
+
+        const [ox, oy] = offsetFor(node.ascendancy);
+        g.circle(node.x + ox, node.y + oy, node.radius * 0.92);
+        g.stroke({ width: coreWidth, color, alpha: core });
+      }
     }
   }
 

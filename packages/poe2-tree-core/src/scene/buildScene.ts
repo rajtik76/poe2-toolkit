@@ -17,6 +17,7 @@ import type {
   SceneOptions,
   TreeData,
   TreeNode,
+  WeaponSet,
   WorldRect,
 } from '../types.js';
 import { placeConnection } from './connections.js';
@@ -24,6 +25,29 @@ import { classifyNode, nodeTargetSize } from './nodeSize.js';
 
 export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
   const allocated = new Set(opts.allocation?.allocated ?? []);
+
+  // Weapon-set assignment for allocated nodes (node id -> 1|2); absent = basic.
+  // Drives the per-set tint the renderer applies to nodes and rails.
+  const weaponSets = opts.allocation?.weaponSets ?? {};
+  const weaponSetOf = (id: number): WeaponSet | undefined => weaponSets[id];
+
+  // The weapon set an active edge belongs to: a set tints its rail when both
+  // endpoints sit in that set or the shared tree. An edge bridging set 1 and
+  // set 2 belongs to neither, so it stays basic.
+  const edgeWeaponSet = (a: number, b: number): WeaponSet | undefined => {
+    const ma = weaponSetOf(a);
+    const mb = weaponSetOf(b);
+
+    if (ma === undefined) {
+      return mb;
+    }
+
+    if (mb === undefined || mb === ma) {
+      return ma;
+    }
+
+    return undefined;
+  };
 
   // The active ascendancy's start node (the diamond every first node launches
   // from) is implicitly allocated — you have the ascendancy — so its rails into
@@ -107,6 +131,9 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
       frameSize: size.overlay * 2,
       radius: Math.max(size.icon, size.overlay),
       allocated: allocated.has(node.skill),
+      ...(allocated.has(node.skill) && weaponSetOf(node.skill) !== undefined
+        ? { weaponSet: weaponSetOf(node.skill) as WeaponSet }
+        : {}),
       ...(node.ascendancyName !== undefined ? { ascendancy: node.ascendancyName } : {}),
       // Display-only jewel socketed here (from the build); no radius effect.
       ...(opts.allocation?.jewels?.[node.skill] ? { jewel: opts.allocation.jewels[node.skill] } : {}),
@@ -167,8 +194,23 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
       seenEdges.add(key);
 
       try {
-        const active = allocated.has(node.skill) && allocated.has(conn.id);
+        // An edge bridging the two weapon sets (one node set 1, the other set 2)
+        // is active in neither set's view, so it never lights up — only edges
+        // within one set or the shared tree do.
+        const setA = weaponSetOf(node.skill);
+        const setB = weaponSetOf(conn.id);
+        const crossSet = setA !== undefined && setB !== undefined && setA !== setB;
+        const active = allocated.has(node.skill) && allocated.has(conn.id) && !crossSet;
         const placed = placeConnection(data, node.skill, conn.id, conn.arcCentre, active);
+
+        // Tint an active rail by the weapon set both endpoints share.
+        if (active) {
+          const set = edgeWeaponSet(node.skill, conn.id);
+
+          if (set !== undefined) {
+            placed.weaponSet = set;
+          }
+        }
 
         // Tag intra-ascendancy edges so the renderer can relocate them too.
         if (node.ascendancyName && node.ascendancyName === target.ascendancyName) {

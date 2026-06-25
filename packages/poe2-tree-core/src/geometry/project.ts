@@ -65,6 +65,7 @@ export function project(scene: Scene, viewport: Viewport, size: Size): ScreenSce
       frameSize: node.frameSize * scale,
       radius: screenRadius,
       allocated: node.allocated,
+      ...(node.weaponSet !== undefined ? { weaponSet: node.weaponSet } : {}),
       ...(node.jewel ? { jewel: node.jewel } : {}),
     });
   }
@@ -93,6 +94,7 @@ export function project(scene: Scene, viewport: Viewport, size: Size): ScreenSce
         a,
         b,
         active: conn.active,
+        ...(conn.weaponSet !== undefined ? { weaponSet: conn.weaponSet } : {}),
         arc: {
           cx: centre.x,
           cy: centre.y,
@@ -104,7 +106,15 @@ export function project(scene: Scene, viewport: Viewport, size: Size): ScreenSce
         },
       });
     } else {
-      connections.push({ from: conn.from, to: conn.to, kind: 'line', a, b, active: conn.active });
+      connections.push({
+        from: conn.from,
+        to: conn.to,
+        kind: 'line',
+        a,
+        b,
+        active: conn.active,
+        ...(conn.weaponSet !== undefined ? { weaponSet: conn.weaponSet } : {}),
+      });
     }
   }
 

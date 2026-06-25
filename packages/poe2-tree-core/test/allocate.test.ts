@@ -6,6 +6,7 @@ import {
   pathToNode,
   reachable,
   toggleAllocation,
+  toggleAllocationInMode,
   toggleAscendancyAllocation,
 } from '../src/index.js';
 import type { TreeData, TreeNode } from '../src/index.js';
@@ -108,11 +109,11 @@ describe('toggleAllocation', () => {
     expect(toggleAllocation(data, 0, new Set(), 3).sort()).toEqual([1, 2, 3]);
   });
 
-  it('removes only what is beyond the clicked node, keeping the node itself', () => {
-    // start(0)-1-2-3-4 line; clicking 2 removes the part further out (3,4) and
-    // keeps 1,2 — clicking shortens the path back to the clicked node.
+  it('removes the clicked node and everything beyond it', () => {
+    // start(0)-1-2-3-4 line; clicking 2 removes 2 and the part further out (3,4),
+    // keeping 1 — a click deletes the node and its dependents (PoB semantics).
     const result = toggleAllocation(data, 0, new Set([1, 2, 3, 4]), 2);
-    expect(result.sort()).toEqual([1, 2]);
+    expect(result.sort()).toEqual([1]);
   });
 
   it('removes a tip node itself (nothing lies beyond it)', () => {
@@ -126,15 +127,86 @@ describe('toggleAllocation', () => {
     expect(result.sort()).toEqual([1, 2, 5]);
   });
 
-  it('clicking a junction removes every branch beyond it', () => {
-    // clicking 2 (branches to 3 and 5) removes both 3 and 5, keeping 1,2.
+  it('clicking a junction removes it and every branch beyond it', () => {
+    // clicking 2 (branches to 3 and 5) removes 2, 3 and 5, keeping just 1.
     const result = toggleAllocation(data, 0, new Set([1, 2, 3, 5]), 2);
-    expect(result.sort()).toEqual([1, 2]);
+    expect(result.sort()).toEqual([1]);
   });
 
   it('reachable keeps only what is still connected to the start', () => {
     const graph = buildTreeGraph(lineData());
     expect([...reachable(graph, [0], new Set([1, 3, 4]))].sort()).toEqual([1]);
+  });
+});
+
+describe('toggleAllocationInMode', () => {
+  // start(0)-1-2-3-4 line, branch 2-5, plus a keystone tip 6 off 3.
+  const data: TreeData = {
+    ...lineData(),
+    nodes: {
+      0: node(0, [1], { classesStart: ['Ranger'] }),
+      1: node(1, [0, 2]),
+      2: node(2, [1, 3, 5, 9]),
+      3: node(3, [2, 4, 6]),
+      4: node(4, [3]),
+      5: node(5, [2]),
+      6: node(6, [3], { isKeystone: true }),
+      9: node(9, [2], { isMastery: true }),
+    },
+  };
+  const graph = buildTreeGraph(data);
+  const blank = { allocated: [], weaponSets: {} };
+
+  it('allocates a basic path with no weapon-set tags', () => {
+    const next = toggleAllocationInMode(data, 0, blank, 3, 0, graph);
+    expect(next.allocated.sort()).toEqual([1, 2, 3]);
+    expect(next.weaponSets).toEqual({});
+  });
+
+  it('tags a weapon-set branch that sprouts from the basic tree', () => {
+    const basic = { allocated: [1, 2], weaponSets: {} };
+    const next = toggleAllocationInMode(data, 0, basic, 4, 1, graph);
+    expect(next.allocated.sort()).toEqual([1, 2, 3, 4]);
+    expect(next.weaponSets).toEqual({ 3: 1, 4: 1 }); // the new nodes are set I
+  });
+
+  it('cannot path a weapon set through the other set’s nodes', () => {
+    // 3 is allocated to set II; allocating 4 (only reachable past 3) in set I is
+    // blocked, so the allocation is unchanged.
+    const setTwo = { allocated: [1, 2, 3], weaponSets: { 3: 2 as const } };
+    const next = toggleAllocationInMode(data, 0, setTwo, 4, 1, graph);
+    expect(next).toBe(setTwo);
+  });
+
+  it('removes the clicked node and the weapon-set branch that depended on it', () => {
+    // basic 1,2; set I branch 3,4 hangs off 2. Clicking 2 removes 2 and the
+    // branch it carried (Path of Building semantics: a node depends on itself).
+    const mixed = { allocated: [1, 2, 3, 4], weaponSets: { 3: 1 as const, 4: 1 as const } };
+    const next = toggleAllocationInMode(data, 0, mixed, 2, 0, graph);
+    expect(next.allocated.sort()).toEqual([1]); // 2 + its branch 3,4 all gone
+    expect(next.weaponSets).toEqual({});
+  });
+
+  it('removes a clicked junction and every branch beyond it, keeping the trunk', () => {
+    // 0-1-2 trunk; 2 is a junction to leaf 5 and to the 3-4 chain. Clicking 2
+    // removes 2, 3, 4 and 5 — its whole dependent subtree — but keeps 1.
+    const all = { allocated: [1, 2, 3, 4, 5], weaponSets: {} };
+    const next = toggleAllocationInMode(data, 0, all, 2, 0, graph);
+    expect(next.allocated.sort()).toEqual([1]);
+  });
+
+  it('removes only the clicked tip', () => {
+    const all = { allocated: [1, 2, 3, 4], weaponSets: {} };
+    const next = toggleAllocationInMode(data, 0, all, 4, 0, graph);
+    expect(next.allocated.sort()).toEqual([1, 2, 3]); // only 4 (the tip) goes
+  });
+
+  it('keeps a keystone basic even when painting a weapon set', () => {
+    // 6 is a keystone: forced shared, never tagged, even in set I mode.
+    const basic = { allocated: [1, 2, 3], weaponSets: {} };
+    const next = toggleAllocationInMode(data, 0, basic, 6, 1, graph);
+    expect(next.allocated.sort()).toEqual([1, 2, 3, 6]);
+    expect(next.weaponSets).toEqual({}); // keystone stays basic
   });
 });
 
@@ -175,9 +247,9 @@ describe('ascendancy allocation', () => {
     expect(next.sort((a, b) => a - b)).toEqual([1, 101, 102]);
   });
 
-  it('removes beyond the clicked ascendancy node and keeps the main allocation', () => {
+  it('removes the clicked ascendancy node and beyond, keeping the main allocation', () => {
     const data = ascData();
     const next = toggleAscendancyAllocation(data, 'Lich', new Set([1, 101, 102, 103]), 102);
-    expect(next.sort((a, b) => a - b)).toEqual([1, 101, 102]); // 103 dropped, 1 kept
+    expect(next.sort((a, b) => a - b)).toEqual([1, 101]); // 102 + 103 dropped, main 1 kept
   });
 });

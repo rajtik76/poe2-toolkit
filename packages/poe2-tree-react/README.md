@@ -99,6 +99,12 @@ A node has one colour icon. Unallocated nodes draw that same icon dimmed with a
 50% grey multiply tint at draw time, the game's own look, so you supply a single
 skill-icon atlas, not a separate inactive one.
 
+**Weapon sets.** When the scene's nodes/rails carry a `weaponSet` tag (set by
+`core.buildScene` from the build's `weaponSets`), `TreeView` tints them apart
+from the gold basic tree: set I green, set II blue, on both the node frame and
+its active rail. A rail bridging the two sets is drawn inactive, since it belongs
+to neither set's view.
+
 The hub artwork (class portrait and ornate ring) comes in through the optional
 `centreSprites` prop. Skip it and the hub falls back to a vector placeholder.
 
@@ -111,7 +117,7 @@ The hub artwork (class portrait and ornate ring) comes in through the optional
   activeClassId={classId}       // rotates the active ring onto the class
   activeAscendancy={ascId}      // relocates that ascendancy disc into the hub
   centreSprites={centreSprites} // optional portrait + ring artwork
-  preview={preview}             // hover highlight: pending add (gold) / remove (red)
+  preview={preview}             // hover highlight: pending add (gold, or the set's tint) / remove (red, ringing each removed node)
   highlight={searchHits}        // skill ids to ring with a standing teal ring (e.g. search hits)
   highlightStyle={ringStyle}    // tune the highlight rings' colours, widths and pulse
   focus={worldRect}             // pass a fresh rect to pan + zoom-fit to it

@@ -37,6 +37,8 @@ export type {
   CentreLayout,
   ClassAnchor,
   BuildAllocation,
+  WeaponSet,
+  AllocMode,
   SceneOptions,
   Viewport,
   ScreenScene,
@@ -64,9 +66,11 @@ export {
   reachable,
   removalSet,
   toggleAllocation,
+  toggleAllocationInMode,
   toggleAscendancyAllocation,
+  weaponSetRemovalSet,
 } from './scene/allocate.js';
-export type { TreeGraph } from './scene/allocate.js';
+export type { TreeGraph, WeaponSetAllocation } from './scene/allocate.js';
 export { placeConnection } from './scene/connections.js';
 export { classifyNode, nodeTargetSize } from './scene/nodeSize.js';
 export type { NodeSize } from './scene/nodeSize.js';

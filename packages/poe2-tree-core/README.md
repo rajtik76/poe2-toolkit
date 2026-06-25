@@ -259,7 +259,8 @@ and are deliberately absent.
 interface BuildAllocation {
   classId?: number;                // matches ClassDef.id; only the editable planner needs it (to find the class start node for pathing)
   ascendId?: string;               // matches AscendancyDef.id, e.g. "Lich"
-  allocated: number[];             // allocated skill ids
+  allocated: number[];             // allocated skill ids (basic + both weapon sets)
+  weaponSets?: Record<number, 1 | 2>; // node id -> weapon set; absent = basic/shared
   attributeChoices?: Record<number, 'str' | 'dex' | 'int'>;
   jewels?: Record<number, JewelInfo>; // display-only, keyed by socket node id
   treeVersion?: string;
@@ -270,6 +271,12 @@ interface BuildAllocation {
 icon and stat instead of the generic "any". `jewels` is display-only metadata
 keyed by socket node id; the engine never applies a jewel's radius to nearby
 nodes (PoE2 jewels grant global stats).
+
+`weaponSets` carries PoE2's two weapon sets: a node tagged `1` or `2` is active
+only when that set is equipped, while an untagged (basic) node is active in both.
+Keystones, jewel sockets and ascendancy nodes are always basic. `buildScene`
+stamps each placed node and active rail with its `weaponSet` so a renderer can
+tint the two sets apart from the shared tree.
 
 ## Interactive editing
 
@@ -292,11 +299,18 @@ The model:
 - **Allocate:** clicking an unallocated node allocates the shortest path to it
   from the class start (plus the current allocation). `pathToNode` is the
   underlying breadth-first search.
-- **Remove:** clicking an allocated node removes everything beyond it (the nodes
-  that lose their connection to the start once it is cut) and keeps the clicked
-  node, which shortens the path back to that node. If nothing lies beyond it (the
-  node is a tip), the node itself is removed. `removalSet` computes exactly which
-  nodes a click removes, so a UI can preview the removal before committing it.
+- **Remove:** clicking an allocated node removes the node and everything that
+  depended on it (the nodes orphaned from the start once it is cut), matching
+  Path of Building — a node depends on itself, so a tip removes just itself.
+  `removalSet` computes exactly which nodes a click removes, so a UI can preview
+  the removal before committing it.
+
+For **weapon sets**, `toggleAllocationInMode` is the mode-aware counterpart: it
+takes a `{ allocated, weaponSets }` state and a paint mode (`0` basic, `1`/`2`
+for the sets) and returns the next state. A set path roots only at the shared
+tree or the same set — it never crosses the other set — and forced-basic nodes
+(keystones, jewel sockets, ascendancy) stay shared whatever the mode.
+`weaponSetRemovalSet` is the set-aware `removalSet`.
 
 Ascendancy points are a separate pool. `toggleAscendancyAllocation` paths within
 a single ascendancy's own subgraph (rooted at its start node) and leaves the
@@ -415,10 +429,12 @@ These are skipped in the scene; the data still contains them.
 | Export | Purpose |
 | --- | --- |
 | `buildTreeGraph` | Walkable adjacency graph of the main tree. |
-| `toggleAllocation` | Allocate the path to a node, or remove from it. |
-| `pathToNode` | Shortest path (BFS) between a node set and a target. |
+| `toggleAllocation` | Allocate the path to a node, or remove the node and its dependents. |
+| `toggleAllocationInMode` | Weapon-set-aware `toggleAllocation` (basic / set I / set II paint mode). |
+| `pathToNode` | Shortest path (BFS) between a node set and a target (with an optional blocked set). |
 | `reachable` | Nodes still connected to a set of roots. |
 | `removalSet` | Exactly which nodes a removal click drops. |
+| `weaponSetRemovalSet` | Set-aware `removalSet`, respecting each set's connectivity. |
 | `buildAscendancyGraph` | Adjacency graph of one ascendancy. |
 | `ascendancyStartNode` | An ascendancy's pathing root. |
 | `toggleAscendancyAllocation` | Edit within one ascendancy's subgraph. |
@@ -426,9 +442,10 @@ These are skipped in the scene; the data still contains them.
 | `freshAllocation` | A blank allocation for a class (on class switch). |
 
 All types are exported from the main entry as well (`TreeData`, `TreeNode`,
-`Scene`, `PlacedNode`, `BuildAllocation`, `Viewport`, `ScreenScene`,
-`SpriteManifest`, `TreeGraph`, `NodeSize`, and the rest). The GGG raw shape
-`GggTreeJson` is exported from the `@poe2-toolkit/tree-core/ggg` subpath.
+`Scene`, `PlacedNode`, `BuildAllocation`, `WeaponSet`, `AllocMode`,
+`WeaponSetAllocation`, `Viewport`, `ScreenScene`, `SpriteManifest`, `TreeGraph`,
+`NodeSize`, and the rest). The GGG raw shape `GggTreeJson` is exported from the
+`@poe2-toolkit/tree-core/ggg` subpath.
 
 ## Design principles
 

@@ -7,10 +7,13 @@
  * clicks through {@link toggleAllocation}.
  */
 
-import type { BuildAllocation, TreeData, TreeNode } from '../types.js';
+import type { AllocMode, BuildAllocation, TreeData, TreeNode, WeaponSet } from '../types.js';
 
 /** Adjacency list of the walkable tree: node id -> connected node ids. */
 export type TreeGraph = Map<number, Set<number>>;
+
+/** Shared empty set, so the common (unblocked) path avoids an allocation. */
+const EMPTY_SET: ReadonlySet<number> = new Set();
 
 /**
  * A blank allocation for a class: no nodes and no ascendancy. Switching class
@@ -150,9 +153,15 @@ export function buildAscendancyGraph(data: TreeData, ascendancy: string): TreeGr
 /**
  * Shortest path (BFS) from any of `sources` to `target`, as the list of nodes
  * to add — excluding the sources, including the target. `[]` when the target is
- * already a source; `null` when unreachable.
+ * already a source; `null` when unreachable. Nodes in `blocked` are never
+ * traversed (used to keep a weapon-set path off the other set's allocated nodes).
  */
-export function pathToNode(graph: TreeGraph, sources: ReadonlySet<number>, target: number): number[] | null {
+export function pathToNode(
+  graph: TreeGraph,
+  sources: ReadonlySet<number>,
+  target: number,
+  blocked: ReadonlySet<number> = EMPTY_SET,
+): number[] | null {
   if (sources.has(target)) {
     return [];
   }
@@ -165,7 +174,7 @@ export function pathToNode(graph: TreeGraph, sources: ReadonlySet<number>, targe
     const current = queue[head]!;
 
     for (const next of graph.get(current) ?? []) {
-      if (seen.has(next)) {
+      if (seen.has(next) || blocked.has(next)) {
         continue;
       }
 
@@ -192,10 +201,10 @@ export function pathToNode(graph: TreeGraph, sources: ReadonlySet<number>, targe
 }
 
 /**
- * The nodes a click on an allocated `target` removes: everything beyond it (the
- * nodes that lose their connection to the start once it's cut), keeping the
- * target itself — clicking shortens the path *back* to the clicked node. When
- * nothing lies beyond (the target is a tip), the target itself is removed.
+ * The nodes a click on an allocated `target` removes: the target itself plus
+ * everything that loses its connection to the start once it is cut. Matches Path
+ * of Building (a node depends on itself), so a click deletes the node and the
+ * branches that hung off it — a tip removes just itself.
  */
 export function removalSet(
   graph: TreeGraph,
@@ -211,15 +220,15 @@ export function removalSet(
   remaining.delete(target);
   const keep = reachable(graph, [startNode], remaining);
 
-  const beyond = new Set<number>();
+  const removed = new Set<number>();
 
   for (const id of allocated) {
-    if (id !== target && !keep.has(id)) {
-      beyond.add(id);
+    if (!keep.has(id)) {
+      removed.add(id);
     }
   }
 
-  return beyond.size > 0 ? beyond : new Set([target]);
+  return removed;
 }
 
 /** The subset of `allowed` still reachable from `roots` through the graph. */
@@ -302,6 +311,180 @@ export function toggleAllocation(
  */
 export function clearAscendancyAllocation(data: TreeData, allocated: Iterable<number>, ascendancy: string): number[] {
   return [...allocated].filter((id) => data.nodes[id]?.ascendancyName !== ascendancy);
+}
+
+// ---------------------------------------------------------------------------
+// Weapon-set aware allocation
+// ---------------------------------------------------------------------------
+
+/** A manual build's main-tree state with per-node weapon-set assignment. */
+export interface WeaponSetAllocation {
+  /** Allocated skill ids across every mode (basic + both weapon sets). */
+  allocated: number[];
+  /** node id -> weapon set (1 or 2); absent = basic/shared. */
+  weaponSets: Record<number, WeaponSet>;
+}
+
+/**
+ * Nodes that can never belong to a weapon set: keystones, jewel sockets and
+ * ascendancy nodes are always shared (mode 0), matching Path of Building. A path
+ * may still run through them, but they stay basic regardless of the paint mode.
+ */
+function isForcedBasic(node: TreeNode | undefined): boolean {
+  return !!(node && (node.isKeystone || node.isJewelSocket || node.ascendancyName));
+}
+
+/** The weapon set of an allocated node, or 0 when it is basic/shared. */
+function modeOf(weaponSets: Readonly<Record<number, WeaponSet>>, id: number): AllocMode {
+  return weaponSets[id] ?? 0;
+}
+
+/**
+ * The allocated nodes that stay connected under weapon-set rules: the basic
+ * (mode 0) tree reaches the start through basic nodes alone, and each weapon
+ * set's nodes reach the start through that kept basic tree plus their own set.
+ * Anything else is orphaned.
+ */
+function validReachable(
+  graph: TreeGraph,
+  startNode: number,
+  allocated: ReadonlySet<number>,
+  weaponSets: Readonly<Record<number, WeaponSet>>,
+): Set<number> {
+  const byMode = (mode: AllocMode): Set<number> => {
+    const set = new Set<number>();
+
+    for (const id of allocated) {
+      if (modeOf(weaponSets, id) === mode) {
+        set.add(id);
+      }
+    }
+
+    return set;
+  };
+
+  const keepBasic = reachable(graph, [startNode], byMode(0));
+
+  const keepSet = (set: WeaponSet): Set<number> => {
+    const own = byMode(set);
+    const reached = reachable(graph, [startNode], new Set<number>([...keepBasic, ...own]));
+
+    return new Set([...reached].filter((id) => own.has(id)));
+  };
+
+  return new Set<number>([...keepBasic, ...keepSet(1), ...keepSet(2)]);
+}
+
+/**
+ * The nodes a click on an allocated `target` removes under weapon-set rules:
+ * everything that loses its connection to the start once the target is cut,
+ * keeping the target itself; or the target alone when it is a tip. Mirrors
+ * {@link removalSet}, but reachability respects each set's connectivity. Exposed
+ * so the hover preview can show exactly what a click will remove.
+ */
+export function weaponSetRemovalSet(
+  graph: TreeGraph,
+  startNode: number,
+  allocated: ReadonlySet<number>,
+  weaponSets: Readonly<Record<number, WeaponSet>>,
+  target: number,
+): Set<number> {
+  // Cut the target, then drop every allocated node that can no longer reach the
+  // start — the target itself plus anything that depended on it. This matches
+  // Path of Building's `depends` (a node depends on itself), so clicking removes
+  // the node and its branches, and the hover paints all those edges 1:1.
+  const remaining = new Set(allocated);
+  remaining.delete(target);
+  const keep = validReachable(graph, startNode, remaining, weaponSets);
+
+  const removed = new Set<number>();
+
+  for (const id of allocated) {
+    if (!keep.has(id)) {
+      removed.add(id);
+    }
+  }
+
+  return removed;
+}
+
+/**
+ * Toggle a node in a given paint mode (0 basic, 1 weapon set I, 2 weapon set II):
+ *  - allocated target -> remove it and everything that depended on it (the nodes
+ *    orphaned from the start once it is cut), per set, matching Path of Building
+ *  - unallocated target -> path to it through basic + same-set nodes, tagging the
+ *    new nodes with the mode (forced-basic nodes stay shared)
+ *
+ * Pathing cannot cross the other weapon set's nodes, so a set branch always
+ * sprouts from the shared tree. The caller owns the point budget — this only
+ * computes the next allocation. Pass a prebuilt `graph` to avoid recomputing it.
+ */
+export function toggleAllocationInMode(
+  data: TreeData,
+  startNode: number,
+  current: WeaponSetAllocation,
+  target: number,
+  mode: AllocMode,
+  graph: TreeGraph = buildTreeGraph(data),
+): WeaponSetAllocation {
+  if (target === startNode) {
+    return current;
+  }
+
+  const allocated = new Set(current.allocated);
+  const weaponSets = current.weaponSets;
+
+  if (allocated.has(target)) {
+    const removed = weaponSetRemovalSet(graph, startNode, allocated, weaponSets, target);
+    const nextWeaponSets: Record<number, WeaponSet> = {};
+
+    for (const id of allocated) {
+      if (!removed.has(id) && weaponSets[id] !== undefined) {
+        nextWeaponSets[id] = weaponSets[id]!;
+      }
+    }
+
+    return {
+      allocated: [...allocated].filter((id) => !removed.has(id)),
+      weaponSets: nextWeaponSets,
+    };
+  }
+
+  // Forced-basic nodes ignore the paint mode and allocate as shared.
+  const effectiveMode: AllocMode = isForcedBasic(data.nodes[target]) ? 0 : mode;
+
+  // Sources: the start plus allocated nodes this mode can branch from (basic or
+  // same set). The other set's allocated nodes are blocked from the path.
+  const sources = new Set<number>([startNode]);
+  const blocked = new Set<number>();
+
+  for (const id of allocated) {
+    const nodeMode = modeOf(weaponSets, id);
+
+    if (nodeMode === 0 || nodeMode === effectiveMode) {
+      sources.add(id);
+    } else {
+      blocked.add(id);
+    }
+  }
+
+  const path = pathToNode(graph, sources, target, blocked);
+
+  if (!path) {
+    return current;
+  }
+
+  const nextWeaponSets: Record<number, WeaponSet> = { ...weaponSets };
+
+  for (const id of path) {
+    if (effectiveMode === 0 || isForcedBasic(data.nodes[id])) {
+      delete nextWeaponSets[id];
+    } else {
+      nextWeaponSets[id] = effectiveMode;
+    }
+  }
+
+  return { allocated: [...allocated, ...path], weaponSets: nextWeaponSets };
 }
 
 export function toggleAscendancyAllocation(

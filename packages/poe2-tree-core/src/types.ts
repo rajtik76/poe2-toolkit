@@ -284,6 +284,12 @@ export interface PlacedNode {
   radius: number;
   /** Allocated in the current build. */
   allocated: boolean;
+  /**
+   * Weapon set this allocated node is assigned to (1 or 2); absent means it is a
+   * shared/basic node active in both sets. Lets the renderer tint set-specific
+   * allocations apart from the main tree.
+   */
+  weaponSet?: WeaponSet;
   /** Owning ascendancy id, if this node belongs to an ascendancy. */
   ascendancy?: string;
   /** Jewel socketed into this node (jewel sockets only), if the build has one. */
@@ -326,6 +332,8 @@ export interface PlacedConnection {
   b: Point;
   /** Both endpoints allocated — the edge is part of the build. */
   active: boolean;
+  /** Weapon set this active edge belongs to (1 or 2); absent means basic/shared. */
+  weaponSet?: WeaponSet;
   /** Owning ascendancy id, if this edge is inside an ascendancy. */
   ascendancy?: string;
   /** Arc only: centre, radius, signed sweep (radians), and the orbit it follows. */
@@ -396,8 +404,15 @@ export interface BuildAllocation {
   classId?: number;
   /** Active ascendancy id (matches `AscendancyDef.id`), if any. */
   ascendId?: string;
-  /** Allocated skill ids. */
+  /** Allocated skill ids (every mode: basic + both weapon sets). */
   allocated: number[];
+  /**
+   * Weapon-set assignment for allocated nodes: node id -> set 1 or 2. A node
+   * absent from this map is a shared/basic node (active in both weapon sets).
+   * Keystones, jewel sockets and ascendancy nodes are always basic, so they
+   * never appear here.
+   */
+  weaponSets?: Record<number, WeaponSet>;
   /**
    * Chosen attribute per generic +attribute node (node id -> str/dex/int). Lets
    * the renderer show the specific icon/stat instead of the generic "any".
@@ -411,6 +426,16 @@ export interface BuildAllocation {
 
 /** The attribute a generic +attribute node was assigned to. */
 export type AttributeChoice = 'str' | 'dex' | 'int';
+
+/**
+ * Which weapon set a set-specific passive belongs to. PoE2 characters carry two
+ * weapon sets; a node tagged 1 or 2 is active only when that set is equipped,
+ * while an untagged (basic) node is active in both.
+ */
+export type WeaponSet = 1 | 2;
+
+/** Allocation paint mode: 0 = basic/shared, 1 = weapon set I, 2 = weapon set II. */
+export type AllocMode = 0 | WeaponSet;
 
 /** Inputs to {@link Scene} construction beyond the static tree data. */
 export interface SceneOptions {
@@ -453,6 +478,8 @@ export interface ScreenNode {
   frameSize: number;
   radius: number;
   allocated: boolean;
+  /** Weapon set this allocated node is assigned to (1 or 2); absent = basic. */
+  weaponSet?: WeaponSet;
   /** Jewel socketed into this node (jewel sockets only), if the build has one. */
   jewel?: JewelInfo;
 }
@@ -464,6 +491,8 @@ export interface ScreenConnection {
   a: Point;
   b: Point;
   active: boolean;
+  /** Weapon set this active edge belongs to (1 or 2); absent = basic/shared. */
+  weaponSet?: WeaponSet;
   /** Arc only, in screen space (angles are unchanged by uniform scale). */
   arc?: { cx: number; cy: number; radius: number; startAngle: number; endAngle: number; clockwise: boolean; orbit: number };
 }
