@@ -15,6 +15,14 @@ on:
 permissions:
   contents: read
 
+# Releases publish to npm. Serialize them so several tags published together
+# don't race to publish a shared dependency package (which 403s on the version a
+# sibling run just shipped). Never cancel an in-flight release mid-publish — let
+# them queue and run one at a time.
+concurrency:
+  group: release-npm
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest

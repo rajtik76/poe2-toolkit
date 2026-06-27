@@ -44,11 +44,27 @@ for (const dir of ORDER) {
   }
 
   console.log(`publish ${name}@${version}`);
-  execFileSync('npm', ['publish', '-w', `packages/${dir}`], {
-    cwd: fileURLToPath(new URL('..', import.meta.url)),
-    stdio: 'inherit',
-  });
-  published++;
+
+  try {
+    execFileSync('npm', ['publish', '-w', `packages/${dir}`], {
+      cwd: fileURLToPath(new URL('..', import.meta.url)),
+      stdio: 'inherit',
+    });
+    published++;
+  } catch (error) {
+    // The check above is best-effort: a sibling release run (or a manual re-run)
+    // can publish this exact version between the check and this publish, and npm
+    // answers that with a fatal E403 "cannot publish over previously published
+    // version". Re-query the registry — if the version is now there the publish
+    // is effectively done, so treat it as a skip rather than failing the whole
+    // release. Anything else is a real error and rethrows.
+    if (publishedVersion(name, version) === version) {
+      console.log(`skip   ${name}@${version} (published concurrently)`);
+      continue;
+    }
+
+    throw error;
+  }
 }
 
 console.log(published === 0 ? 'Nothing to publish — all versions current.' : `Published ${published} package(s).`);
