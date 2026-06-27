@@ -2,14 +2,14 @@
   "name": "poe2-toolkit",
   "version": "0.0.0",
   "private": true,
-  "description": "Framework-agnostic toolkit for Path of Exile 2 data: a shared GGPK access layer plus extractors and renderers for the passive tree (items and gems in progress). Code only — ships no game data or art.",
+  "description": "Framework-agnostic toolkit for Path of Exile 2 data: a shared GGPK access layer plus extractors and renderers for the passive tree, items, gems and runes. Code only - ships no game data or art.",
   "license": "MIT",
   "type": "module",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @poe2-toolkit/ggpk && npm run build -w @poe2-toolkit/tree-core && npm run build -w @poe2-toolkit/tree-react && npm run build -w @poe2-toolkit/tree-extractor && npm run build -w @poe2-toolkit/item-extractor && npm run build -w @poe2-toolkit/gem-extractor",
+    "build": "npm run build -w @poe2-toolkit/ggpk && npm run build -w @poe2-toolkit/tree-core && npm run build -w @poe2-toolkit/tree-react && npm run build -w @poe2-toolkit/tree-extractor && npm run build -w @poe2-toolkit/item-extractor && npm run build -w @poe2-toolkit/gem-extractor && npm run build -w @poe2-toolkit/rune-extractor",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint packages",

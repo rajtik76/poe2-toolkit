@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Publish to npm every package whose current version is not yet on the registry,
 // in dependency order. Already-published versions are skipped, so a release that
-// only bumped some packages publishes only those — no "version already exists"
+// only bumped some packages publishes only those - no "version already exists"
 // failures. Run by the Release workflow; assumes `npm run build` already ran and
 // that npm auth is configured (NODE_AUTH_TOKEN via setup-node's .npmrc).
 import { execFileSync } from 'node:child_process';
@@ -16,6 +16,7 @@ const ORDER = [
   'poe2-tree-extractor', // -> ggpk
   'poe2-item-extractor', // -> ggpk
   'poe2-gem-extractor', // -> ggpk
+  'poe2-rune-extractor', // -> ggpk
 ];
 
 /** The version of `name` already on npm, or null if that exact version is absent. */
@@ -55,7 +56,7 @@ for (const dir of ORDER) {
     // The check above is best-effort: a sibling release run (or a manual re-run)
     // can publish this exact version between the check and this publish, and npm
     // answers that with a fatal E403 "cannot publish over previously published
-    // version". Re-query the registry — if the version is now there the publish
+    // version". Re-query the registry - if the version is now there the publish
     // is effectively done, so treat it as a skip rather than failing the whole
     // release. Anything else is a real error and rethrows.
     if (publishedVersion(name, version) === version) {
@@ -67,4 +68,4 @@ for (const dir of ORDER) {
   }
 }
 
-console.log(published === 0 ? 'Nothing to publish — all versions current.' : `Published ${published} package(s).`);
+console.log(published === 0 ? 'Nothing to publish - all versions current.' : `Published ${published} package(s).`);
