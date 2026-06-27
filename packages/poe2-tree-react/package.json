@@ -1,6 +1,6 @@
 {
   "name": "@poe2-toolkit/tree-react",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "React renderer for the Path of Exile 2 passive tree. A thin view adapter over @poe2-toolkit/tree-core: it draws what the core computed and owns pan/zoom/hover/click. No geometry.",
   "keywords": [
     "path-of-exile",
