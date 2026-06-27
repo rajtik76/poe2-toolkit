@@ -44,9 +44,14 @@ function available(): boolean {
   return existsSync(join(TABLES_DIR, 'SkillGems.json')) && existsSync(GOLDEN_GEMS) && existsSync(GOLDEN_REQS);
 }
 
-/** Map the app's `/4k/` skill-icon paths back to the GGPK base paths. */
+/**
+ * Map the app's icon paths back to the GGPK base paths. The app inserts a `4k/`
+ * segment before the file name to match its vendored 4k PNGs, both for active
+ * icons (`SkillIcons/4k/X.dds`) and support icons (`SkillIcons/Support/4k/X.dds`),
+ * so dropping that one segment wherever it sits recovers the raw GGPK path.
+ */
 function toBaseIcon(icon: string | null): string | null {
-  return icon ? icon.replace('/2DArt/SkillIcons/4k/', '/2DArt/SkillIcons/') : icon;
+  return icon ? icon.replace('/4k/', '/') : icon;
 }
 
 function normalizeGoldenIcons(gems: Record<string, Gem>): Record<string, Gem> {
