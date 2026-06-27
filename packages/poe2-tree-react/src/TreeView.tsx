@@ -45,6 +45,14 @@ export interface TreeViewProps {
    * (`add`) or remove (`remove`). Drawn on top of the base render.
    */
   preview?: AllocationPreview | null;
+  /**
+   * Arbitrary edge groups to paint over the base render, each in its own colour.
+   * A multi-colour generalisation of {@link AllocationPreview}'s edge highlight.
+   * Domain-agnostic: the caller decides what each group means, whether a diff, a
+   * route or a plan. Drawn under the search and hover rings, in array order, so a
+   * later group paints over an earlier one where they share an edge.
+   */
+  edgeOverlays?: EdgeOverlay[] | null;
   /** Imperative zoom controls, for external +/- buttons. */
   controls?: Ref<TreeViewControls>;
   /**
@@ -163,6 +171,23 @@ export interface AllocationPreview {
   weaponSet?: 1 | 2;
 }
 
+/**
+ * A group of edges to paint in one colour over the base render. The renderer is
+ * agnostic about what the group means and only strokes the matching connectors.
+ */
+export interface EdgeOverlay {
+  /** Edge keys (`min-max` of the two node ids) to paint. */
+  edges: Set<string>;
+  /** Stroke colour, `0xRRGGBB`. */
+  color: number;
+  /**
+   * Also paint edges whose endpoints are not both allocated (the dim base rails).
+   * Default false, so only lit connectors are painted. Set true to surface edges
+   * that the build does not yet hold, such as a route it is missing.
+   */
+  includeInactive?: boolean;
+}
+
 /** A sprite to draw at the hub: source image URL + the sub-rect to crop. */
 export interface CentreSprite {
   url: string;
@@ -259,6 +284,7 @@ export function TreeView({
   onInteractStart,
   onNodeHover,
   preview,
+  edgeOverlays,
   controls,
   wheelZoom,
   focus,
@@ -297,6 +323,7 @@ export function TreeView({
   const sceneRef = useRef(scene);
   const highlightRef = useRef<Set<number> | null>(highlight ?? null);
   const previewRef = useRef<AllocationPreview | null>(preview ?? null);
+  const edgeOverlaysRef = useRef<EdgeOverlay[] | null>(edgeOverlays ?? null);
   const highlightActiveRef = useRef(false);
   const activeAscendancyRef = useRef(activeAscendancy);
   const rebuildRef = useRef<(() => void) | null>(null);
@@ -336,6 +363,7 @@ export function TreeView({
       previewRef.current,
       activeAscendancyRef.current,
       highlightStyleRef.current,
+      edgeOverlaysRef.current,
     );
 
     // Debug id labels are heavy; only show (and render) them once zoomed in far
@@ -425,6 +453,7 @@ export function TreeView({
               previewRef.current,
               activeAscendancyRef.current,
               highlightStyleRef.current,
+              edgeOverlaysRef.current,
             );
           }
         });
@@ -453,6 +482,7 @@ export function TreeView({
     sceneRef.current = scene;
     highlightRef.current = highlight ?? null;
     previewRef.current = preview ?? null;
+    edgeOverlaysRef.current = edgeOverlays ?? null;
     const resolvedStyle: ResolvedHighlightStyle = {
       glowColor: highlightStyle?.glowColor ?? DEFAULT_HIGHLIGHT.glowColor,
       coreColor: highlightStyle?.coreColor ?? DEFAULT_HIGHLIGHT.coreColor,
@@ -475,7 +505,7 @@ export function TreeView({
       overscroll: zoom?.overscroll ?? DEFAULT_OVERSCROLL,
     };
     sync();
-  }, [scene, highlight, highlightStyle, preview, activeAscendancy, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
+  }, [scene, highlight, highlightStyle, preview, edgeOverlays, activeAscendancy, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
 
   // ---- Scene graph build ---------------------------------------------------
 
@@ -642,10 +672,10 @@ export function TreeView({
         hoverRef.current = hit;
         const node = hit !== null ? scene.nodes.find((candidate) => candidate.skill === hit) : undefined;
         onNodeHover?.(hit, node ? worldToScreen(viewport, node.x, node.y) : undefined);
-        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null, activeAscendancy, highlightStyleRef.current);
+        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null, activeAscendancy, highlightStyleRef.current, edgeOverlays ?? null);
       }
     },
-    [scene, sync, onNodeHover, activeAscendancy, highlight, preview],
+    [scene, sync, onNodeHover, activeAscendancy, highlight, preview, edgeOverlays],
   );
 
   const onPointerUp = useCallback(
@@ -1228,6 +1258,7 @@ function drawOverlay(
   preview: AllocationPreview | null,
   activeAscendancy: string | undefined,
   highlightStyle: ResolvedHighlightStyle,
+  edgeOverlays: EdgeOverlay[] | null = null,
 ): void {
   if (!g || !viewport) {
     return;
@@ -1245,8 +1276,39 @@ function drawOverlay(
   const offsetFor = (ascendancy?: string): [number, number] =>
     ascendancy && ascendancy === activeAscendancy ? [ascOx, ascOy] : [0, 0];
 
+  // Caller-defined edge groups, painted under the preview and rings. Each group
+  // strokes its matching connectors in its colour; a later group wins where two
+  // share an edge. Widths match the lit rail so a coloured route reads as solid.
+  if (edgeOverlays) {
+    const glowWidth = RAIL_GAP + RAIL_WIDTH * 2.5;
+    const coreWidth = RAIL_GAP + RAIL_WIDTH * 1.5;
+
+    for (const overlay of edgeOverlays) {
+      if (overlay.edges.size === 0) {
+        continue;
+      }
+
+      for (const conn of scene.connections) {
+        if (!overlay.edges.has(edgeKey(conn.from, conn.to))) {
+          continue;
+        }
+
+        // Skip dim base rails unless the group opts in (e.g. a missing route).
+        if (!conn.active && !overlay.includeInactive) {
+          continue;
+        }
+
+        const [ox, oy] = offsetFor(conn.ascendancy);
+        addConnPaths(g, [conn], ox, oy);
+        g.stroke({ width: glowWidth, color: overlay.color, alpha: 0.3, cap: 'round' });
+        addConnPaths(g, [conn], ox, oy);
+        g.stroke({ width: coreWidth, color: overlay.color, alpha: 0.95, cap: 'round' });
+      }
+    }
+  }
+
   // Allocation preview rails (under the rings). Widths are world units (like the
-  // base rails), clamped to a small on-screen minimum — matching the Canvas2D
+  // base rails), clamped to a small on-screen minimum, matching the Canvas2D
   // `max(3, 9 * scale)` / `max(1.5, 4 * scale)` so the path tracks the zoom.
   if (preview) {
     const remove = preview.kind === 'remove';

@@ -118,6 +118,7 @@ The hub artwork (class portrait and ornate ring) comes in through the optional
   activeAscendancy={ascId}      // relocates that ascendancy disc into the hub
   centreSprites={centreSprites} // optional portrait + ring artwork
   preview={preview}             // hover highlight: pending add (gold, or the set's tint) / remove (red, ringing each removed node)
+  edgeOverlays={overlays}       // paint groups of edges, each in its own colour (a diff, a route, a plan)
   highlight={searchHits}        // skill ids to ring with a standing teal ring (e.g. search hits)
   highlightStyle={ringStyle}    // tune the highlight rings' colours, widths and pulse
   focus={worldRect}             // pass a fresh rect to pan + zoom-fit to it
@@ -135,7 +136,17 @@ The hub artwork (class portrait and ornate ring) comes in through the optional
 ```
 
 Exported types: `TreeViewProps`, `TreeViewControls`, `AllocationPreview`,
-`CentreSprite`, `ZoomLimits`, `HighlightStyle`, `RenderResources`.
+`EdgeOverlay`, `CentreSprite`, `ZoomLimits`, `HighlightStyle`, `RenderResources`.
+
+`edgeOverlays` paints arbitrary groups of edges over the base render, each in its
+own colour. It is a multi-colour generalisation of `preview`'s edge highlight,
+and the renderer stays agnostic about what a group means: you decide, whether a
+build diff, a planned route, or anything else. Each group is `{ edges, color,
+includeInactive? }`, where `edges` is a set of edge keys (`min-max` of the two
+node ids), `color` is `0xRRGGBB`, and `includeInactive` also paints edges whose
+endpoints are not both allocated (the dim base rails), so you can surface a path
+the build does not yet hold. Groups are drawn in array order, so a later one wins
+where two share an edge.
 
 `highlightStyle` tunes the look of the `highlight` rings, each field optional:
 `glowColor` / `coreColor` (the soft outer and bright inner ring), `glowWidth` /
