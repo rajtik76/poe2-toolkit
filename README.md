@@ -10,6 +10,44 @@ into clean, typed output, and renderers for the passive tree.
 
 Everything here is **code**. None of it bundles game data or art.
 
+> The only framework-agnostic, code-only **Path of Exile 2 passive tree renderer**
+> on npm - a headless geometry core plus a React view, with the extractors that
+> feed them. You extract the data at run time; nothing about the game is bundled.
+
+<p align="center">
+  <a href="https://poe.rajtik.com/tree"><b>&#9654; Live, interactive demo</b></a>
+</p>
+
+<!--
+  Demo GIF slot: drop a 5-10s capture (pan/zoom + allocating nodes on the live
+  demo) at docs/demo.gif, then uncomment the block below. Keep it under ~5 MB.
+<p align="center">
+  <a href="https://poe.rajtik.com/tree">
+    <img src="docs/demo.gif" alt="Path of Exile 2 passive tree renderer" width="720">
+  </a>
+</p>
+-->
+
+## Why this exists
+
+Path of Exile 2's official passive-tree export is leaner than PoE1's - it ships
+the nodes and edges but not the orbit, sprite, or zoom constants you need to draw
+them, so rendering it faithfully is real work. The tools that do that today are
+full applications (planners) that bundle a snapshot of game data and drift out of
+date; the one widely-used typed data library, `pathofexile-dat`, extracts data
+but does not render.
+
+This toolkit fills that gap as **libraries, not an app**:
+
+- **Code only.** Nothing derived from the game is bundled - no data, no art, not
+  even test fixtures. You extract on your own machine from the official patch
+  server, so it stays current and legally clean.
+- **Headless core, thin view.** `tree-core` computes the geometry with zero
+  dependencies; `tree-react` only draws it and owns pan/zoom/clicks. Swap in your
+  own view layer without touching the engine.
+- **Typed and tested.** Real TypeScript types and golden / characterization tests
+  against the live format, published to npm under semver.
+
 ## Quick start
 
 Render a clickable passive tree - core works out the geometry, React draws it:
