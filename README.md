@@ -15,18 +15,12 @@ Everything here is **code**. None of it bundles game data or art.
 > feed them. You extract the data at run time; nothing about the game is bundled.
 
 <p align="center">
-  <a href="https://poe.rajtik.com/tree"><b>&#9654; Live, interactive demo</b></a>
-</p>
-
-<!--
-  Demo GIF slot: drop a 5-10s capture (pan/zoom + allocating nodes on the live
-  demo) at docs/demo.gif, then uncomment the block below. Keep it under ~5 MB.
-<p align="center">
   <a href="https://poe.rajtik.com/tree">
-    <img src="docs/demo.gif" alt="Path of Exile 2 passive tree renderer" width="720">
+    <img src="https://github.com/rajtik76/poe2-toolkit/releases/download/tree-react-v0.6.1/demo.gif" alt="Path of Exile 2 passive tree renderer" width="720">
   </a>
+  <br>
+  <a href="https://poe.rajtik.com/tree"><b>&#9654; Try the live, interactive demo</b></a>
 </p>
--->
 
 ## Why this exists
 
