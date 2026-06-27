@@ -12,6 +12,13 @@
  * loader and sprite-layout parser live in unexported `dist/` paths. They are
  * reached by resolving an exported subpath and importing the sibling files —
  * the same internals the legacy extractor used, located portably.
+ *
+ * Reaching past a package's public exports is inherently fragile: a minor
+ * `pathofexile-dat` release can move, rename or restructure these files with no
+ * semver signal. {@link loadInternals} contains that risk to one place — it
+ * fails loud with an actionable message (naming the version and the fix) the
+ * moment a path or an expected export goes missing, rather than letting an
+ * `undefined is not a function` surface deep in a later extraction step.
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -88,6 +95,14 @@ interface SpriteLayoutModule {
   parseFile(contents: Uint8Array): Iterable<SpriteEntry>;
 }
 
+/**
+ * Internal `dist/`-relative module paths reached past `pathofexile-dat`'s public
+ * exports. If a release relocates either, {@link loadInternals} reports exactly
+ * which one and the installed version.
+ */
+const BUNDLE_LOADERS_PATH = 'cli/bundle-loaders.js';
+const SPRITE_LAYOUT_PATH = 'sprites/layout-parser.js';
+
 /** Locate pathofexile-dat's `dist/` directory via an exported subpath. */
 function datDistDir(): string {
   const require = createRequire(import.meta.url);
@@ -95,12 +110,72 @@ function datDistDir(): string {
   return dirname(require.resolve('pathofexile-dat/bundles.js'));
 }
 
+/** Installed pathofexile-dat version for diagnostics, or `unknown` if unreadable. */
+async function datVersion(dist: string): Promise<string> {
+  try {
+    const pkg = JSON.parse(await readFile(join(dist, '..', 'package.json'), 'utf8')) as { version?: string };
+
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Build the error thrown when an internal module can't be reached or doesn't
+ * have the shape we depend on — a single, actionable diagnostic in place of an
+ * opaque "Cannot find module" / "undefined is not a function" deep in a run.
+ */
+function internalsError(relPath: string, version: string, detail: string, cause?: unknown): Error {
+  return new Error(
+    `@poe2-toolkit/ggpk: pathofexile-dat@${version} ${detail} ` +
+      `('dist/${relPath}'). This reaches past its public exports, so an internal ` +
+      `change can break it without a semver signal. Pin pathofexile-dat to a known-good ` +
+      `version (the toolkit targets ^15.1.0) or update @poe2-toolkit/ggpk's cdnSource to the new layout.`,
+    cause === undefined ? undefined : { cause },
+  );
+}
+
+/** Dynamically import an internal dist module, mapping any failure to {@link internalsError}. */
+async function importInternal(dist: string, relPath: string, version: string): Promise<unknown> {
+  try {
+    return await import(pathToFileURL(join(dist, relPath)).href);
+  } catch (cause) {
+    throw internalsError(relPath, version, 'no longer provides', cause);
+  }
+}
+
+/**
+ * Assert the dynamically-imported internal modules still expose the exports we
+ * call, narrowing them to their full types. Throws {@link internalsError} naming
+ * the offending module when a renamed/removed export is found — caught here at
+ * the boundary rather than as a cryptic runtime failure mid-extraction.
+ * Exported for unit testing; not part of the package's public API.
+ */
+export function validateDatInternals(
+  loaders: Partial<BundleLoadersModule>,
+  layout: Partial<SpriteLayoutModule>,
+  version: string,
+): { loaders: BundleLoadersModule; layout: SpriteLayoutModule } {
+  if (typeof loaders.CdnBundleLoader?.create !== 'function' || typeof loaders.FileLoader?.create !== 'function') {
+    throw internalsError(BUNDLE_LOADERS_PATH, version, 'no longer exports the expected CdnBundleLoader/FileLoader from');
+  }
+
+  if (typeof layout.parseFile !== 'function') {
+    throw internalsError(SPRITE_LAYOUT_PATH, version, 'no longer exports the expected parseFile from');
+  }
+
+  return { loaders: loaders as BundleLoadersModule, layout: layout as SpriteLayoutModule };
+}
+
 async function loadInternals(): Promise<{ loaders: BundleLoadersModule; layout: SpriteLayoutModule }> {
   const dist = datDistDir();
-  const loaders = (await import(pathToFileURL(join(dist, 'cli/bundle-loaders.js')).href)) as unknown as BundleLoadersModule;
-  const layout = (await import(pathToFileURL(join(dist, 'sprites/layout-parser.js')).href)) as unknown as SpriteLayoutModule;
+  const version = await datVersion(dist);
 
-  return { loaders, layout };
+  const loaders = (await importInternal(dist, BUNDLE_LOADERS_PATH, version)) as Partial<BundleLoadersModule>;
+  const layout = (await importInternal(dist, SPRITE_LAYOUT_PATH, version)) as Partial<SpriteLayoutModule>;
+
+  return validateDatInternals(loaders, layout, version);
 }
 
 /**
