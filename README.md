@@ -10,6 +10,49 @@ into clean, typed output, and renderers for the passive tree.
 
 Everything here is **code**. None of it bundles game data or art.
 
+## Quick start
+
+Render a clickable passive tree - core works out the geometry, React draws it:
+
+```sh
+npm install @poe2-toolkit/tree-react @poe2-toolkit/tree-core
+```
+
+```tsx
+import { useMemo, useState } from 'react';
+import { buildScene } from '@poe2-toolkit/tree-core';
+import { normalizeGggTree } from '@poe2-toolkit/tree-core/ggg';
+import { TreeView } from '@poe2-toolkit/tree-react';
+
+// A tree `data.json` (from @poe2-toolkit/tree-extractor, or the one the live demo
+// publishes) -> the engine's TreeData. Once per tree version.
+const data = normalizeGggTree(rawTreeJson, '0_5');
+
+export function Tree() {
+  const [allocated, setAllocated] = useState<number[]>([]);
+
+  // Geometry is the core's job: state in, a positioned Scene out. Rebuild on edits.
+  const scene = useMemo(
+    () => buildScene(data, { allocation: { classId: 0, allocated } }),
+    [allocated],
+  );
+
+  // Omit `resources` and you get a vector render - a real tree, no art to load.
+  return (
+    <TreeView
+      scene={scene}
+      onNodeClick={(skill) =>
+        setAllocated((a) => (a.includes(skill) ? a.filter((s) => s !== skill) : [...a, skill]))
+      }
+    />
+  );
+}
+```
+
+That's the whole loop: **the core computes where everything goes, React draws it
+and reports clicks.** Add atlas `resources` for real art - see
+[`tree-react`](./packages/poe2-tree-react) for graphics and the full prop list.
+
 ## Live demo and patch webhook
 
 A running instance of the passive tree built from these packages is live at
@@ -42,20 +85,22 @@ unsubscribe endpoints, and retry behavior.
 | [`@poe2-toolkit/tree-extractor`](./packages/poe2-tree-extractor) | Builds the passive-tree data and sprite atlases from a GGPK source. | Ready |
 | [`@poe2-toolkit/tree-core`](./packages/poe2-tree-core) | Headless geometry engine: tree data in, a fully positioned scene out. | Ready |
 | [`@poe2-toolkit/tree-react`](./packages/poe2-tree-react) | React renderer that draws what the core computed and owns pan/zoom/interaction. | Ready |
-| [`@poe2-toolkit/item-extractor`](./packages/poe2-item-extractor) | Builds item data and icons from a GGPK source. | WIP |
-| [`@poe2-toolkit/gem-extractor`](./packages/poe2-gem-extractor) | Builds gem data and icons from a GGPK source. | WIP |
+| [`@poe2-toolkit/item-extractor`](./packages/poe2-item-extractor) | Builds item data and icons from a GGPK source. | Ready |
+| [`@poe2-toolkit/gem-extractor`](./packages/poe2-gem-extractor) | Builds gem data and icons from a GGPK source. | Ready |
+| [`@poe2-toolkit/rune-extractor`](./packages/poe2-rune-extractor) | Builds rune / soul-core data from a GGPK source (data only). | Ready |
 
 ## How it fits together
 
 ```
                     @poe2-toolkit/ggpk          fetch + decode GGPK / patch server
                           |                     (GgpkSource: table() / file())
-        +-----------------+-----------------+
-        v                 v                 v
-  tree/extractor    item/extractor    gem/extractor    extraction: data in, typed data out
+        +-----------+-----------+-----------+
+        v           v           v           v
+     tree-       item-       gem-        rune-       extraction: data in, typed data out
+   extractor   extractor   extractor   extractor
         |
         v
-   tree/core  -->  tree/react                          rendering: scene in, pixels out
+   tree-core  -->  tree-react                        rendering: scene in, pixels out
 ```
 
 Acquisition happens once, in `@poe2-toolkit/ggpk`. Every extractor reads from the same
