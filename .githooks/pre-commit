@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#
+# Pre-commit gate, two checks in fail-fast order:
+#   1. Author must be you (pinned email) - every commit is yours.
+#   2. Staged changes must carry no AI trace (Claude/Anthropic/Copilot/...,
+#      robot emoji, machine attribution). The repo's own AI-tooling meta files
+#      are excluded so editing them is never blocked.
+#
+# The commit-message AI-trace check lives in the separate commit-msg hook.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+#
+set -euo pipefail
+
+# Change this if you ever commit under a different identity.
+EXPECTED_EMAIL="rajtik@gmail.com"
+
+# ── 1. Author is you ─────────────────────────────────────────────────────────
+author_email=$(git var GIT_AUTHOR_IDENT | sed -E 's/.*<([^>]*)>.*/\1/')
+if [ "$author_email" != "$EXPECTED_EMAIL" ]; then
+  echo "✗ commit author is <$author_email>, expected <$EXPECTED_EMAIL>." >&2
+  echo "  Fix:  git config user.email $EXPECTED_EMAIL  (and git config user.name ...)" >&2
+  exit 1
+fi
+
+# ── 2. No AI trace in staged content ─────────────────────────────────────────
+# Added lines only, excluding the repo's own AI-tooling meta files (which
+# legitimately mention these terms) so the scan never blocks itself.
+added=$(git diff --cached --no-color -U0 --diff-filter=ACMR -- . \
+  ':(exclude)CLAUDE.md' ':(exclude)AGENTS.md' ':(exclude).githooks/**' \
+  ':(exclude).ai/**' ':(exclude).claude/**' \
+  | grep -E '^\+' | grep -vE '^\+\+\+' || true)
+
+content_patterns=(
+  '🤖'
+  'claude'
+  'anthropic'
+  'chatgpt'
+  'openai'
+  'copilot'
+  'noreply@anthropic\.com'
+  'claude\.ai'
+  'co-authored-by:.*(claude|anthropic|copilot|bot)'
+  'generated (with|by) .*(claude|copilot|chatgpt|openai)'
+  '(^|[^[:alnum:]])ai (assistant|language model|generated)'
+  'as an ai([^[:alnum:]]|$)'
+)
+
+for pattern in "${content_patterns[@]}"; do
+  if printf '%s' "$added" | grep -qiE "$pattern"; then
+    echo "✗ staged changes contain an AI trace (matched: /$pattern/i)" >&2
+    echo "  Remove it from the diff before committing." >&2
+    exit 1
+  fi
+done
