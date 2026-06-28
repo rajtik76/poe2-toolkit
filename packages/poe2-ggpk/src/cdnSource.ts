@@ -8,23 +8,19 @@
  * files (its `extract` step output); raw files and sprites are pulled from the
  * patch CDN on demand and cached on disk.
  *
- * `pathofexile-dat` only exports `./bundles.js` and `./dat.js`, but the bundle
- * loader and sprite-layout parser live in unexported `dist/` paths. They are
- * reached by resolving an exported subpath and importing the sibling files —
- * the same internals the legacy extractor used, located portably.
- *
- * Reaching past a package's public exports is inherently fragile: a minor
- * `pathofexile-dat` release can move, rename or restructure these files with no
- * semver signal. {@link loadInternals} contains that risk to one place — it
- * fails loud with an actionable message (naming the version and the fix) the
- * moment a path or an expected export goes missing, rather than letting an
- * `undefined is not a function` surface deep in a later extraction step.
+ * Since `pathofexile-dat@15.2.0` the bundle `FileLoader` and the sprite-index
+ * parser are part of the package's public API (`./bundles.js`, `./sprites.js`),
+ * and `FileLoader` takes any `BundleLoader` — an object with a single
+ * `fetchFile(name)` method. The toolkit supplies its own {@link CdnCachingLoader}
+ * so it owns where bytes come from and how a miss is handled, instead of reaching
+ * past the package's exports into its `dist/` internals.
  */
 
-import { readFile, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+import { type BundleLoader, FileLoader } from 'pathofexile-dat/bundles.js';
+import { type SpriteImage, parseSpriteIndex } from 'pathofexile-dat/sprites.js';
 
 import { decodeDds } from './image/dds.js';
 import type { RgbaImage } from './image/types.js';
@@ -65,138 +61,27 @@ export interface CdnSourceOptions {
 
 const DEFAULT_CDN_HOST = 'https://patch-poe2.poecdn.com';
 
-// --- minimal typings over pathofexile-dat's unexported internals -------------
-
-interface BundleLoader {
-  fetchFile(name: string): Promise<Uint8Array>;
-}
-
-interface FileLoaderLike {
-  bundleLoader: BundleLoader;
-  getFileContents(path: string): Promise<Uint8Array>;
-  tryGetFileContents(path: string): Promise<Uint8Array | null>;
-}
-
-interface BundleLoadersModule {
-  CdnBundleLoader: { create(cacheDir: string, patch: string): Promise<BundleLoader> };
-  FileLoader: { create(bundle: BundleLoader): Promise<FileLoaderLike> };
-}
-
-interface SpriteEntry {
-  name: string;
-  spritePath: string;
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-}
-
-interface SpriteLayoutModule {
-  parseFile(contents: Uint8Array): Iterable<SpriteEntry>;
-}
+/** GGG's bundle root under each patch version on the CDN. */
+const BUNDLES_DIR = 'Bundles2';
 
 /**
- * Internal `dist/`-relative module paths reached past `pathofexile-dat`'s public
- * exports. If a release relocates either, {@link loadInternals} reports exactly
- * which one and the installed version.
+ * A {@link BundleLoader} over the patch CDN, caching every bundle on disk.
+ *
+ * `pathofexile-dat`'s own `CdnBundleLoader` calls `process.exit(1)` on a 404 and
+ * bakes in its cache path; some texture bundles are not on the patch CDN (only
+ * in a full install), so a missing bundle must skip its file, not kill the run.
+ * This throws on a miss and caches by the `@`-flattened name `FileLoader`
+ * expects, leaving the loader free to surface the error to the caller.
  */
-const BUNDLE_LOADERS_PATH = 'cli/bundle-loaders.js';
-const SPRITE_LAYOUT_PATH = 'sprites/layout-parser.js';
+class CdnCachingLoader implements BundleLoader {
+  constructor(
+    private readonly cdnHost: string,
+    private readonly patch: string,
+    private readonly bundleCacheDir: string,
+  ) {}
 
-/** Locate pathofexile-dat's `dist/` directory via an exported subpath. */
-function datDistDir(): string {
-  const require = createRequire(import.meta.url);
-
-  return dirname(require.resolve('pathofexile-dat/bundles.js'));
-}
-
-/** Installed pathofexile-dat version for diagnostics, or `unknown` if unreadable. */
-async function datVersion(dist: string): Promise<string> {
-  try {
-    const pkg = JSON.parse(await readFile(join(dist, '..', 'package.json'), 'utf8')) as { version?: string };
-
-    return pkg.version ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
-}
-
-/**
- * Build the error thrown when an internal module can't be reached or doesn't
- * have the shape we depend on — a single, actionable diagnostic in place of an
- * opaque "Cannot find module" / "undefined is not a function" deep in a run.
- */
-function internalsError(relPath: string, version: string, detail: string, cause?: unknown): Error {
-  return new Error(
-    `@poe2-toolkit/ggpk: pathofexile-dat@${version} ${detail} ` +
-      `('dist/${relPath}'). This reaches past its public exports, so an internal ` +
-      `change can break it without a semver signal. Pin pathofexile-dat to a known-good ` +
-      `version (the toolkit targets ^15.1.0) or update @poe2-toolkit/ggpk's cdnSource to the new layout.`,
-    cause === undefined ? undefined : { cause },
-  );
-}
-
-/** Dynamically import an internal dist module, mapping any failure to {@link internalsError}. */
-async function importInternal(dist: string, relPath: string, version: string): Promise<unknown> {
-  try {
-    return await import(pathToFileURL(join(dist, relPath)).href);
-  } catch (cause) {
-    throw internalsError(relPath, version, 'no longer provides', cause);
-  }
-}
-
-/**
- * Assert the dynamically-imported internal modules still expose the exports we
- * call, narrowing them to their full types. Throws {@link internalsError} naming
- * the offending module when a renamed/removed export is found — caught here at
- * the boundary rather than as a cryptic runtime failure mid-extraction.
- * Exported for unit testing; not part of the package's public API.
- */
-export function validateDatInternals(
-  loaders: Partial<BundleLoadersModule>,
-  layout: Partial<SpriteLayoutModule>,
-  version: string,
-): { loaders: BundleLoadersModule; layout: SpriteLayoutModule } {
-  if (typeof loaders.CdnBundleLoader?.create !== 'function' || typeof loaders.FileLoader?.create !== 'function') {
-    throw internalsError(BUNDLE_LOADERS_PATH, version, 'no longer exports the expected CdnBundleLoader/FileLoader from');
-  }
-
-  if (typeof layout.parseFile !== 'function') {
-    throw internalsError(SPRITE_LAYOUT_PATH, version, 'no longer exports the expected parseFile from');
-  }
-
-  return { loaders: loaders as BundleLoadersModule, layout: layout as SpriteLayoutModule };
-}
-
-async function loadInternals(): Promise<{ loaders: BundleLoadersModule; layout: SpriteLayoutModule }> {
-  const dist = datDistDir();
-  const version = await datVersion(dist);
-
-  const loaders = (await importInternal(dist, BUNDLE_LOADERS_PATH, version)) as Partial<BundleLoadersModule>;
-  const layout = (await importInternal(dist, SPRITE_LAYOUT_PATH, version)) as Partial<SpriteLayoutModule>;
-
-  return validateDatInternals(loaders, layout, version);
-}
-
-/**
- * Create a patch-CDN-backed {@link GgpkSource}. Connecting to the network is
- * deferred to the first file/sprite request; table reads only touch the local
- * `tablesDir`.
- */
-export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSource> {
-  const { patch, cacheDir, tablesDir, cdnHost = DEFAULT_CDN_HOST } = options;
-  const { loaders, layout } = await loadInternals();
-
-  const bundle = await loaders.CdnBundleLoader.create(cacheDir, patch);
-  const loader = await loaders.FileLoader.create(bundle);
-
-  // The stock loader calls `process.exit(1)` on a 404; some texture bundles are
-  // not on the patch CDN (only in a full install). Replace the fetch with one
-  // that throws so a single missing bundle skips its file instead of killing
-  // the run, and that caches by the same `@`-flattened name the loader expects.
-  const bundleCacheDir = join(cacheDir, patch);
-  loader.bundleLoader.fetchFile = async (name: string): Promise<Uint8Array> => {
-    const cached = join(bundleCacheDir, name.replace(/\//g, '@'));
+  async fetchFile(name: string): Promise<Uint8Array> {
+    const cached = join(this.bundleCacheDir, name.replace(/\//g, '@'));
 
     try {
       return await readFile(cached);
@@ -204,7 +89,7 @@ export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSou
       /* not cached yet */
     }
 
-    const res = await fetch(`${cdnHost}/${patch}/Bundles2/${name}`);
+    const res = await fetch(`${this.cdnHost}/${this.patch}/${BUNDLES_DIR}/${name}`);
 
     if (!res.ok) {
       throw new Error(`CDN ${res.status} ${name}`);
@@ -214,10 +99,26 @@ export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSou
     await writeFile(cached, buf);
 
     return new Uint8Array(buf);
-  };
+  }
+}
+
+/**
+ * Create a patch-CDN-backed {@link GgpkSource}. Connecting to the network is
+ * deferred to the first file/sprite request; table reads only touch the local
+ * `tablesDir`.
+ */
+export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSource> {
+  const { patch, cacheDir, tablesDir, cdnHost = DEFAULT_CDN_HOST } = options;
+
+  const bundleCacheDir = join(cacheDir, patch);
+  await mkdir(bundleCacheDir, { recursive: true });
+
+  // `FileLoader.create` reads the bundle index through this loader on first use;
+  // every bundle (index included) is fetched from the CDN and cached on disk.
+  const loader = await FileLoader.create(new CdnCachingLoader(cdnHost, patch, bundleCacheDir));
 
   const ddsCache = new Map<string, RgbaImage | null>();
-  let spriteIndex: Map<string, SpriteEntry> | null = null;
+  let spriteIndex: Map<string, SpriteImage> | null = null;
 
   async function file(path: string): Promise<Uint8Array | null> {
     return loader.tryGetFileContents(path.toLowerCase());
@@ -246,11 +147,11 @@ export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSou
     return image;
   }
 
-  async function ensureSpriteIndex(): Promise<Map<string, SpriteEntry>> {
+  async function ensureSpriteIndex(): Promise<Map<string, SpriteImage>> {
     if (!spriteIndex) {
       spriteIndex = new Map();
 
-      for (const entry of layout.parseFile(await loader.getFileContents('art/uiimages1.txt'))) {
+      for (const entry of parseSpriteIndex(await loader.getFileContents('art/uiimages1.txt'))) {
         spriteIndex.set(entry.name, entry);
       }
     }
