@@ -309,6 +309,12 @@ export function TreeView({
   const viewportRef = useRef<Viewport | null>(null);
   const hoverRef = useRef<number | null>(null);
   const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  // Active touch/pen pointers by id (client coords), for pinch-zoom. A single
+  // entry pans (via dragRef); two entries pinch.
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  // Spread between the two pinch pointers on the previous move, so each move
+  // scales by the ratio of the new spread to the old.
+  const pinchRef = useRef<number | null>(null);
   const texRef = useRef<TexCtx>({ textures: new Map(), sources: new Map(), images: new Map() });
   const readyRef = useRef(false);
 
@@ -607,10 +613,49 @@ export function TreeView({
 
   // ---- Pointer interaction -------------------------------------------------
 
+  const zoomAt = useCallback(
+    (px: number, py: number, factor: number) => {
+      const viewport = viewportRef.current;
+
+      if (!viewport) {
+        return;
+      }
+
+      const scale = clamp(viewport.scale * factor, MIN_SCALE, limitsRef.current.maxScale);
+      const ratio = scale / viewport.scale;
+      viewport.tx = px - (px - viewport.tx) * ratio;
+      viewport.ty = py - (py - viewport.ty) * ratio;
+      viewport.scale = scale;
+
+      const canvas = containerRef.current;
+
+      if (canvas) {
+        clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight, limitsRef.current);
+      }
+
+      sync();
+    },
+    [scene, sync],
+  );
+
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.currentTarget.setPointerCapture(event.pointerId);
-      dragRef.current = { x: event.clientX, y: event.clientY, moved: false };
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+      // A second finger starts a pinch: cancel the pan and seed the spread.
+      if (pointersRef.current.size === 2) {
+        const [a, b] = [...pointersRef.current.values()];
+
+        if (a && b) {
+          pinchRef.current = Math.hypot(a.x - b.x, a.y - b.y);
+        }
+
+        dragRef.current = null;
+      } else {
+        dragRef.current = { x: event.clientX, y: event.clientY, moved: false };
+      }
+
       onInteractStart?.();
     },
     [onInteractStart],
@@ -621,6 +666,33 @@ export function TreeView({
       const viewport = viewportRef.current;
 
       if (!viewport) {
+        return;
+      }
+
+      // Two fingers down: pinch-zoom about the midpoint, scaling by how much the
+      // spread between them changed since the last move.
+      const tracked = pointersRef.current;
+
+      if (tracked.has(event.pointerId)) {
+        tracked.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      }
+
+      if (tracked.size === 2 && pinchRef.current !== null) {
+        const [a, b] = [...tracked.values()];
+
+        if (a && b) {
+          const dist = Math.hypot(a.x - b.x, a.y - b.y);
+
+          if (pinchRef.current > 0 && dist > 0) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            const midX = (a.x + b.x) / 2 - rect.left;
+            const midY = (a.y + b.y) / 2 - rect.top;
+            zoomAt(midX, midY, dist / pinchRef.current);
+          }
+
+          pinchRef.current = dist;
+        }
+
         return;
       }
 
@@ -668,12 +740,26 @@ export function TreeView({
         drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null, activeAscendancy, highlightStyleRef.current, edgeOverlays ?? null);
       }
     },
-    [scene, sync, onNodeHover, activeAscendancy, highlight, preview, edgeOverlays],
+    [scene, sync, onNodeHover, activeAscendancy, highlight, preview, edgeOverlays, zoomAt],
   );
 
   const onPointerUp = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.currentTarget.releasePointerCapture(event.pointerId);
+      pointersRef.current.delete(event.pointerId);
+
+      // Lifting one finger of a pinch: end the pinch but keep panning from the
+      // finger still down, seeded at its position so the view doesn't jump.
+      if (pinchRef.current !== null) {
+        pinchRef.current = null;
+
+        const remaining = [...pointersRef.current.values()][0];
+
+        dragRef.current = remaining ? { x: remaining.x, y: remaining.y, moved: true } : null;
+
+        return;
+      }
+
       const drag = dragRef.current;
       dragRef.current = null;
       const viewport = viewportRef.current;
@@ -707,31 +793,6 @@ export function TreeView({
       }
     },
     [scene, onNodeDoubleClick, activeAscendancy],
-  );
-
-  const zoomAt = useCallback(
-    (px: number, py: number, factor: number) => {
-      const viewport = viewportRef.current;
-
-      if (!viewport) {
-        return;
-      }
-
-      const scale = clamp(viewport.scale * factor, MIN_SCALE, limitsRef.current.maxScale);
-      const ratio = scale / viewport.scale;
-      viewport.tx = px - (px - viewport.tx) * ratio;
-      viewport.ty = py - (py - viewport.ty) * ratio;
-      viewport.scale = scale;
-
-      const canvas = containerRef.current;
-
-      if (canvas) {
-        clampViewport(viewport, scene, canvas.clientWidth, canvas.clientHeight, limitsRef.current);
-      }
-
-      sync();
-    },
-    [scene, sync],
   );
 
   useImperativeHandle(
@@ -803,8 +864,13 @@ export function TreeView({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      onLostPointerCapture={() => {
+      onLostPointerCapture={(event) => {
         dragRef.current = null;
+        pointersRef.current.delete(event.pointerId);
+
+        if (pointersRef.current.size < 2) {
+          pinchRef.current = null;
+        }
       }}
       onDoubleClick={onDoubleClick}
     />
