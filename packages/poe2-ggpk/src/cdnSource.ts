@@ -19,8 +19,10 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { type BundleLoader, FileLoader } from 'pathofexile-dat/bundles.js';
-import { type SpriteImage, parseSpriteIndex } from 'pathofexile-dat/sprites.js';
+import { FileLoader } from 'pathofexile-dat/bundles.js';
+import type { BundleLoader } from 'pathofexile-dat/bundles.js';
+import { parseSpriteIndex } from 'pathofexile-dat/sprites.js';
+import type { SpriteImage } from 'pathofexile-dat/sprites.js';
 
 import { decodeDds } from './image/dds.js';
 import type { RgbaImage } from './image/types.js';
