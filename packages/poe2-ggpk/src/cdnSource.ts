@@ -74,8 +74,10 @@ const BUNDLES_DIR = 'Bundles2';
  * in a full install), so a missing bundle must skip its file, not kill the run.
  * This throws on a miss and caches by the `@`-flattened name `FileLoader`
  * expects, leaving the loader free to surface the error to the caller.
+ *
+ * Exported for unit testing; not part of the package's public API.
  */
-class CdnCachingLoader implements BundleLoader {
+export class CdnCachingLoader implements BundleLoader {
   constructor(
     private readonly cdnHost: string,
     private readonly patch: string,
