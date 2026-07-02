@@ -96,9 +96,9 @@ The rest of this section is the shape and the rules the types alone don't tell y
 its extension swapped to `.png`, which the CLI writes as files under `icons/`.
 Icons are deduplicated, so it's one PNG per distinct `icon`. `icons.report` counts
 what happened: `packed` decoded successfully, `missing` could not be served or
-decoded (skipped, never substituted). Rune art lives under `Art/2DItems/...`, which
-the patch CDN does not host, so against a pure `createCdnSource` these all report
-`missing`; a full local GGPK install serves them (same as the item extractor).
+decoded (skipped, never substituted). Rune art lives under `Art/2DItems/...` as
+uncompressed DX10 textures (dxgi 28); the patch CDN serves them and `decodeDds`
+handles that format, so a pure `createCdnSource` decodes all of them.
 
 ## CLI: write the bundle to disk
 

@@ -1,7 +1,8 @@
 /**
- * In-process DDS decode (BC1/BC2/BC3/BC7) to straight RGBA8. No system
- * ImageMagick and no native dependencies, which keeps extraction portable in
- * CI. PoE2 tree art is DX10/BC1 (icons) with some BC3; UI art is BC7.
+ * In-process DDS decode (BC1/BC2/BC3/BC7 + uncompressed RGBA/BGRA8) to straight
+ * RGBA8. No system ImageMagick and no native dependencies, which keeps
+ * extraction portable in CI. PoE2 tree art is DX10/BC1 (icons) with some BC3;
+ * UI art is BC7; item icons are uncompressed DX10 R8G8B8A8 (dxgi 28/29).
  */
 
 import { decodeBc7Block } from './bc7.js';
@@ -13,9 +14,13 @@ const DXGI_BC1 = new Set([70, 71, 72]);
 const DXGI_BC2 = new Set([73, 74, 75]);
 const DXGI_BC3 = new Set([76, 77, 78]);
 const DXGI_BC7 = new Set([97, 98, 99]);
+const DXGI_RGBA8 = new Set([28, 29]); // R8G8B8A8_UNORM(_SRGB)
+const DXGI_BGRA8 = new Set([87, 88]); // B8G8R8A8_UNORM(_SRGB)
 
 /**
- * Decode a DDS buffer (BC1/BC2/BC3/BC7) to straight RGBA8.
+ * Decode a DDS buffer to straight RGBA8. Handles block-compressed
+ * BC1/BC2/BC3/BC7 and uncompressed 32-bit RGBA8/BGRA8 (DX10 dxgi 28/29/87/88).
+ * Only the base mip level is returned.
  *
  * @param buf - Raw DDS file bytes.
  * @returns The decoded {@link RgbaImage}.
@@ -39,7 +44,12 @@ export function decodeDds(buf: Uint8Array): RgbaImage {
     const dxgi = dv.getUint32(128, true);
     dataOffset = 148;
 
-    if (DXGI_BC1.has(dxgi)) {
+    // Uncompressed 32-bit formats carry no 4x4 blocks; copy pixels straight.
+    if (DXGI_RGBA8.has(dxgi)) {
+      return decodeUncompressed(buf, dataOffset, width, height, false);
+    } else if (DXGI_BGRA8.has(dxgi)) {
+      return decodeUncompressed(buf, dataOffset, width, height, true);
+    } else if (DXGI_BC1.has(dxgi)) {
       kind = 'bc1';
     } else if (DXGI_BC2.has(dxgi)) {
       kind = 'bc2';
@@ -91,6 +101,46 @@ export function decodeDds(buf: Uint8Array): RgbaImage {
       p += 8;
       blitBlock(rgba, width, height, bx, by, colors, alpha);
     }
+  }
+
+  return { width, height, rgba };
+}
+
+/**
+ * Copy an uncompressed 32-bit surface to straight RGBA8. Assumes tightly
+ * packed rows (pitch = width * 4), which holds for the CDN item textures.
+ *
+ * @param swapRb - Source is BGRA (dxgi 87/88); swap R/B into RGBA order.
+ */
+function decodeUncompressed(
+  buf: Uint8Array,
+  dataOffset: number,
+  width: number,
+  height: number,
+  swapRb: boolean,
+): RgbaImage {
+  const count = width * height;
+  const need = dataOffset + count * 4;
+
+  if (buf.byteLength < need) {
+    throw new Error(`truncated DDS: need ${need} bytes, have ${buf.byteLength}`);
+  }
+
+  const rgba = new Uint8Array(count * 4);
+
+  if (!swapRb) {
+    rgba.set(buf.subarray(dataOffset, need));
+
+    return { width, height, rgba };
+  }
+
+  for (let i = 0; i < count; i++) {
+    const s = dataOffset + i * 4;
+    const d = i * 4;
+    rgba[d] = buf[s + 2]!;
+    rgba[d + 1] = buf[s + 1]!;
+    rgba[d + 2] = buf[s]!;
+    rgba[d + 3] = buf[s + 3]!;
   }
 
   return { width, height, rgba };
