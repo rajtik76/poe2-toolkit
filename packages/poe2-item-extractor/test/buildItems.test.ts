@@ -25,8 +25,19 @@ const TABLES: Record<string, TableRow[]> = {
     { DDSFile: 'Art/2DItems/Weapons/greatsword.dds' },
     { DDSFile: 'Art/2DItems/Weapons/rapier.dds' },
     { DDSFile: 'Art/2DItems/Weapons/greatsword_alt.dds' },
+    { DDSFile: 'Art/2DItems/Weapons/oro.dds' },
+    { DDSFile: 'Art/2DItems/Weapons/behemoth.dds' },
   ],
   AttributeRequirements: [{ BaseItemType: 0, ReqStr: 40, ReqDex: 10, ReqInt: 0 }],
+  // A one-handed unique, a two-handed unique, a [DNT] placeholder, and a name clashing with a base.
+  UniqueStashLayout: [
+    { WordsKey: 0, ItemVisualIdentityKey: 3, UniqueStashTypesKey: 0 },
+    { WordsKey: 3, ItemVisualIdentityKey: 4, UniqueStashTypesKey: 1 },
+    { WordsKey: 1, ItemVisualIdentityKey: 0, UniqueStashTypesKey: 0 },
+    { WordsKey: 2, ItemVisualIdentityKey: 1, UniqueStashTypesKey: 1 },
+  ],
+  Words: [{ Text: "Oro's Sacrifice" }, { Text: 'Dev Unique [DNT]' }, { Text: 'Greatsword' }, { Text: 'Behemoth' }],
+  UniqueStashTypes: [{ Id: 'Sword' }, { Id: 'SwordTwoHand' }],
 };
 
 function fakeSource(images: Record<string, RgbaImage | null> = {}): GgpkSource & { dds(path: string): Promise<RgbaImage | null> } {
@@ -44,8 +55,10 @@ describe('buildItems', () => {
     const items = await buildItems(fakeSource());
 
     expect(items.Greatsword).toEqual({
+      rarity: 'normal',
       icon: 'Art/2DItems/Weapons/greatsword.dds',
       itemClass: 'Two Hand Sword',
+      category: null,
       twoHanded: true,
       req: { str: 40, dex: 10, int: 0 },
     });
@@ -71,6 +84,41 @@ describe('buildItems', () => {
   });
 });
 
+describe('buildItems - uniques', () => {
+  it('maps a unique with its name, icon and stash category', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items["Oro's Sacrifice"]).toEqual({
+      rarity: 'unique',
+      icon: 'Art/2DItems/Weapons/oro.dds',
+      itemClass: null,
+      category: 'Sword',
+      twoHanded: false,
+      req: { str: 0, dex: 0, int: 0 },
+    });
+  });
+
+  it('derives two-handedness of a unique from its weapon category', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items.Behemoth).toMatchObject({ category: 'SwordTwoHand', twoHanded: true });
+  });
+
+  it('skips [DNT] unique placeholders', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items['Dev Unique [DNT]']).toBeUndefined();
+  });
+
+  it('never lets a unique overwrite a base of the same name', async () => {
+    const items = await buildItems(fakeSource());
+
+    // A "Greatsword" unique row exists, but the base must keep the slot.
+    expect(items.Greatsword?.rarity).toBe('normal');
+    expect(items.Greatsword?.itemClass).toBe('Two Hand Sword');
+  });
+});
+
 describe('buildItemIcons', () => {
   it('decodes distinct DDS icons to PNG paths and reports misses', async () => {
     const source = fakeSource({ 'Art/2DItems/Weapons/greatsword.dds': px() });
@@ -79,7 +127,7 @@ describe('buildItemIcons', () => {
 
     expect(Object.keys(icons)).toContain('Art/2DItems/Weapons/greatsword.png');
     expect(report.packed).toBe(1);
-    expect(report.missing).toBe(1); // rapier.dds has no decoded image here
+    expect(report.missing).toBe(3); // rapier.dds and the uniques' oro.dds / behemoth.dds have no decoded image here
   });
 });
 

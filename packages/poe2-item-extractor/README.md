@@ -5,8 +5,9 @@
 [![ESM only](https://img.shields.io/badge/module-ESM-f7df1e.svg)](#)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-Builds **Path of Exile 2 base-item** data and icons straight from the official
-GGPK / patch server, in a flat shape a build front-end can consume.
+Builds **Path of Exile 2 item** data - normal-rarity bases **and** uniques - plus
+their icons, straight from the official GGPK / patch server, in a flat shape a
+build front-end can consume.
 
 It mirrors [`@poe2-toolkit/tree-extractor`](../poe2-tree-extractor): source-agnostic,
 built on a [`@poe2-toolkit/ggpk`](../poe2-ggpk) source, returning formatted data
@@ -44,15 +45,75 @@ const { data, icons } = await extractItems(source);
 > `patch` is whatever version the patch server currently serves; a stale version
 > 404s, so pass the one you actually want to extract.
 
-`extractItems(source)` returns an `ItemBundle`:
+`extractItems(source)` resolves to an `ItemBundle` - the item `data` plus decoded
+`icons`:
 
-| Field | Type | What it is |
-| --- | --- | --- |
-| `data` | `ItemData` | Bases keyed by display name, each with its raw icon path, item class id, a `twoHanded` flag, and the str/dex/int requirements. The first displayable base seen for a name wins. |
-| `icons` | `ItemIconsResult` | Decoded icon PNGs keyed by output path (`<dds path>.png`), with a report of what packed or was skipped. |
+```ts
+interface ItemBundle {
+  data: ItemData;         // items keyed by display name (bases + uniques)
+  icons: ItemIconsResult; // decoded icon PNGs + a pack/skip report
+}
+```
 
-The individual steps are exported too: `buildItems(source)` for the data and
+The two steps are exported separately too: `buildItems(source)` for the data and
 `buildItemIcons(source, data)` for the PNGs.
+
+Field-level docs live on the exported types themselves - `Item`, `ItemReq`,
+`ItemIconsResult` - so your editor shows each field's meaning on hover and they
+ship in the `.d.ts`. The rest of this section is the shape and the rules that the
+types alone don't tell you.
+
+### `data`: the items (`ItemData`)
+
+`ItemData` is a plain object keyed by **display name** - the base type line for a
+normal item (`Vaal Cuirass`), the unique's name for a unique (`Kaom's Heart`).
+Each value is an `Item`. A normal base and a unique:
+
+```json
+"Vaal Cuirass": {
+  "rarity": "normal",
+  "icon": "Art/2DItems/Armours/BodyArmours/Basetypes/BodyStr08.dds",
+  "itemClass": "Body Armour",
+  "category": null,
+  "twoHanded": false,
+  "req": { "str": 60, "dex": 0, "int": 0 }
+}
+
+"Kaom's Heart": {
+  "rarity": "unique",
+  "icon": "Art/2DItems/Armours/BodyArmours/Uniques/KaomsHeart.dds",
+  "itemClass": null,
+  "category": "Body Armour",
+  "twoHanded": false,
+  "req": { "str": 0, "dex": 0, "int": 0 }
+}
+```
+
+Every field is present on every entry, but which ones carry a value follows from
+`rarity`:
+
+- **`itemClass` vs `category` are mutually exclusive.** A base has `itemClass`
+  (`ItemClasses.Id`) and `category: null`; a unique has `category`
+  (`UniqueStashTypes.Id`, the stash slot) and `itemClass: null`. .dat has no
+  unique-to-base-type link (see [How it works](#how-it-works)), so a unique's
+  closest-to-a-class is its stash category. The two vocabularies differ -
+  `SwordTwoHand` vs `Two Hand Sword`, `Warstaff` vs `Quarterstaff`.
+- **`req` on a unique is always `{ str: 0, dex: 0, int: 0 }`** - the requirement
+  lives on the unique's (unknown) base type, so treat it as *not populated*, not
+  as "no requirement". A base's `req` is the real str/dex/int to equip.
+- **`twoHanded` is derived**, from `itemClass` for bases and from the weapon
+  `category` for uniques, so it is correct for uniques even without a base type.
+- **Bases win name clashes.** Bases are added first (first displayable base for a
+  name wins); uniques fold in after and never overwrite a base of the same name.
+
+### `icons`: the decoded PNGs (`ItemIconsResult`)
+
+`icons.icons` is PNG bytes keyed by output path - each item's `icon` DDS path with
+its extension swapped to `.png` (e.g. `Art/.../KaomsHeart.png`), which the CLI
+writes as files under `icons/`. Icons are deduplicated, so it's one PNG per
+distinct `icon` across all items. `icons.report` counts what happened:
+`packed` decoded successfully, `missing` could not be served or decoded (skipped,
+never substituted from a vendored asset).
 
 ## CLI: write the bundle to disk
 
@@ -70,9 +131,14 @@ publish step left to you.
 
 ## How it works
 
-- **Data** joins `BaseItemTypes` to its `ItemClasses`, `ItemVisualIdentity`
+- **Normal bases** join `BaseItemTypes` to its `ItemClasses`, `ItemVisualIdentity`
   (icon) and `AttributeRequirements`. Only displayable equipment bases (those
   with a visual identity) are kept; `[DNT]` dev placeholders are dropped.
+- **Uniques** come from `UniqueStashLayout` (the authoritative unique list),
+  joined with `Words` for the name, `ItemVisualIdentity` for the icon and
+  `UniqueStashTypes` for the category. .dat has no unique-to-base-type link (the
+  base a unique rolls on is decided at drop generation, not stored), so a unique
+  carries its stash `category` (the item slot) instead of a concrete base type.
 - **Two-handedness** is derived from the item class, not from base-level tags
   (bases don't inherit weapon-class tags), which is the reliable signal.
 - **Icons** are kept as their raw GGPK DDS paths in the data and decoded to PNG by
