@@ -76,7 +76,8 @@ Each value is an `Item`. A normal base and a unique:
   "itemClass": "Body Armour",
   "category": null,
   "twoHanded": false,
-  "req": { "str": 60, "dex": 0, "int": 0 }
+  "req": { "str": 60, "dex": 0, "int": 0 },
+  "flavourText": null
 }
 
 "Kaom's Heart": {
@@ -85,7 +86,8 @@ Each value is an `Item`. A normal base and a unique:
   "itemClass": null,
   "category": "Body Armour",
   "twoHanded": false,
-  "req": { "str": 0, "dex": 0, "int": 0 }
+  "req": { "str": 0, "dex": 0, "int": 0 },
+  "flavourText": ["The warrior who fears will fall."]
 }
 ```
 
@@ -103,6 +105,9 @@ Every field is present on every entry, but which ones carry a value follows from
   as "no requirement". A base's `req` is the real str/dex/int to equip.
 - **`twoHanded` is derived**, from `itemClass` for bases and from the weapon
   `category` for uniques, so it is correct for uniques even without a base type.
+- **`flavourText` is the unique's lore**, as separate lines (GGG stores explicit
+  line breaks). It is `null` on bases and on any unique without one - only uniques
+  carry it.
 - **Bases win name clashes.** Bases are added first (first displayable base for a
   name wins); uniques fold in after and never overwrite a base of the same name.
 
@@ -139,6 +144,10 @@ publish step left to you.
   `UniqueStashTypes` for the category. .dat has no unique-to-base-type link (the
   base a unique rolls on is decided at drop generation, not stored), so a unique
   carries its stash `category` (the item slot) instead of a concrete base type.
+- **Flavour text** comes from `FlavourText`, which has no foreign key to the
+  unique: it lines up by the `ItemVisualIdentity` / `FlavourText` id with the
+  `_`-suffixed art variant dropped (`FourUniqueRing33_a` -> `FourUniqueRing33`),
+  the same join Path of Building uses.
 - **Two-handedness** is derived from the item class, not from base-level tags
   (bases don't inherit weapon-class tags), which is the reliable signal.
 - **Icons** are kept as their raw GGPK DDS paths in the data and decoded to PNG by

@@ -58,6 +58,12 @@ export interface Item {
    * (unknown) base type, so read it as *not populated*, not "no requirement".
    */
   req: ItemReq;
+  /**
+   * The unique's flavour / lore text as separate lines (GGG stores explicit line
+   * breaks that matter for display), or `null` for bases and any unique without
+   * one. Only uniques carry flavour text.
+   */
+  flavourText: string[] | null;
 }
 
 /**
@@ -93,7 +99,7 @@ interface BaseItemTypeRow {
 }
 
 interface ItemClassRow { Id?: string }
-interface ItemVisualIdentityRow { DDSFile?: string }
+interface ItemVisualIdentityRow { Id?: string; DDSFile?: string }
 interface AttributeRequirementRow { BaseItemType?: number | null; ReqStr?: number; ReqDex?: number; ReqInt?: number }
 
 /** One unique's slot in the unique stash: name, icon and category by row index. */
@@ -105,6 +111,27 @@ interface UniqueStashLayoutRow {
 
 interface WordsRow { Text?: string }
 interface UniqueStashTypesRow { Id?: string }
+interface FlavourTextRow { Id?: string; Text?: string }
+
+/**
+ * The unique-item id shared between `ItemVisualIdentity` and `FlavourText`, with
+ * any `_`-suffixed art variant dropped: `FourUniqueRing33_a` -> `FourUniqueRing33`.
+ * This is how the two tables line up (there is no direct foreign key), matching
+ * Path of Building's `flavourText` join.
+ */
+function normalizeUniqueId(id: string): string {
+  return /^[^_]+/.exec(id)?.[0] ?? id;
+}
+
+/** Split GGG flavour text into trimmed non-empty lines, or `null` when empty. */
+function splitFlavourText(text: string): string[] | null {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+
+  return lines.length > 0 ? lines : null;
+}
 
 /**
  * Build the item export from the supplied {@link GgpkSource}. All data comes
@@ -157,6 +184,7 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
         dex: req?.ReqDex ?? 0,
         int: req?.ReqInt ?? 0,
       },
+      flavourText: null,
     };
   });
 
@@ -180,6 +208,24 @@ async function addUniques(
   const UniqueStashLayout = (await source.table('UniqueStashLayout')) as UniqueStashLayoutRow[];
   const Words = (await source.table('Words')) as WordsRow[];
   const UniqueStashTypes = (await source.table('UniqueStashTypes')) as UniqueStashTypesRow[];
+  const FlavourText = (await source.table('FlavourText')) as FlavourTextRow[];
+
+  // Flavour text has no foreign key to a unique; it lines up by the normalized
+  // ItemVisualIdentity/FlavourText id. First row for a key wins.
+  const flavourByUniqueId = new Map<string, string[]>();
+
+  for (const row of FlavourText) {
+    if (typeof row.Id !== 'string' || typeof row.Text !== 'string') {
+      continue;
+    }
+
+    const key = normalizeUniqueId(row.Id);
+    const lines = splitFlavourText(row.Text);
+
+    if (lines && !flavourByUniqueId.has(key)) {
+      flavourByUniqueId.set(key, lines);
+    }
+  }
 
   for (const row of UniqueStashLayout) {
     const name = row.WordsKey != null ? Words[row.WordsKey]?.Text : undefined;
@@ -193,15 +239,18 @@ async function addUniques(
       continue;
     }
 
+    const visual = row.ItemVisualIdentityKey != null ? ItemVisualIdentity[row.ItemVisualIdentityKey] : undefined;
     const category = row.UniqueStashTypesKey != null ? UniqueStashTypes[row.UniqueStashTypesKey]?.Id ?? null : null;
+    const flavourText = visual?.Id != null ? flavourByUniqueId.get(normalizeUniqueId(visual.Id)) ?? null : null;
 
     items[name] = {
       rarity: 'unique',
-      icon: row.ItemVisualIdentityKey != null ? ItemVisualIdentity[row.ItemVisualIdentityKey]?.DDSFile ?? null : null,
+      icon: visual?.DDSFile ?? null,
       itemClass: null,
       category,
       twoHanded: category != null && TWO_HANDED_CATEGORIES.has(category),
       req: { str: 0, dex: 0, int: 0 },
+      flavourText,
     };
   }
 }

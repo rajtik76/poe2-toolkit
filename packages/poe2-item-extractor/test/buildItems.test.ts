@@ -22,13 +22,18 @@ const TABLES: Record<string, TableRow[]> = {
   ],
   ItemClasses: [{ Id: 'Two Hand Sword' }, { Id: 'One Hand Sword' }],
   ItemVisualIdentity: [
-    { DDSFile: 'Art/2DItems/Weapons/greatsword.dds' },
-    { DDSFile: 'Art/2DItems/Weapons/rapier.dds' },
-    { DDSFile: 'Art/2DItems/Weapons/greatsword_alt.dds' },
-    { DDSFile: 'Art/2DItems/Weapons/oro.dds' },
-    { DDSFile: 'Art/2DItems/Weapons/behemoth.dds' },
+    { Id: 'Greatsword', DDSFile: 'Art/2DItems/Weapons/greatsword.dds' },
+    { Id: 'Rapier', DDSFile: 'Art/2DItems/Weapons/rapier.dds' },
+    { Id: 'GreatswordAlt', DDSFile: 'Art/2DItems/Weapons/greatsword_alt.dds' },
+    // `_a` art-variant suffix: flavour text is keyed by the id without it.
+    { Id: 'UniqueSwordOro_a', DDSFile: 'Art/2DItems/Weapons/oro.dds' },
+    { Id: 'UniqueSwordBehemoth', DDSFile: 'Art/2DItems/Weapons/behemoth.dds' },
   ],
   AttributeRequirements: [{ BaseItemType: 0, ReqStr: 40, ReqDex: 10, ReqInt: 0 }],
+  FlavourText: [
+    { Id: 'UniqueSwordOro', Text: 'A blade of fire.\r\nForged in endless war.' },
+    { Id: 'UniqueSwordBehemoth', Text: 'Heavy is the blade.' },
+  ],
   // A one-handed unique, a two-handed unique, a [DNT] placeholder, and a name clashing with a base.
   UniqueStashLayout: [
     { WordsKey: 0, ItemVisualIdentityKey: 3, UniqueStashTypesKey: 0 },
@@ -61,6 +66,7 @@ describe('buildItems', () => {
       category: null,
       twoHanded: true,
       req: { str: 40, dex: 10, int: 0 },
+      flavourText: null,
     });
   });
 
@@ -95,7 +101,16 @@ describe('buildItems - uniques', () => {
       category: 'Sword',
       twoHanded: false,
       req: { str: 0, dex: 0, int: 0 },
+      // Joined via the `_a`-stripped ItemVisualIdentity id, split into lines.
+      flavourText: ['A blade of fire.', 'Forged in endless war.'],
     });
+  });
+
+  it('leaves flavourText null on bases and populates it only for uniques', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items.Rapier?.flavourText).toBeNull();
+    expect(items.Behemoth?.flavourText).toEqual(['Heavy is the blade.']);
   });
 
   it('derives two-handedness of a unique from its weapon category', async () => {
