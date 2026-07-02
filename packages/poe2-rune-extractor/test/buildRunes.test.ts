@@ -9,7 +9,15 @@ import { describe, expect, it } from 'vitest';
 
 import { buildRuneIcons } from '../src/buildIcons';
 import { buildRunes } from '../src/buildRunes';
+import { buildSocketIcons } from '../src/buildSockets';
 import { extractRunes } from '../src/index';
+
+/** GGPK DDS paths of the three socket textures, keyed by their logical output path. */
+const SOCKET_DDS = {
+  'ui/rune-socket.png': 'art/textures/interface/2d/2dart/uiimages/ingame/runesocketfilled.dds',
+  'ui/soul-core-socket.png': 'art/textures/interface/2d/2dart/uiimages/ingame/soulcoressocketfilled.dds',
+  'ui/socket-empty.png': 'art/textures/interface/2d/2dart/uiimages/ingame/soulcoressocketempty.dds',
+};
 
 /** Minimal tables: a levelled core, a level-0 core, a [DNT] placeholder, an art-less core. */
 const TABLES: Record<string, TableRow[]> = {
@@ -123,9 +131,40 @@ describe('buildRuneIcons', () => {
   });
 });
 
+describe('buildSocketIcons', () => {
+  it('decodes the socket textures to stable logical PNG paths', async () => {
+    const source = fakeSource(CSD, {
+      [SOCKET_DDS['ui/rune-socket.png']]: px(),
+      [SOCKET_DDS['ui/soul-core-socket.png']]: px(),
+      [SOCKET_DDS['ui/socket-empty.png']]: px(),
+    });
+    const { icons, report } = await buildSocketIcons(source);
+
+    expect(Object.keys(icons).sort()).toEqual([
+      'ui/rune-socket.png',
+      'ui/socket-empty.png',
+      'ui/soul-core-socket.png',
+    ]);
+    expect(report).toEqual({ packed: 3, missing: 0 });
+  });
+
+  it('skips and counts a missing socket texture instead of substituting', async () => {
+    const source = fakeSource(CSD, { [SOCKET_DDS['ui/socket-empty.png']]: px() });
+    const { icons, report } = await buildSocketIcons(source);
+
+    expect(Object.keys(icons)).toEqual(['ui/socket-empty.png']);
+    expect(report).toEqual({ packed: 1, missing: 2 });
+  });
+});
+
 describe('extractRunes', () => {
-  it('returns data and icons in one pass', async () => {
-    const source = fakeSource(CSD, { 'Art/2DItems/SoulCores/iron.dds': px() });
+  it('returns data plus rune and socket icons in one pass', async () => {
+    const source = fakeSource(CSD, {
+      'Art/2DItems/SoulCores/iron.dds': px(),
+      [SOCKET_DDS['ui/rune-socket.png']]: px(),
+      [SOCKET_DDS['ui/soul-core-socket.png']]: px(),
+      [SOCKET_DDS['ui/socket-empty.png']]: px(),
+    });
     const bundle = await extractRunes({
       ...source,
       resolveSprite: () => Promise.resolve(null),
@@ -133,6 +172,8 @@ describe('extractRunes', () => {
     });
 
     expect(Object.keys(bundle.data)).toContain('Iron Soul Core');
-    expect(bundle.icons.report.packed).toBe(1);
+    expect(Object.keys(bundle.icons.icons)).toContain('ui/rune-socket.png');
+    // 1 rune icon + 3 socket textures; body.dds still misses (Dual core has no icon).
+    expect(bundle.icons.report).toEqual({ packed: 4, missing: 1 });
   });
 });

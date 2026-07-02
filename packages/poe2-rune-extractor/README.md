@@ -100,6 +100,20 @@ decoded (skipped, never substituted). Rune art lives under `Art/2DItems/...` as
 uncompressed DX10 textures (dxgi 28); the patch CDN serves them and `decodeDds`
 handles that format, so a pure `createCdnSource` decodes all of them.
 
+`icons.icons` also carries the three fixed **item-socket UI textures**, keyed by
+stable logical paths rather than raw GGG texture paths:
+
+- `ui/rune-socket.png` - the rune content only, no ring (`runesocketfilled`)
+- `ui/soul-core-socket.png` - the soul-core content only, no ring (`soulcoressocketfilled`)
+- `ui/socket-empty.png` - the bare metal ring
+  (`soulcoressocketempty`; GGG ships no rune-specific empty, so this is shared)
+
+These are UI chrome, not per-rune data, and all three are distinct layers. The ring
+(`socket-empty`) is drawn for every socket; the filled textures carry only the
+content and are layered over the ring for an occupied socket, so the ring stays
+visible whatever the socket holds. `buildSocketIcons(source)` builds them alone;
+`icons.report` sums their pack/skip counts in with the rune icons.
+
 ## CLI: write the bundle to disk
 
 ```sh
@@ -126,6 +140,9 @@ All four flags are required. It writes `runes.json` and the icon PNG tree under
   extractor decodes), kept as a raw DDS path and decoded to PNG by
   `buildRuneIcons`. An icon the source cannot serve is skipped and reported, never
   pulled from a vendored asset.
+- The three item-socket UI textures are decoded by `buildSocketIcons` from fixed
+  GGG paths under `art/textures/interface/2d/2dart/uiimages/ingame/` into the same
+  stable-named, skip-and-report contract.
 - `[DNT]` dev placeholders are dropped; a `RequiredLevel` of 0 becomes `null`.
 
 ## Attributions and legal
