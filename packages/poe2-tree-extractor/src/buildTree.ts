@@ -178,28 +178,54 @@ interface QuestFlagRow { Id?: string | null }
 
 // --- exported tree shape -----------------------------------------------------
 
-/** A tree node as serialized to `data.json` (graph node, or data-only override). */
+/**
+ * A tree node as serialized to `data.json`: either a graph node (with geometry
+ * and edges) or a data-only class override (`skill`/`name`/`icon`/`stats` only,
+ * no coordinates or connections). The boolean flags are present-only `true`
+ * literals — absent means false, they are never serialized as `false`.
+ */
 export interface ExportNode {
+  /** PassiveSkillGraphId; also this node's key in {@link TreeExport.nodes}. */
   skill: number;
+  /** Display name (may be empty for anonymous nodes). */
   name: string;
+  /** Raw GGPK DDS path of the node icon (empty when none). */
   icon: string;
+  /** Rendered stat lines, one per modifier (real newlines already expanded). */
   stats: string[];
+  /** Owning group's key in {@link TreeExport.groups}. Absent on override nodes. */
   group?: number;
+  /** Orbit ring within the group (0 = centre). Absent on override nodes. */
   orbit?: number;
+  /** Slot index along {@link ExportNode.orbit}. Absent on override nodes. */
   orbitIndex?: number;
+  /** World x, computed from group anchor + orbit. Absent on override nodes. */
   x?: number;
+  /** World y, computed from group anchor + orbit. Absent on override nodes. */
   y?: number;
+  /** Skill ids this node connects out to (bidirectional adjacency, mirrored). */
   out?: number[];
+  /** Reserved for incoming edges; emitted empty and filled downstream. */
   in?: number[];
+  /** Present (`true`) when the node is a notable. */
   isNotable?: true;
+  /** Present (`true`) when the node is a keystone. */
   isKeystone?: true;
+  /** Present (`true`) when the node is a jewel socket. */
   isJewelSocket?: true;
+  /** Present (`true`) when the node is a mastery (its own stats are empty). */
   isMastery?: true;
+  /** Present (`true`) for a generic "+N to any Attribute" node. */
   isGenericAttribute?: true;
+  /** Present (`true`) when the node is an ascendancy's starting node. */
   isAscendancyStart?: true;
+  /** Mastery background pattern image (extensionless), for mastery nodes only. */
   activeEffectImage?: string;
+  /** `Ascendancy.Id` when the node belongs to an ascendancy; absent otherwise. */
   ascendancyId?: string;
+  /** Class indices (into {@link TreeExport.classes}) this node starts, if any. */
   classStartIndex?: number[];
+  /** GGG flavour text, when the node carries any. */
   flavourText?: unknown;
   /**
    * Allocation gate: GGG hides this node on the base tree until an unlocking
@@ -210,55 +236,100 @@ export interface ExportNode {
   unlockConstraint?: { ascendancy?: string; nodes: number[] };
 }
 
-export interface ExportAscendancy { id: string; name: string; offsetX: number; offsetY: number }
-
-export interface ExportClass {
+/** One ascendancy of a class: its id, name and disc offset from the tree centre. */
+export interface ExportAscendancy {
+  /** `Ascendancy.Id`, matching {@link ExportNode.ascendancyId}. */
+  id: string;
+  /** Display name. */
   name: string;
+  /** X offset of the ascendancy disc from the tree hub centre. */
+  offsetX: number;
+  /** Y offset of the ascendancy disc from the tree hub centre. */
+  offsetY: number;
+}
+
+/** A playable class: its base attributes, ascendancies and per-class overrides. */
+export interface ExportClass {
+  /** Class display name (e.g. `Ranger`). */
+  name: string;
+  /** Base strength granted by the class. */
   base_str: number;
+  /** Base dexterity granted by the class. */
   base_dex: number;
+  /** Base intelligence granted by the class. */
   base_int: number;
+  /** The class's ascendancies (released ones only). */
   ascendancies: ExportAscendancy[];
+  /** Base node skill id -> class-specific override node skill id. */
   overridePairs: Record<number, number>;
 }
 
+/** One orbit group: world anchor, the orbit rings it uses and its member nodes. */
 export interface ExportGroup {
+  /** World x of the group anchor. */
   x: number;
+  /** World y of the group anchor. */
   y: number;
+  /** Distinct orbit rings occupied by this group's nodes, ascending. */
   orbits: number[];
+  /** Member node skill ids, in `.psg` file order. */
   nodes: number[];
-  /** Raw `.psg` group words; purpose not yet decoded, kept so nothing is lost. */
+  /** Raw `.psg` group flag word; purpose not yet decoded, kept so nothing is lost. */
   flag: number;
+  /** Second raw `.psg` group word; purpose not yet decoded, kept verbatim. */
   unknown1: number;
 }
 
 /** A directed arc edge: the orbit it follows and that orbit's world centre. */
 export interface ExportEdge {
+  /** Source node skill id. */
   from: number;
+  /** Target node skill id. */
   to: number;
+  /** Orbit ring magnitude (1..9) the arc sweeps along. */
   orbit: number;
+  /** World x of the arc centre (renderer sweeps the short way `from`->`to`). */
   orbitX: number;
+  /** World y of the arc centre. */
   orbitY: number;
 }
 
-/** A graph root with its raw `.psg` curvature word (kept verbatim). */
+/** A graph root (class start / anchor) with its raw `.psg` curvature word. */
 export interface ExportRoot {
+  /** Root node skill id. */
   id: number;
+  /** Raw curvature word; purpose not yet decoded, kept verbatim. */
   curvature: number;
 }
 
 /** The full `data.json` payload. */
 export interface TreeExport {
+  /** Tree variant name (currently always `Default`). */
   tree: string;
+  /** Playable classes; a node's `classStartIndex` indexes into this array. */
   classes: ExportClass[];
+  /** Orbit groups keyed by numeric group id (a node's `group`). */
   groups: Record<number, ExportGroup>;
+  /** All nodes keyed by numeric skill id (a node's `skill`). */
   nodes: Record<number, ExportNode>;
+  /** Directed arc edges with their resolved world centres. */
   edges: ExportEdge[];
+  /** Graph roots (class starts / anchors) with raw curvature words. */
   roots: ExportRoot[];
+  /**
+   * Synthesized +attribute choices keyed by skill id: allocating a generic
+   * attribute node forces Str/Dex/Int, so the three variants live here.
+   */
   skillOverrides: Record<number, Record<string, unknown>>;
+  /** Skill ids of the jewel-socket nodes. */
   jewelSlots: number[];
+  /** Bounding box: minimum node x across the tree. */
   min_x: number;
+  /** Bounding box: minimum node y across the tree. */
   min_y: number;
+  /** Bounding box: maximum node x across the tree. */
   max_x: number;
+  /** Bounding box: maximum node y across the tree. */
   max_y: number;
   /**
    * Points spendable on the main (always-active) tree at the level cap: one per

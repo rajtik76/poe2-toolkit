@@ -31,6 +31,11 @@ contract and never imports anything GGG-specific. Turning a particular export
 into `TreeData` is a separate, swappable adapter; the one for GGG's official
 `data.json` lives in the `@poe2-toolkit/tree-core/ggg` subpath.
 
+Field-level docs live on the exported types themselves (shown on hover, shipped
+in the `.d.ts`), so the sections below document only the high-level contract -
+the main input, the main output, and the key concepts - not every field of the
+~40 exported types.
+
 ## Contents
 
 - [Why](#why)
@@ -270,7 +275,9 @@ interface BuildAllocation {
 `attributeChoices` lets a generic `+attribute` node render its chosen Str/Dex/Int
 icon and stat instead of the generic "any". `jewels` is display-only metadata
 keyed by socket node id; the engine never applies a jewel's radius to nearby
-nodes (PoE2 jewels grant global stats).
+nodes (PoE2 jewels grant global stats). Each entry is a `JewelInfo` - `name`,
+`rarity`, `baseType`, `mods` and an optional `icon` - enough to render a socket
+tooltip; see the type for field detail.
 
 `weaponSets` carries PoE2's two weapon sets: a node tagged `1` or `2` is active
 only when that set is equipped, while an untagged (basic) node is active in both.

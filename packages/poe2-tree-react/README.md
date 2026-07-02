@@ -89,7 +89,8 @@ interface RenderResources {
 
 To draw a node, the renderer turns it into a sprite key with the helpers in
 [`spriteKeys`](src/spriteKeys.ts) (`iconKeyFor`, `frameKeyFor`, `effectKeyFor`,
-and friends), looks that key up in your `manifest`, and blits the rect from the
+`arcConnectorKeyFor`, `lineConnectorKeyFor`), looks that key up in your
+`manifest`, and blits the rect from the
 matching atlas. The keys follow GGG's atlas naming, so pointing the renderer at a
 different atlas set comes down to swapping that one file. Leave `resources` out
 and you get a plain vector render of discs and rails, which is handy for
@@ -106,7 +107,10 @@ its active rail. A rail bridging the two sets is drawn inactive, since it belong
 to neither set's view.
 
 The hub artwork (class portrait and ornate ring) comes in through the optional
-`centreSprites` prop. Skip it and the hub falls back to a vector placeholder.
+`centreSprites` prop, holding up to three `CentreSprite`s (`portrait`,
+`ringStatic`, `ringActive`). Each is a source image `url` plus the sub-rect to
+crop (`sx`, `sy`, `sw`, `sh`). Skip the prop and the hub falls back to a vector
+placeholder.
 
 ## Component props
 
@@ -137,6 +141,14 @@ The hub artwork (class portrait and ornate ring) comes in through the optional
 
 Exported types: `TreeViewProps`, `TreeViewControls`, `AllocationPreview`,
 `EdgeOverlay`, `CentreSprite`, `ZoomLimits`, `HighlightStyle`, `RenderResources`.
+Every prop and every field on these types carries its own doc-comment, shown on
+hover in your editor and shipped in the package's `.d.ts` — so the per-field
+detail lives there, not duplicated here.
+
+`preview` is an `AllocationPreview`: `kind` (`add` or `remove`), the `nodes`
+(skill ids) and `edges` (edge keys, `min-max` of the two node ids) it would
+touch, and an optional `weaponSet` (1 or 2) that tints an `add` into that set's
+colour. Pass `null` to clear it.
 
 `edgeOverlays` paints arbitrary groups of edges over the base render, each in its
 own colour. It is a multi-colour generalisation of `preview`'s edge highlight,

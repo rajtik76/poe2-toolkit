@@ -30,10 +30,15 @@ import type { GgpkSource, TableRow } from './source.js';
 
 /** A UIImages sprite: its backing DDS path and sub-rect within that image. */
 export interface SpriteRef {
+  /** GGPK path of the backing DDS sprite sheet. */
   path: string;
+  /** Top edge of the sub-rect within the sprite sheet, in pixels. */
   top: number;
+  /** Left edge of the sub-rect within the sprite sheet, in pixels. */
   left: number;
+  /** Width of the sub-rect, in pixels. */
   width: number;
+  /** Height of the sub-rect, in pixels. */
   height: number;
 }
 
@@ -47,9 +52,13 @@ export interface GgpkImageSource {
   uiSprite(name: string): Promise<RgbaImage | null>;
 }
 
-/** A CDN-backed source with both table/file access and image fetching. */
+/**
+ * A CDN-backed source with both table/file access and image fetching: the
+ * return type of {@link createCdnSource}.
+ */
 export type CdnSource = GgpkSource & GgpkImageSource;
 
+/** Configuration for {@link createCdnSource}. */
 export interface CdnSourceOptions {
   /** GGPK patch version, e.g. `4.5.3.1.7`. */
   patch: string;
@@ -110,6 +119,9 @@ export class CdnCachingLoader implements BundleLoader {
  * Create a patch-CDN-backed {@link GgpkSource}. Connecting to the network is
  * deferred to the first file/sprite request; table reads only touch the local
  * `tablesDir`.
+ *
+ * @param options - Patch version, cache/tables directories and optional CDN host.
+ * @returns A {@link CdnSource} exposing table/file access plus image fetching.
  */
 export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSource> {
   const { patch, cacheDir, tablesDir, cdnHost = DEFAULT_CDN_HOST } = options;

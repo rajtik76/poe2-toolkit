@@ -83,7 +83,12 @@ export interface TreeViewProps {
   debugIds?: boolean;
   /** Zoom and pan extents. Omit any field to keep its default. */
   zoom?: ZoomLimits;
+  /** Forwarded to the canvas wrapper `<div>` (the React-owned host element). */
   className?: string;
+  /**
+   * Inline styles merged onto the canvas wrapper `<div>`. Merged after the
+   * component's own layout styles, so it can override them (e.g. `background`).
+   */
   style?: CSSProperties;
 }
 
@@ -148,13 +153,23 @@ interface ResolvedHighlightStyle {
 
 /** Imperative handle exposed via `controls` for external zoom buttons. */
 export interface TreeViewControls {
+  /** Zoom in one step about the canvas centre, clamped to the zoom-in cap. */
   zoomIn: () => void;
+  /** Zoom out one step about the canvas centre, clamped to the zoom-out floor. */
   zoomOut: () => void;
 }
 
 /** Hover preview of a pending allocate/remove: node ids + edge keys to glow. */
 export interface AllocationPreview {
+  /**
+   * Whether the pending click would allocate (`add`) or deallocate (`remove`).
+   * Drives the colour: `add` uses gold (or the weapon set's tint), `remove` red.
+   */
   kind: 'add' | 'remove';
+  /**
+   * Skill ids the click would touch. For a `remove`, each is also ringed so a
+   * lone tip with no edge between two removed nodes still shows in the preview.
+   */
   nodes: Set<number>;
   /** Edge keys as `min-max` of the two node ids. */
   edges: Set<string>;
@@ -184,10 +199,15 @@ export interface EdgeOverlay {
 
 /** A sprite to draw at the hub: source image URL + the sub-rect to crop. */
 export interface CentreSprite {
+  /** Source image URL to load and crop from (e.g. a spritesheet). */
   url: string;
+  /** Sub-rect left edge in the source image, px. */
   sx: number;
+  /** Sub-rect top edge in the source image, px. */
   sy: number;
+  /** Sub-rect width in the source image, px. */
   sw: number;
+  /** Sub-rect height in the source image, px. */
   sh: number;
 }
 

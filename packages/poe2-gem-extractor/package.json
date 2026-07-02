@@ -1,6 +1,6 @@
 {
   "name": "@poe2-toolkit/gem-extractor",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Builds Path of Exile 2 gem data and icons straight from the official GGPK / patch server. Code only - ships no game data or art.",
   "keywords": [
     "path-of-exile",

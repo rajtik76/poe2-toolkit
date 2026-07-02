@@ -24,21 +24,39 @@ export type GemColor = 'r' | 'g' | 'b' | 'w';
 const GEM_KIND: Record<number, GemKind> = { 0: 'active', 1: 'support', 2: 'spirit' };
 const GEM_COLOR: Record<number, GemColor> = { 1: 'r', 2: 'g', 3: 'b', 4: 'w' };
 
-/** The percent-of-attribute requirements plus the gem's minimum character level. */
+/**
+ * A gem's headline requirement: the percent-of-attribute weights plus its
+ * minimum character level. This is the flat summary on {@link Gem}; the full
+ * per-level curve lives in {@link GemRequirement}.
+ */
 export interface GemReq {
+  /** Strength requirement as a percent-of-attribute weight (0 for none, e.g. all support gems). */
   str: number;
+  /** Dexterity requirement as a percent-of-attribute weight (0 for none, e.g. all support gems). */
   dex: number;
+  /** Intelligence requirement as a percent-of-attribute weight (0 for none, e.g. all support gems). */
   int: number;
+  /** Minimum character level to use the gem at all (its floor, not the per-level curve). */
   level: number;
 }
 
 /** One gem as serialized for the build front-end. */
 export interface Gem {
+  /** Display name from the gem's base item (e.g. `Ice Nova`, `Fire Attunement`). */
   name: string;
+  /** Whether it is an `active` skill, a `support`, or a `spirit` (persistent buff) gem. */
   kind: GemKind;
+  /** Socket colour: `r` (str), `g` (dex), `b` (int) or `w` (any). */
   color: GemColor;
+  /** Gem tags with bbcode stripped (e.g. `Spell`, `AoE`, `Cold`); `[]` when none. */
   tags: string[];
+  /**
+   * Skill / support description with bbcode stripped - from `ActiveSkills` for
+   * active and spirit gems, from `GemEffects.SupportText` for supports. `null`
+   * when the source text is empty.
+   */
   description: string | null;
+  /** Headline attribute-percent weights plus minimum character level. */
   req: GemReq;
   /** Raw GGPK DDS path of the gem's icon, or `null` when none is referenced. */
   icon: string | null;
@@ -46,24 +64,36 @@ export interface Gem {
 
 /** A gem's resolved requirement at one gem level. */
 export interface GemLevel {
+  /** Minimum character level for this gem level (`floor(ActorLevel)`, at least 1). */
   requiredLevel: number;
+  /** Strength required at this level, via PoB's formula (0 for supports / zero-weight attributes). */
   str: number;
+  /** Dexterity required at this level, via PoB's formula (0 for supports / zero-weight attributes). */
   dex: number;
+  /** Intelligence required at this level, via PoB's formula (0 for supports / zero-weight attributes). */
   int: number;
 }
 
 /** The full per-level requirement curve for one gem. */
 export interface GemRequirement {
+  /** Display name of the gem (same as the matching {@link Gem.name}). */
   name: string;
-  /** Keyed by gem level. */
+  /** The requirement at each gem level, keyed by gem level (`1`, `2`, ...). */
   levels: Record<number, GemLevel>;
 }
 
 /** Everything the gem extractor produces. */
 export interface GemData {
-  /** Gems keyed by the last path segment of their base item id. */
+  /**
+   * Gems keyed by the last path segment of their base item id (PoB's
+   * `normalizeGemId`, e.g. `SkillGemIceNova`). Last segment wins on collision,
+   * matching the consumer's lookup.
+   */
   gems: Record<string, Gem>;
-  /** Per-level requirement curves, keyed the same way; gems without a curve are omitted. */
+  /**
+   * Per-level requirement curves, keyed the same way as {@link GemData.gems}.
+   * A gem with no per-level curve (e.g. many supports) is omitted here.
+   */
   requirements: Record<string, GemRequirement>;
 }
 

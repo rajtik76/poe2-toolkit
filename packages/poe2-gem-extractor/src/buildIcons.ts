@@ -19,7 +19,13 @@ type DdsSource = Pick<GgpkImageSource, 'dds'>;
 export interface GemIconsResult {
   /** PNG bytes keyed by output path (`<dds path without extension>.png`). */
   icons: Record<string, Buffer>;
-  report: { packed: number; missing: number };
+  /** How the decode went. */
+  report: {
+    /** Distinct icons decoded to PNG successfully. */
+    packed: number;
+    /** Distinct icons the source could not serve or decode (skipped, never substituted). */
+    missing: number;
+  };
 }
 
 /** Replace a trailing `.dds` (any case) with `.png`. */

@@ -86,6 +86,11 @@ interface GgpkImageSource {
 }
 ```
 
+`createCdnSource` takes `CdnSourceOptions` and returns a `CdnSource`
+(`GgpkSource & GgpkImageSource`); `resolveSprite` yields a `SpriteRef` (a backing
+DDS path plus a sub-rect). These, along with `TableRow`, are exported — see the
+exported types for full field docs.
+
 ## Shared decoders
 
 The package also exports the format decoders every domain reuses, so they live in
@@ -97,13 +102,14 @@ one place rather than being reimplemented per extractor:
 | `encodePng(width, height, rgba)` | Encode RGBA8 to a PNG buffer (Node zlib, no native deps). |
 | `decodePng(bytes)` | Decode an 8-bit RGBA/RGB PNG to RGBA8. |
 | `buildStatIndex(csd)` | Parse a `stat_descriptions.csd` (UTF-16 text) into a per-stat index. |
-| `renderBlock(index, statIds, values)` | Render numeric `(stat, value)` pairs into human-readable lines. |
+| `renderBlock(index, statIds, vals)` | Render numeric `(stat, value)` pairs into human-readable lines. |
 
 `buildStatIndex` returns a `StatIndex`; pass it to `renderBlock` along with
-parallel `statIds`/`values` arrays. `renderBlock` returns a `RenderedBlock` with
+parallel `statIds`/`vals` arrays. `renderBlock` returns a `RenderedBlock` with
 `lines` (the rendered text) and `unresolved` (any stat ids with no matching
 block). `RgbaImage` (`{ width, height, rgba }`) is the shape returned by every
-image decoder. All of these types are exported.
+image decoder. All of these types are exported; see the exported types for full
+field docs.
 
 All of it is pure TypeScript with no native dependencies, which keeps extraction
 portable across machines and CI.

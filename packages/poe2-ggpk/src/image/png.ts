@@ -34,7 +34,14 @@ function crc32(buf: Uint8Array): number {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-/** Encode RGBA8 to a PNG buffer (Node zlib, no deps). */
+/**
+ * Encode RGBA8 to a PNG buffer (Node zlib, no deps).
+ *
+ * @param width - Image width in pixels.
+ * @param height - Image height in pixels.
+ * @param rgba - Row-major RGBA8 pixels, length `width * height * 4`.
+ * @returns The encoded PNG bytes.
+ */
 export function encodePng(width: number, height: number, rgba: Uint8Array): Buffer {
   const stride = width * 4;
   const raw = Buffer.alloc((stride + 1) * height);
@@ -69,7 +76,12 @@ export function encodePng(width: number, height: number, rgba: Uint8Array): Buff
   ]);
 }
 
-/** Decode a PNG buffer (8-bit RGBA or RGB, no interlace) to RGBA8. */
+/**
+ * Decode a PNG buffer (8-bit RGBA or RGB, no interlace) to RGBA8.
+ *
+ * @param buf - Raw PNG file bytes.
+ * @returns The decoded {@link RgbaImage}.
+ */
 export function decodePng(buf: Uint8Array): RgbaImage {
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   let o = 8; // skip signature

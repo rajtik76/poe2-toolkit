@@ -16,7 +16,9 @@
  * mean a straight line. Captured verbatim — interpretation lives downstream.
  */
 export interface PsgConnection {
+  /** Target node's skillId. */
   id: number;
+  /** Raw per-edge orbit word: magnitude = ring, sign = sweep; 0/sentinel = line. */
   orbit: number;
 }
 
@@ -36,7 +38,9 @@ export interface PsgNode {
 
 /** One orbit cluster: a world anchor plus its member nodes. */
 export interface PsgGroup {
+  /** World x of the group anchor. */
   x: number;
+  /** World y of the group anchor. */
   y: number;
   /** Proxy groups exist only to anchor geometry and hold no real passives. */
   isProxy: boolean;
@@ -50,6 +54,7 @@ export interface PsgGroup {
 
 /** One graph root (class start / anchor) with its raw curvature word. */
 export interface PsgRoot {
+  /** Root node's skillId. */
   id: number;
   /** Raw curvature word (purpose not yet decoded; captured, not discarded). */
   curvature: number;

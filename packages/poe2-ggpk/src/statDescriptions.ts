@@ -40,14 +40,21 @@ interface StatRecord {
   variants: Variant[];
 }
 
-/** Per-stat lookup from a parsed `.csd` file. */
+/**
+ * A parsed `stat_descriptions.csd`: an opaque handle produced by
+ * {@link buildStatIndex} and consumed by {@link renderBlock}. Treat it as
+ * read-only; its internals are an implementation detail.
+ */
 export interface StatIndex {
+  /** Each stat id mapped to the description block that renders it. */
   byStat: Map<string, StatRecord>;
 }
 
 /** The rendered lines of a stat block, plus any stat ids that had no block. */
 export interface RenderedBlock {
+  /** Rendered, human-readable text lines for the resolved stats. */
   lines: string[];
+  /** Stat ids that matched no description block, in input order. */
   unresolved: string[];
 }
 
@@ -89,6 +96,9 @@ function parseDescriptionLine(line: string): Variant {
  * file (decoded from UTF-16). The first language block (English) is kept; later
  * `lang "..."` blocks are skipped by the outer loop, which only resumes on the
  * next `description` marker.
+ *
+ * @param csd - The decoded UTF-16 text of a `stat_descriptions.csd` file.
+ * @returns A {@link StatIndex} to pass to {@link renderBlock}.
  */
 export function buildStatIndex(csd: string): StatIndex {
   // Drop a leading UTF-16 byte-order mark if the decoder left one in.
@@ -217,6 +227,11 @@ function stripBbcode(text: string): string {
  * several stats together (e.g. min/max added damage), so its placeholders are
  * filled from whichever of those stats it provides (others default to 0) and all
  * are marked consumed so the line is not repeated.
+ *
+ * @param index - The {@link StatIndex} from {@link buildStatIndex}.
+ * @param statIds - Stat ids to render.
+ * @param vals - Raw stat values, parallel to `statIds`.
+ * @returns A {@link RenderedBlock} of rendered lines and any unresolved stat ids.
  */
 export function renderBlock(index: StatIndex, statIds: string[], vals: number[]): RenderedBlock {
   const valueByStat = new Map(statIds.map((id, i) => [id, vals[i]!]));

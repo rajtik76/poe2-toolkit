@@ -7,6 +7,10 @@ import type { SpriteManifest } from '@poe2-toolkit/tree-core';
  * core already computed — it never decides a size or a position.
  */
 export interface RenderResources {
+  /**
+   * Core-produced sprite key -> native atlas rect (which atlas, and the x/y/w/h
+   * to blit). Keys follow GGG's atlas naming; see the `spriteKeys` helpers.
+   */
   manifest: SpriteManifest;
   /** Atlas id -> drawable bitmap (e.g. `HTMLImageElement` or `ImageBitmap`). */
   atlases: Record<string, CanvasImageSource>;

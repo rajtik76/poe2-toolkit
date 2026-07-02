@@ -7,20 +7,30 @@ import { encodePng } from '@poe2-toolkit/ggpk';
 
 /** A decoded sprite to place in an atlas, keyed by its renderer atlas key. */
 export interface AtlasSprite {
+  /** Renderer atlas key this sprite is looked up by. */
   key: string;
+  /** Sprite width in pixels. */
   width: number;
+  /** Sprite height in pixels. */
   height: number;
+  /** Raw RGBA pixels, row-major, `width * height * 4` bytes. */
   rgba: Uint8Array;
 }
 
 /** One placed sprite's pixel rect inside the packed sheet. */
 export interface AtlasFrame {
+  /**
+   * The sprite's sub-rectangle within the sheet: `x`/`y` its top-left pixel
+   * offset, `w`/`h` its width/height. The renderer blits from this rect.
+   */
   frame: { x: number; y: number; w: number; h: number };
 }
 
 /** A packed atlas: its PNG bytes and the frame-map keyed by sprite key. */
 export interface PackedAtlas {
+  /** The composited sheet as encoded PNG bytes. */
   png: Buffer;
+  /** Each sprite's placement rect, keyed by its {@link AtlasSprite.key}. */
   frames: Record<string, AtlasFrame>;
 }
 

@@ -43,8 +43,9 @@ export interface TreeConstants {
 }
 
 export interface Group {
-  /** World centre of the orbit cluster. */
+  /** World x of the orbit cluster's centre. */
   x: number;
+  /** World y of the orbit cluster's centre. */
   y: number;
   /** Which orbits are populated in this group. */
   orbits: number[];
@@ -68,14 +69,19 @@ export interface TreeNode {
   y: number;
   /** Edges to neighbouring nodes (GGG `in` + `out`, merged). */
   connections: NodeConnection[];
+  /** Display name (e.g. "Spell Damage"). */
   name: string;
   /** Atlas key into the {@link SpriteManifest}. */
   icon: string;
+  /** Granted modifier lines, ready to show in a tooltip. */
   stats: string[];
 
   // --- kind flags (optional; absence = plain small node) ---
+  /** Larger named passive (drawn with a notable frame + effect pattern). */
   isNotable?: boolean;
+  /** Build-defining keystone (largest frame; carries {@link TreeNode.flavourText}). */
   isKeystone?: boolean;
+  /** A jewel socket. */
   isJewelSocket?: boolean;
   /**
    * Special sockets (e.g. "Sinister Jewel Socket") that are not part of the base
@@ -83,8 +89,9 @@ export interface TreeNode {
    * GGG carries no dedicated flag (PoB shipped this as `noRadius`).
    */
   noRadius?: boolean;
-  /** GGG: `isMastery` (PoB: `isOnlyImage`). */
+  /** Mastery hub: renders as a background pattern, not a connectable node. GGG: `isMastery` (PoB: `isOnlyImage`). */
   isMastery?: boolean;
+  /** The root node of an ascendancy panel (its pathing root). */
   isAscendancyStart?: boolean;
   /** GGG: `isGenericAttribute`. */
   isAttribute?: boolean;
@@ -99,6 +106,7 @@ export interface TreeNode {
   ascendancyName?: string;
   /** Keystone lore. */
   flavourText?: string;
+  /** Crafting/recipe hint lines carried through from the export, when present. */
   recipe?: string[];
   /** Attribute nodes: the interchangeable choices (e.g. Str / Dex / Int). */
   options?: NodeOption[];
@@ -121,8 +129,11 @@ export interface TreeNode {
 
 /** One selectable variant of an attribute node. */
 export interface NodeOption {
+  /** Skill id of this choice's underlying node. */
   id: number;
+  /** Display name of this choice (e.g. "Intelligence"). */
   name: string;
+  /** Modifier lines granted by this choice. */
   stats: string[];
   /** Skill-icon path for this specific choice (e.g. plusintelligence.png). */
   icon: string;
@@ -142,22 +153,29 @@ export interface NodeConnection {
   arcCentre?: Point;
 }
 
+/** Native pixel/world dimensions of a sprite or hub layer. */
 export interface Size {
   width: number;
   height: number;
 }
 
+/** A character class: its start node, base attributes, hub art and ascendancies. */
 export interface ClassDef {
+  /** Display name (e.g. "Ranger"). */
   name: string;
   /** Integer class id = index in GGG's `classes` array (Witch = 1). */
   id: number;
+  /** Starting strength granted by the class. */
   baseStr: number;
+  /** Starting dexterity granted by the class. */
   baseDex: number;
+  /** Starting intelligence granted by the class. */
   baseInt: number;
   /** Skill id of this class's start node (derived from `classStartIndex`). */
   startNode: number;
   /** Central art + ring geometry for this class. */
   centre: CentreArt;
+  /** The class's ascendancy subclasses. */
   ascendancies: AscendancyDef[];
   /**
    * Per-class node display overrides: base node skill id -> the skill id whose
@@ -199,6 +217,7 @@ export interface CentreArt {
 export interface AscendancyDef {
   /** Display name, also the build's ascendancy key (e.g. "Deadeye"). */
   id: string;
+  /** Display name (usually equal to {@link AscendancyDef.id}). */
   name: string;
   /** GGG internal id, e.g. `Ranger1`. */
   internalId: string;
@@ -218,6 +237,7 @@ export interface AscendancyDef {
 // Input: graphics manifest (supplied separately, never loaded by core)
 // ---------------------------------------------------------------------------
 
+/** One sprite's location: which atlas, and its native pixel sub-rect within it. */
 export interface SpriteFrame {
   /** Atlas id the render package resolves to a bitmap. */
   atlas: string;
@@ -228,6 +248,11 @@ export interface SpriteFrame {
   h: number;
 }
 
+/**
+ * The graphics contract: maps every atlas key core emits (node icons, centre
+ * art, effect patterns) to a frame. Supplied by the renderer; core never loads
+ * it or resolves atlas ids to images.
+ */
 export interface SpriteManifest {
   /** Atlas key -> native pixel rect. */
   frames: Record<string, SpriteFrame>;
@@ -237,11 +262,13 @@ export interface SpriteManifest {
 // Geometry primitives
 // ---------------------------------------------------------------------------
 
+/** A world-space point. */
 export interface Point {
   x: number;
   y: number;
 }
 
+/** An axis-aligned world-space rectangle (bounds), min/max on each axis. */
 export interface WorldRect {
   minX: number;
   minY: number;
@@ -253,10 +280,19 @@ export interface WorldRect {
 // Output: computed scene (render-ready)
 // ---------------------------------------------------------------------------
 
+/**
+ * The engine's world-space output: every node positioned and sized, every edge
+ * resolved, the hub laid out — everything a renderer needs, with no geometry
+ * left to compute. Feed it to {@link project} to get pixels.
+ */
 export interface Scene {
+  /** Every drawn node, positioned + sized + marked allocated. */
   nodes: PlacedNode[];
+  /** Every drawn edge, each resolved to a line or an arc. */
   connections: PlacedConnection[];
+  /** Background effect patterns behind notables/keystones/masteries. */
   masteryEffects: PlacedEffect[];
+  /** Hub geometry + per-class ring rotation. */
   centre: CentreLayout;
   /** Extent of the whole tree, including the far-flung ascendancy discs. */
   bounds: WorldRect;
@@ -268,11 +304,14 @@ export interface Scene {
   mainBounds: WorldRect;
 }
 
+/** A node placed in world space: centre, sizes, hit radius and allocation state. */
 export interface PlacedNode {
+  /** Skill id (matches {@link TreeNode.skill}). */
   skill: number;
   /** Absolute world centre. */
   x: number;
   y: number;
+  /** Render kind (drives colour/frame). */
   kind: NodeKind;
   /** Skill-icon atlas key (carried through from {@link TreeNode.icon}). */
   icon: string;
@@ -301,9 +340,11 @@ export interface PlacedNode {
  * applies a jewel's radius effect to nearby nodes (PoE2 jewels are global stats).
  */
 export interface JewelInfo {
+  /** Item name (the unique's name, or the rare's rolled name). */
   name: string;
   /** Item rarity, upper-case PoB form: NORMAL / MAGIC / RARE / UNIQUE. */
   rarity: string;
+  /** Base type of the jewel (e.g. "Time-Lost Diamond"). */
   baseType: string;
   /** Granted modifier lines. */
   mods: string[];
@@ -311,24 +352,40 @@ export interface JewelInfo {
   icon?: string;
 }
 
+/** Render kind of a placed node — picks its colour, frame and size. */
 export type NodeKind =
+  /** Plain small passive. */
   | 'normal'
+  /** Larger named passive. */
   | 'notable'
+  /** Build-defining keystone. */
   | 'keystone'
+  /** Mastery hub (drawn as a background pattern). */
   | 'mastery'
+  /** Jewel socket. */
   | 'jewel'
+  /** Generic +attribute node (Str/Dex/Int choice). */
   | 'attribute'
+  /** A class's start node. */
   | 'classStart'
+  /** Root node of an ascendancy panel. */
   | 'ascendancyStart'
+  /** Plain node inside an ascendancy. */
   | 'ascendancyNormal'
+  /** Notable inside an ascendancy. */
   | 'ascendancyNotable';
 
+/** An edge placed in world space: its two endpoints, resolved to a line or arc. */
 export interface PlacedConnection {
+  /** Skill id of the edge's first endpoint. */
   from: number;
+  /** Skill id of the edge's second endpoint. */
   to: number;
   /** Straight line, or an arc following an orbit. */
   kind: 'line' | 'arc';
+  /** World position of the `from` endpoint. */
   a: Point;
+  /** World position of the `to` endpoint. */
   b: Point;
   /** Both endpoints allocated — the edge is part of the build. */
   active: boolean;
@@ -340,13 +397,16 @@ export interface PlacedConnection {
   arc?: { cx: number; cy: number; radius: number; startAngle: number; endAngle: number; clockwise: boolean; orbit: number };
 }
 
+/** A background effect pattern placed behind a notable/keystone/mastery. */
 export interface PlacedEffect {
   /** Node the effect pattern belongs to. */
   skill: number;
+  /** World centre of the pattern (the node's centre). */
   x: number;
   y: number;
   /** World diameter of the pattern. */
   size: number;
+  /** Atlas key of the pattern sprite. */
   patternKey: string;
   /** The mastery's cluster (group) has an allocated node — the pattern is lit. */
   active: boolean;
@@ -368,13 +428,17 @@ export interface CentreLayout {
    * native `width` — already folded in here so the renderer just scales these.
    */
   ring: { artRadius: number; activeRadius: number; frameRadius: number };
+  /** One anchor per class: where it sits on the rim and how its ring rotates. */
   classes: ClassAnchor[];
   /** Every ascendancy disc (relocatable block: world anchor + size). */
   ascendancies: AscendancyDef[];
 }
 
+/** Where a class sits on the hub rim and how its gold ring rotates onto it. */
 export interface ClassAnchor {
+  /** Integer class id (matches {@link ClassDef.id}). */
   classId: number;
+  /** Class display name. */
   name: string;
   /** Class-start skill id. */
   startNode: number;
@@ -449,8 +513,11 @@ export interface SceneOptions {
 
 /** View transform: `screen = world * scale + (tx, ty)`. */
 export interface Viewport {
+  /** Screen-pixel x translation (pan). */
   tx: number;
+  /** Screen-pixel y translation (pan). */
   ty: number;
+  /** World-to-screen scale factor (zoom). */
   scale: number;
 }
 
@@ -461,22 +528,31 @@ export interface Viewport {
 export interface ScreenScene {
   /** The viewport scale, for line widths / LOD decisions in the renderer. */
   scale: number;
+  /** Visible nodes in pixel space. */
   nodes: ScreenNode[];
+  /** Visible edges in pixel space. */
   connections: ScreenConnection[];
+  /** Visible effect patterns in pixel space. */
   masteryEffects: ScreenEffect[];
 }
 
+/** A {@link PlacedNode} projected to screen pixels. */
 export interface ScreenNode {
+  /** Skill id (matches {@link PlacedNode.skill}). */
   skill: number;
   /** Screen-pixel centre. */
   x: number;
   y: number;
+  /** Render kind (drives colour/frame). */
   kind: NodeKind;
+  /** Skill-icon atlas key. */
   icon: string;
   /** Screen-pixel diameters. */
   iconSize: number;
   frameSize: number;
+  /** Hit-test radius in screen pixels. */
   radius: number;
+  /** Allocated in the current build. */
   allocated: boolean;
   /** Weapon set this allocated node is assigned to (1 or 2); absent = basic. */
   weaponSet?: WeaponSet;
@@ -484,12 +560,19 @@ export interface ScreenNode {
   jewel?: JewelInfo;
 }
 
+/** A {@link PlacedConnection} projected to screen pixels. */
 export interface ScreenConnection {
+  /** Skill id of the edge's first endpoint. */
   from: number;
+  /** Skill id of the edge's second endpoint. */
   to: number;
+  /** Straight line, or an arc following an orbit. */
   kind: 'line' | 'arc';
+  /** Screen position of the `from` endpoint. */
   a: Point;
+  /** Screen position of the `to` endpoint. */
   b: Point;
+  /** Both endpoints allocated — the edge is part of the build. */
   active: boolean;
   /** Weapon set this active edge belongs to (1 or 2); absent = basic/shared. */
   weaponSet?: WeaponSet;
@@ -497,11 +580,16 @@ export interface ScreenConnection {
   arc?: { cx: number; cy: number; radius: number; startAngle: number; endAngle: number; clockwise: boolean; orbit: number };
 }
 
+/** A {@link PlacedEffect} projected to screen pixels. */
 export interface ScreenEffect {
+  /** Node the effect pattern belongs to. */
   skill: number;
+  /** Screen-pixel centre. */
   x: number;
   y: number;
+  /** Screen-pixel diameter of the pattern. */
   size: number;
+  /** Atlas key of the pattern sprite. */
   patternKey: string;
   /** The mastery's cluster (group) has an allocated node — the pattern is lit. */
   active: boolean;

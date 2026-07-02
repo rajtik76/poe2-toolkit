@@ -48,18 +48,85 @@ const { data, graphics, centre } = await extractTree(source);
 > is only illustrative and will age. The CDN serves just the current patch, so a
 > stale version 404s; pass the one you actually want to extract.
 
-`extractTree(source)` returns a `TreeBundle`:
+`extractTree(source)` resolves to a `TreeBundle` - the tree `data`, the sprite
+`graphics`, and the decoded `centre` art:
 
-| Field | Type | What it is |
-| --- | --- | --- |
-| `data` | `TreeExport` | The `data.json` payload, `@poe2-toolkit/tree-core`'s normalize input (nodes, groups, classes, arc edges, roots, jewel slots, attribute choices, and the `maxBasicPoints` / `maxWeaponSetPoints` budget). |
-| `graphics` | `GraphicsResult` | The three sprite atlases (`skills`, `frame`, `mastery-effect-active`), each a packed PNG plus its frame-map, with a report of what packed or was skipped. |
-| `centre` | `Record<string, Buffer>` | Centre art keyed by output name (`portrait-ranger`, `ascendancy-deadeye`, `ring-static`, ...), each a PNG buffer. |
+```ts
+interface TreeBundle {
+  data: TreeExport;               // the data.json payload (tree-core's normalize input)
+  graphics: GraphicsResult;       // three packed sprite atlases + a pack/skip report
+  centre: Record<string, Buffer>; // centre art PNGs keyed by output name
+}
+```
 
-The individual steps are exported too, if you only need one:
-`buildTree(source)`, `buildGraphics(source, data)`, `buildCentre(source)`. The
-lower-level pieces are exported as well: `parsePsg` (the `.psg` graph parser) and
-`packAtlas` (the atlas packer), along with their types.
+The three steps are exported separately too, if you only need one:
+`buildTree(source)` for the data, `buildGraphics(source, data)` for the atlases,
+`buildCentre(source)` for the centre art. The lower-level pieces are exported as
+well: `parsePsg` (the `.psg` graph parser) and `packAtlas` (the atlas packer).
+
+Field-level docs live on the exported types themselves - `TreeExport`,
+`ExportNode`, `ExportEdge`, `GraphicsResult`, `PackedAtlas`, the `Psg*` types and
+the rest - so your editor shows each field's meaning on hover and they ship in
+the `.d.ts`. The rest of this section is the shape and the rules the types alone
+don't tell you.
+
+### `data`: the tree (`TreeExport`)
+
+`data` is the `data.json` payload `@poe2-toolkit/tree-core` normalizes: `nodes`
+and `groups` keyed by numeric id, plus `classes`, arc `edges`, `roots`,
+`jewelSlots`, the synthesized attribute `skillOverrides`, the tree bounds
+(`min_x`/`min_y`/`max_x`/`max_y`) and the passive-point budget. The shape a
+consumer touches most is a node in `nodes`. A notable, keyed by its skill id:
+
+```json
+"52847": {
+  "skill": 52847,
+  "name": "Constitution",
+  "icon": "Art/2DArt/SkillIcons/passives/life.dds",
+  "stats": ["20% increased maximum Life"],
+  "group": 42,
+  "orbit": 2,
+  "orbitIndex": 4,
+  "x": 1734.482,
+  "y": -905.117,
+  "out": [48291, 11730],
+  "in": [],
+  "isNotable": true
+}
+```
+
+That is a representative example, shape-accurate to `ExportNode` - the ids,
+coordinates and stat text vary per extract. The rules the types don't spell out:
+
+- **`nodes` and `groups` are keyed by numeric id.** A node's key is its `skill`
+  (the PassiveSkillGraphId); `group`, `out`/`in`, `edges` and `jewelSlots` all
+  reference those same ids. `classStartIndex` instead indexes into `classes`.
+- **Kind flags are present-only `true` literals.** `isNotable`, `isKeystone`,
+  `isJewelSocket`, `isMastery`, `isGenericAttribute` and `isAscendancyStart`
+  appear only when true - a plain node carries none of them, they are never
+  serialized as `false`.
+- **Geometry is optional.** Graph nodes carry `group`/`orbit`/`orbitIndex`/`x`/`y`
+  and `out`; data-only class-override nodes (swapped in per class) carry only
+  `skill`/`name`/`icon`/`stats`, no coordinates or edges.
+- **The passive-point budget is split.** `maxBasicPoints` is what the main tree
+  can spend at the level cap; `maxWeaponSetPoints` is how far a single weapon set
+  may additionally diverge. Both are computed from GGPK, never hardcoded.
+
+### `graphics`: the sprite atlases (`GraphicsResult`)
+
+`graphics.atlases` holds the three packed atlases - `skills`, `frame` and
+`mastery-effect-active` - each a `PackedAtlas` (PNG bytes plus a frame-map keyed
+by the renderer's sprite key). `graphics.report` counts what happened per atlas:
+`packed` decoded successfully, `missing` could not be served (skipped, never
+substituted from a vendored asset). Note the `frames` report has no `missing`
+count - the frame set is a fixed known list, so there is nothing to miss; the
+asymmetry with `skills`/`masteryEffects` is intentional.
+
+### `centre`: the centre art (`Record<string, Buffer>`)
+
+`centre` is PNG bytes keyed by output name (`portrait-ranger`,
+`ascendancy-deadeye`, `ring-static`, ...), which the CLI writes as files under
+`centre/`.
 
 ## CLI: write the bundle to disk
 
@@ -124,5 +191,3 @@ Full attribution is in the repository [NOTICE](../../NOTICE.md).
 ## License
 
 MIT, see [LICENSE](./LICENSE).
-</content>
-</invoke>

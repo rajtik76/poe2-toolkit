@@ -14,7 +14,13 @@ const DXGI_BC2 = new Set([73, 74, 75]);
 const DXGI_BC3 = new Set([76, 77, 78]);
 const DXGI_BC7 = new Set([97, 98, 99]);
 
-/** Decode a DDS buffer to straight RGBA8. */
+/**
+ * Decode a DDS buffer (BC1/BC2/BC3/BC7) to straight RGBA8.
+ *
+ * @param buf - Raw DDS file bytes.
+ * @returns The decoded {@link RgbaImage}.
+ * @throws If the buffer is not a DDS or its format is unsupported.
+ */
 export function decodeDds(buf: Uint8Array): RgbaImage {
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
