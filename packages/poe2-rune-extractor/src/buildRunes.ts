@@ -8,9 +8,10 @@
  * prefixed with the slot it applies to ("All Equipment: +9 to Dexterity",
  * "Martial Weapon: Adds 4 to 6 Fire Damage").
  *
- * Keying is by display name (the base type line a build shows). Runes have no
- * icon of their own - the soul-core base's icon, if any, comes from the item
- * extractor - so this package produces data only.
+ * Keying is by display name (the base type line a build shows). A soul core is a
+ * base item, so its icon is its base's visual identity - kept here as a raw GGPK
+ * DDS path and decoded to PNG by {@link buildRuneIcons}, mirroring the item and
+ * gem extractors.
  */
 
 import { buildStatIndex, renderBlock } from '@poe2-toolkit/ggpk';
@@ -18,13 +19,29 @@ import type { GgpkSource, StatIndex } from '@poe2-toolkit/ggpk';
 
 /** One rune / soul core as serialized for the build front-end. */
 export interface Rune {
-  /** Character level the soul core requires, or `null` when it has none. */
+  /**
+   * Required character level, taken as `core.RequiredLevel || null` - so a
+   * `RequiredLevel` of 0 (no requirement) becomes `null` rather than `0`.
+   */
   levelRequirement: number | null;
-  /** Rendered effect lines, each prefixed with the equipment slot it applies to. */
+  /**
+   * Rendered stat lines, each prefixed with the equipment slot it applies to
+   * (`"<slot>: <rendered stat>"`, e.g. `"Armour: +14% to Fire Resistance"`).
+   * The slot comes from `SoulCoreStatCategories.Display`; one soul core groups
+   * several slot categories.
+   */
   effects: string[];
+  /**
+   * Raw GGPK DDS path of the soul core base's icon, or `null` when none is
+   * referenced. Decoded to PNG by {@link buildRuneIcons}.
+   */
+  icon: string | null;
 }
 
-/** Runes keyed by display name. */
+/**
+ * Runes keyed by display name - the soul core's `BaseItemTypes.Name` (the base
+ * type line a build shows).
+ */
 export type RuneData = Record<string, Rune>;
 
 /** GGPK path of GGG's stat-description file (UTF-16 text despite the extension). */
@@ -35,7 +52,8 @@ const STAT_DESCRIPTIONS_PATH = 'data/statdescriptions/stat_descriptions.csd';
 interface SoulCoreRow { BaseItemType?: number | null; RequiredLevel?: number }
 interface SoulCoreStatRow { SoulCore?: number | null; StatCategory?: number | null; Stats?: number[]; StatsValues?: number[] }
 interface SoulCoreStatCategoryRow { Display?: string }
-interface BaseItemTypeRow { Name?: string }
+interface BaseItemTypeRow { Name?: string; ItemVisualIdentity?: number | null }
+interface ItemVisualIdentityRow { DDSFile?: string }
 interface StatRow { Id?: string }
 
 /** Strip PoE bbcode: `[Cold]` -> `Cold`, `[AoESkill|AoE]` -> `AoE` (display half). */
@@ -68,6 +86,7 @@ export async function buildRunes(source: GgpkSource): Promise<RuneData> {
   const SoulCoreStats = (await source.table('SoulCoreStats')) as SoulCoreStatRow[];
   const SoulCoreStatCategories = (await source.table('SoulCoreStatCategories')) as SoulCoreStatCategoryRow[];
   const BaseItemTypes = (await source.table('BaseItemTypes')) as BaseItemTypeRow[];
+  const ItemVisualIdentity = (await source.table('ItemVisualIdentity')) as ItemVisualIdentityRow[];
   const Stats = (await source.table('Stats')) as StatRow[];
 
   const statIndex: StatIndex = buildStatIndex(await readCsd(source, STAT_DESCRIPTIONS_PATH));
@@ -112,9 +131,12 @@ export async function buildRunes(source: GgpkSource): Promise<RuneData> {
       }
     }
 
+    const ivi = base?.ItemVisualIdentity;
+
     runes[name] = {
       levelRequirement: core.RequiredLevel || null,
       effects,
+      icon: ivi != null ? ItemVisualIdentity[ivi]?.DDSFile ?? null : null,
     };
   });
 

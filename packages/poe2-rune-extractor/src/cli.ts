@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * Command-line entry: extract rune / soul-core data from the patch CDN and write
- * it to an output directory (`runes.json`).
+ * Command-line entry: extract rune / soul-core data + icons from the patch CDN
+ * and write them to an output directory (`runes.json` and the icon PNG tree under
+ * `icons/`).
  *
  *   poe2-rune-extract --patch 4.5.3.1.8 --tables ./tables/English \
  *                     --cache ./.cache --out ./out/runes
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { createCdnSource } from '@poe2-toolkit/ggpk';
 
@@ -56,14 +57,23 @@ async function main(): Promise<void> {
   const { patch, tablesDir, cacheDir, outDir } = parseArgs(process.argv.slice(2));
 
   const source = await createCdnSource({ patch, cacheDir, tablesDir });
-  const { data } = await extractRunes(source);
+  const { data, icons } = await extractRunes(source);
 
+  const iconsDir = join(outDir, 'icons');
   mkdirSync(outDir, { recursive: true });
+
   writeFileSync(join(outDir, 'runes.json'), JSON.stringify(data, null, 2));
+
+  for (const [path, png] of Object.entries(icons.icons)) {
+    const outPath = join(iconsDir, path);
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, png);
+  }
 
   const effectLines = Object.values(data).reduce((sum, rune) => sum + rune.effects.length, 0);
   process.stdout.write(
     `runes: ${Object.keys(data).length} (${effectLines} effect lines)\n` +
+      `icons: ${icons.report.packed} packed (${icons.report.missing} missing)\n` +
       `written to ${outDir}\n`,
   );
 }

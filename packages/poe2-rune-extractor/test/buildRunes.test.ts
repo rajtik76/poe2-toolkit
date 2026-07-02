@@ -4,19 +4,25 @@
  * suite needs no network or local GGPK extract.
  */
 
-import type { GgpkSource, TableRow } from '@poe2-toolkit/ggpk';
+import type { GgpkSource, RgbaImage, TableRow } from '@poe2-toolkit/ggpk';
 import { describe, expect, it } from 'vitest';
 
+import { buildRuneIcons } from '../src/buildIcons';
 import { buildRunes } from '../src/buildRunes';
 import { extractRunes } from '../src/index';
 
-/** Minimal tables: a levelled core, a level-0 core, a [DNT] placeholder. */
+/** Minimal tables: a levelled core, a level-0 core, a [DNT] placeholder, an art-less core. */
 const TABLES: Record<string, TableRow[]> = {
   BaseItemTypes: [
-    { Name: 'Iron Soul Core' },
-    { Name: 'Body Soul Core' },
-    { Name: 'Dev Core [DNT]' },
-    { Name: 'Dual Soul Core' },
+    { Name: 'Iron Soul Core', ItemVisualIdentity: 0 },
+    { Name: 'Body Soul Core', ItemVisualIdentity: 1 },
+    { Name: 'Dev Core [DNT]', ItemVisualIdentity: 2 },
+    { Name: 'Dual Soul Core', ItemVisualIdentity: null },
+  ],
+  ItemVisualIdentity: [
+    { DDSFile: 'Art/2DItems/SoulCores/iron.dds' },
+    { DDSFile: 'Art/2DItems/SoulCores/body.dds' },
+    { DDSFile: 'Art/2DItems/SoulCores/dev.dds' },
   ],
   SoulCores: [
     { BaseItemType: 0, RequiredLevel: 12 },
@@ -40,8 +46,11 @@ const TABLES: Record<string, TableRow[]> = {
 // "+{value} to Dexterity".
 const CSD = ['description', '\t1 additional_dexterity', '\t1', '\t\t# "+{0} to Dexterity"', ''].join('\n');
 
-/** A fake source: tables from the fixture, the `.csd` served as UTF-16 bytes. */
-function fakeSource(csd: string | null = CSD): GgpkSource {
+/** A fake source: tables + the `.csd` served as UTF-16 bytes, and decoded DDS images. */
+function fakeSource(
+  csd: string | null = CSD,
+  images: Record<string, RgbaImage | null> = {},
+): GgpkSource & { dds(path: string): Promise<RgbaImage | null> } {
   return {
     table: (name: string) => Promise.resolve(TABLES[name] ?? []),
     file: (path: string) =>
@@ -50,23 +59,27 @@ function fakeSource(csd: string | null = CSD): GgpkSource {
           ? new Uint8Array(Buffer.from(csd, 'utf16le'))
           : null,
       ),
+    dds: (path: string) => Promise.resolve(images[path] ?? null),
   };
 }
 
+const px = (): RgbaImage => ({ width: 1, height: 1, rgba: new Uint8Array([1, 2, 3, 4]) });
+
 describe('buildRunes', () => {
-  it('renders effect lines prefixed with the equipment slot', async () => {
+  it('renders effect lines prefixed with the equipment slot and maps the base icon', async () => {
     const runes = await buildRunes(fakeSource());
 
     expect(runes['Iron Soul Core']).toEqual({
       levelRequirement: 12,
       effects: ['All Equipment: +9 to Dexterity'],
+      icon: 'Art/2DItems/SoulCores/iron.dds',
     });
   });
 
   it('treats RequiredLevel 0 as null and strips bbcode from the slot', async () => {
     const runes = await buildRunes(fakeSource());
 
-    expect(runes['Body Soul Core']).toEqual({
+    expect(runes['Body Soul Core']).toMatchObject({
       levelRequirement: null,
       effects: ['Martial Weapon: +4 to Dexterity'],
     });
@@ -75,10 +88,16 @@ describe('buildRunes', () => {
   it('groups several stat categories on one core into separate prefixed lines', async () => {
     const runes = await buildRunes(fakeSource());
 
-    expect(runes['Dual Soul Core']).toEqual({
+    expect(runes['Dual Soul Core']).toMatchObject({
       levelRequirement: 20,
       effects: ['All Equipment: +5 to Dexterity', 'Martial Weapon: +2 to Dexterity'],
     });
+  });
+
+  it('leaves the icon null for an art-less core', async () => {
+    const runes = await buildRunes(fakeSource());
+
+    expect(runes['Dual Soul Core']?.icon).toBeNull();
   });
 
   it('skips [DNT] placeholder cores', async () => {
@@ -92,10 +111,28 @@ describe('buildRunes', () => {
   });
 });
 
+describe('buildRuneIcons', () => {
+  it('decodes distinct rune icons to PNG paths and reports misses', async () => {
+    const source = fakeSource(CSD, { 'Art/2DItems/SoulCores/iron.dds': px() });
+    const data = await buildRunes(source);
+    const { icons, report } = await buildRuneIcons(source, data);
+
+    expect(Object.keys(icons)).toContain('Art/2DItems/SoulCores/iron.png');
+    expect(report.packed).toBe(1);
+    expect(report.missing).toBe(1); // body.dds has no decoded image here (Dual core has no icon)
+  });
+});
+
 describe('extractRunes', () => {
-  it('returns the rune data in a bundle', async () => {
-    const bundle = await extractRunes(fakeSource());
+  it('returns data and icons in one pass', async () => {
+    const source = fakeSource(CSD, { 'Art/2DItems/SoulCores/iron.dds': px() });
+    const bundle = await extractRunes({
+      ...source,
+      resolveSprite: () => Promise.resolve(null),
+      uiSprite: () => Promise.resolve(null),
+    });
 
     expect(Object.keys(bundle.data)).toContain('Iron Soul Core');
+    expect(bundle.icons.report.packed).toBe(1);
   });
 });
