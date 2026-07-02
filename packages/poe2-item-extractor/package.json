@@ -1,6 +1,6 @@
 {
   "name": "@poe2-toolkit/item-extractor",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Builds Path of Exile 2 item data and icons straight from the official GGPK / patch server. Code only - ships no game data or art.",
   "keywords": [
     "path-of-exile",
@@ -36,7 +36,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@poe2-toolkit/ggpk": "^0.3.0"
+    "@poe2-toolkit/ggpk": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
