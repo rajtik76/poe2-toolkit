@@ -17,6 +17,7 @@ const ORDER = [
   'poe2-item-extractor', // -> ggpk
   'poe2-gem-extractor', // -> ggpk
   'poe2-rune-extractor', // -> ggpk
+  'poe2-mod-extractor', // -> ggpk
 ];
 
 /** The version of `name` already on npm, or null if that exact version is absent. */
