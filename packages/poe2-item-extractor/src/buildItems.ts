@@ -65,14 +65,25 @@ export interface Item {
    */
   flavourText: string[] | null;
   /**
+   * The base's mod domain in the `ModDomains` vocabulary (`Item` for ordinary
+   * equipment, `Flask` for flasks and charms, ...), from `BaseItemTypes.ModDomain`;
+   * `null` for uniques (no base link) and for bases whose domain has no name. A mod
+   * only rolls on an item of the mod's own domain, so this is the **first** filter
+   * when joining to `@poe2-toolkit/mod-extractor` (`Mod.domain`): match the domain,
+   * then the {@link Item.tags}. Without it the tag filter alone leaks mods from
+   * unrelated domains (Monster, Heist, Atlas, ...) that share a `default` weight.
+   */
+  modDomain: string | null;
+  /**
    * The item's effective item-type tags in the `Tags.Id` vocabulary
    * (e.g. `armour`, `body_armour`, `str_armour`, `weapon`, `default`) - the base's
    * own `BaseItemTypes.Tags` plus the tags its item class contributes plus
-   * `default`. This is the set GGG matches a mod's spawn tags against, so it is
-   * how items join to `@poe2-toolkit/mod-extractor`: a mod can roll on an item when
-   * the first of its `spawnWeights` whose tag is in `tags` has a positive weight.
-   * Empty on uniques: .dat has no unique-to-base-type link, so a unique's base
-   * tags are unknown (like its `req` and `itemClass`).
+   * `default`. This is the set GGG matches a mod's spawn tags against, so together
+   * with {@link Item.modDomain} it is how items join to `@poe2-toolkit/mod-extractor`:
+   * within the item's mod domain, a mod can roll on the item when the first of its
+   * `spawnWeights` whose tag is in `tags` has a positive weight. Empty on uniques:
+   * .dat has no unique-to-base-type link, so a unique's base tags are unknown (like
+   * its `req` and `itemClass`).
    */
   tags: string[];
 }
@@ -149,6 +160,25 @@ const CLASS_TAGS: Record<string, readonly string[]> = {
 };
 
 /**
+ * `ModDomains` enumerators in schema order (1-based; `BaseItemTypes.ModDomain`
+ * indexes this). Kept byte-for-byte in step with `@poe2-toolkit/mod-extractor`'s
+ * own `MOD_DOMAINS`, the shared vocabulary a base's `modDomain` joins to a mod's
+ * `domain`. A value with no name (or an out-of-range index) yields `null`.
+ */
+const MOD_DOMAINS = [
+  'Item', 'Flask', 'Monster', 'Chest', 'Area', null, 'Sanctum Relic', null, 'Crafted', 'Base Jewel',
+  'Atlas', 'Leaguestone', 'Abyss Jewel', 'Map Device', 'Dummy', 'Delve', 'Delve Area', 'Synthesis A',
+  'Synthesis Globals', 'Synthesis Bonus', 'Affliction Jewel', 'Heist Area', 'Heist NPC', 'Heist Trinket',
+  'Watchstone', 'Veiled', 'Expedition Relic', 'Unveiled', 'Eldritch Altar', 'Sentinel', 'Memory Line',
+  'Sanctum Special', 'Crucible Map', 'Tincture', 'Animal Charm', 'Necropolis Monster', 'Idol', 'Graft',
+] as const;
+
+/** Map a 1-based `BaseItemTypes.ModDomain` index to its name, or `null`. */
+function modDomainName(domain: number | null | undefined): string | null {
+  return domain != null ? MOD_DOMAINS[domain - 1] ?? null : null;
+}
+
+/**
  * The base's effective mod-matching tags: its own `BaseItemTypes.Tags`, the tags
  * its item class contributes ({@link CLASS_TAGS}) and the universal `default`,
  * sorted for a stable output. This is the set a mod's spawn tags are matched
@@ -178,6 +208,7 @@ interface BaseItemTypeRow {
   Name?: string;
   ItemClass?: number | null;
   ItemVisualIdentity?: number | null;
+  ModDomain?: number | null;
   Tags?: number[];
 }
 
@@ -270,6 +301,7 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
         int: req?.ReqInt ?? 0,
       },
       flavourText: null,
+      modDomain: modDomainName(base.ModDomain),
       tags: effectiveTags(base.Tags ?? [], classId, Tags),
     };
   });
@@ -337,6 +369,7 @@ async function addUniques(
       twoHanded: category != null && TWO_HANDED_CATEGORIES.has(category),
       req: { str: 0, dex: 0, int: 0 },
       flavourText,
+      modDomain: null,
       tags: [],
     };
   }

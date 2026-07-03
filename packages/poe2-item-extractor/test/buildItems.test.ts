@@ -5,6 +5,7 @@
  */
 
 import type { GgpkSource, RgbaImage, TableRow } from '@poe2-toolkit/ggpk';
+import { decodePng } from '@poe2-toolkit/ggpk';
 import { describe, expect, it } from 'vitest';
 
 import { buildItemIcons } from '../src/buildIcons';
@@ -15,13 +16,16 @@ import { extractItems } from '../src/index';
 const TABLES: Record<string, TableRow[]> = {
   BaseItemTypes: [
     // Base tags [0] union the class tags; the out-of-range index 99 is dropped.
-    { Name: 'Greatsword', ItemClass: 0, ItemVisualIdentity: 0, Tags: [0, 99] },
+    // ModDomain 1 -> the `Item` domain.
+    { Name: 'Greatsword', ItemClass: 0, ItemVisualIdentity: 0, ModDomain: 1, Tags: [0, 99] },
+    // No ModDomain -> modDomain is null.
     { Name: 'Rapier', ItemClass: 1, ItemVisualIdentity: 1 },
     { Name: 'Greatsword', ItemClass: 0, ItemVisualIdentity: 2 },
     { Name: 'No Art', ItemClass: 1, ItemVisualIdentity: null },
     { Name: 'Dev Base [DNT]', ItemClass: 0, ItemVisualIdentity: 0 },
-    // An item class with no entry in CLASS_TAGS contributes only its own base tags.
-    { Name: 'Cobalt Jewel', ItemClass: 2, ItemVisualIdentity: 5, Tags: [1] },
+    // An item class with no entry in CLASS_TAGS contributes only its own base tags;
+    // ModDomain 6 is a nameless enum slot, so modDomain resolves to null.
+    { Name: 'Cobalt Jewel', ItemClass: 2, ItemVisualIdentity: 5, ModDomain: 6, Tags: [1] },
   ],
   ItemClasses: [{ Id: 'Two Hand Sword' }, { Id: 'One Hand Sword' }, { Id: 'Jewel' }],
   Tags: [{ Id: 'ezomyte_basetype' }, { Id: 'abyss_jewel' }],
@@ -72,8 +76,17 @@ describe('buildItems', () => {
       twoHanded: true,
       req: { str: 40, dex: 10, int: 0 },
       flavourText: null,
+      modDomain: 'Item',
       tags: ['default', 'ezomyte_basetype', 'sword', 'two_hand_weapon', 'twohand', 'weapon'],
     });
+  });
+
+  it('maps a base ModDomain to its name and yields null for a missing or nameless one', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items.Greatsword?.modDomain).toBe('Item');
+    expect(items.Rapier?.modDomain).toBeNull(); // no ModDomain on the row
+    expect(items['Cobalt Jewel']?.modDomain).toBeNull(); // nameless enum slot
   });
 
   it('flags one-handers as not two-handed and defaults missing reqs to 0', async () => {
@@ -121,7 +134,8 @@ describe('buildItems - uniques', () => {
       req: { str: 0, dex: 0, int: 0 },
       // Joined via the `_a`-stripped ItemVisualIdentity id, split into lines.
       flavourText: ['A blade of fire.', 'Forged in endless war.'],
-      // Uniques carry no tags: their base type - hence its tags - is not in .dat.
+      // Uniques carry no base link, so neither a mod domain nor tags.
+      modDomain: null,
       tags: [],
     });
   });
@@ -164,6 +178,55 @@ describe('buildItemIcons', () => {
     expect(report.packed).toBe(1);
     // rapier.dds, jewel.dds and the uniques' oro.dds / behemoth.dds have no decoded image here
     expect(report.missing).toBe(4);
+  });
+
+  it('crops a flask fill-state sheet to its rightmost (full) frame', async () => {
+    // A 9x3 "sheet": each column's red channel encodes its x (x * 10) so the crop
+    // is verifiable. The full frame is the last third, columns 6..8.
+    const width = 9;
+    const height = 3;
+    const rgba = new Uint8Array(width * height * 4);
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const i = (y * width + x) * 4;
+        rgba[i] = x * 10;
+        rgba[i + 3] = 255;
+      }
+    }
+
+    const flaskPath = 'Art/2DItems/Flasks/Basetypes/FlaskLife01.dds';
+    const source: GgpkSource & { dds(path: string): Promise<RgbaImage | null> } = {
+      table: () => Promise.resolve([]),
+      file: () => Promise.resolve(null),
+      dds: () => Promise.resolve({ width, height, rgba }),
+    };
+    const data = { 'Lesser Life Flask': { icon: flaskPath } } as unknown as Parameters<typeof buildItemIcons>[1];
+
+    const { icons } = await buildItemIcons(source, data);
+    const png = icons['Art/2DItems/Flasks/Basetypes/FlaskLife01.png']!;
+    const decoded = decodePng(png);
+
+    // Kept only the last third (round(9 / 3) = 3 columns), starting at x = 6.
+    expect(decoded.width).toBe(3);
+    expect(decoded.height).toBe(3);
+    expect([decoded.rgba[0], decoded.rgba[4], decoded.rgba[8]]).toEqual([60, 70, 80]);
+  });
+
+  it('leaves a single-frame charm icon untouched', async () => {
+    const charm = (): RgbaImage => ({ width: 4, height: 4, rgba: new Uint8Array(4 * 4 * 4).fill(200) });
+    const source: GgpkSource & { dds(path: string): Promise<RgbaImage | null> } = {
+      table: () => Promise.resolve([]),
+      file: () => Promise.resolve(null),
+      dds: () => Promise.resolve(charm()),
+    };
+    const data = { 'Ruby Charm': { icon: 'Art/2DItems/Charms/Basetypes/RubyCharm.dds' } } as unknown as Parameters<typeof buildItemIcons>[1];
+
+    const { icons } = await buildItemIcons(source, data);
+    const decoded = decodePng(icons['Art/2DItems/Charms/Basetypes/RubyCharm.png']!);
+
+    expect(decoded.width).toBe(4); // charms are single-frame, no crop
+    expect(decoded.height).toBe(4);
   });
 });
 

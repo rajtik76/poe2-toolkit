@@ -113,21 +113,29 @@ name. Each value is a `Mod`:
 
 ### Joining mods to items
 
-`spawnWeights[].tag` and an item's `tags` (from
-[`@poe2-toolkit/item-extractor`](../poe2-item-extractor)) share one vocabulary, so
-the compatible mods for an item are a pure filter - no lookup tables, no shared
-code:
+A mod and an item from [`@poe2-toolkit/item-extractor`](../poe2-item-extractor) share
+two vocabularies - the domain (`mod.domain` / `item.modDomain`) and the spawn tags
+(`mod.spawnWeights[].tag` / `item.tags`) - so the compatible mods for an item are a
+pure filter: no lookup tables, no shared code. A mod rolls when it is in the item's
+**domain** *and* the **first** of its `spawnWeights` whose `tag` the item carries has
+a positive weight. Filter on the domain first - many mods carry a positive `default`
+weight, so tag-matching alone would let unrelated domains (Monster, Heist, Atlas, ...)
+leak onto every item:
 
 ```ts
-function compatibleMods(item: { tags: string[] }, mods: ModData): string[] {
+function compatibleMods(item: { modDomain: string | null; tags: string[] }, mods: ModData): string[] {
   return Object.entries(mods)
     .filter(([, mod]) => {
+      if (mod.domain !== item.modDomain) return false;
       const gate = mod.spawnWeights.find((sw) => sw.tag === 'default' || item.tags.includes(sw.tag));
       return gate != null && gate.weight > 0;
     })
     .map(([id]) => id);
 }
 ```
+
+Flasks and charms live in `domain: "Flask"`, ordinary equipment in `domain: "Item"`,
+so a flask never draws an equipment affix and vice versa.
 
 ## CLI: write the bundle to disk
 

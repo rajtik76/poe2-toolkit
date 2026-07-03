@@ -1,6 +1,6 @@
 {
   "name": "@poe2-toolkit/mod-extractor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Builds Path of Exile 2 item-mod data - affix ranges, tiers and spawn tags - straight from the official GGPK / patch server. Code only - ships no game data or art.",
   "keywords": [
     "path-of-exile",

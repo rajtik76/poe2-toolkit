@@ -78,6 +78,7 @@ Each value is an `Item`. A normal base and a unique:
   "twoHanded": false,
   "req": { "str": 60, "dex": 0, "int": 0 },
   "flavourText": null,
+  "modDomain": "Item",
   "tags": ["armour", "body_armour", "default", "str_armour", "vaal_basetype"]
 }
 
@@ -89,6 +90,7 @@ Each value is an `Item`. A normal base and a unique:
   "twoHanded": false,
   "req": { "str": 0, "dex": 0, "int": 0 },
   "flavourText": ["The warrior who fears will fall."],
+  "modDomain": null,
   "tags": []
 }
 ```
@@ -110,33 +112,47 @@ Every field is present on every entry, but which ones carry a value follows from
 - **`flavourText` is the unique's lore**, as separate lines (GGG stores explicit
   line breaks). It is `null` on bases and on any unique without one - only uniques
   carry it.
+- **`modDomain` is the base's mod domain** (`ModDomains` vocabulary: `Item` for
+  ordinary equipment, `Flask` for flasks *and* charms, ...). A mod only rolls on an
+  item of the mod's own domain, so this is the **first** filter when joining to
+  [`@poe2-toolkit/mod-extractor`](../poe2-mod-extractor) - match the domain, *then*
+  the `tags`. `null` on uniques and on bases whose domain has no name.
 - **`tags` are the item's effective mod-matching tags** (`Tags.Id` vocabulary:
   `armour`, `body_armour`, `str_armour`, `weapon`, `default`, ...) - the base's own
   tags plus the tags its item class contributes plus `default`. This is the set GGG
-  matches a mod against, so it is how items join to
-  [`@poe2-toolkit/mod-extractor`](../poe2-mod-extractor) (see below). Empty on
-  uniques, whose base type - and thus its tags - is not in .dat.
+  matches a mod against *within a domain*, so together with `modDomain` it is how
+  items join to [`@poe2-toolkit/mod-extractor`](../poe2-mod-extractor) (see below).
+  Empty on uniques, whose base type - and thus its tags - is not in .dat.
 - **Bases win name clashes.** Bases are added first (first displayable base for a
   name wins); uniques fold in after and never overwrite a base of the same name.
 
 ### Joining items to mods
 
-An item's `tags` and a mod's `spawnWeights[].tag` (from
-[`@poe2-toolkit/mod-extractor`](../poe2-mod-extractor)) share one vocabulary, so the
-mods that can roll on an item are a pure filter - no lookup tables, no shared code.
-A mod can roll when the **first** of its `spawnWeights` whose tag the item carries
-has a positive weight:
+An item and a mod from [`@poe2-toolkit/mod-extractor`](../poe2-mod-extractor) share
+two vocabularies - the mod domain (`item.modDomain` / `mod.domain`) and the spawn
+tags (`item.tags` / `mod.spawnWeights[].tag`) - so the mods that can roll on an item
+are a pure filter: no lookup tables, no shared code. A mod can roll when it is in the
+item's **domain** *and* the **first** of its `spawnWeights` whose tag the item carries
+has a positive weight. The domain filter is not optional - many mods carry a positive
+`default` weight, so tag-matching alone leaks mods from unrelated domains (Monster,
+Heist, Atlas, ...):
 
 ```ts
-function compatibleMods(item: { tags: string[] }, mods: ModData): string[] {
+function compatibleMods(item: { modDomain: string | null; tags: string[] }, mods: ModData): string[] {
   return Object.entries(mods)
     .filter(([, mod]) => {
+      if (mod.domain !== item.modDomain) return false;
       const gate = mod.spawnWeights.find((sw) => sw.tag === 'default' || item.tags.includes(sw.tag));
       return gate != null && gate.weight > 0;
     })
     .map(([id]) => id);
 }
 ```
+
+So a **life flask** (`modDomain: "Flask"`, `tags: ["default", "flask", "life_flask"]`)
+draws only `Flask`-domain mods whose spawn tags include `life_flask` (or `default`),
+and a **body armour** (`modDomain: "Item"`) draws only `Item`-domain mods - never the
+flask's pool, and never a Monster affix.
 
 ### `icons`: the decoded PNGs (`ItemIconsResult`)
 
@@ -177,6 +193,10 @@ publish step left to you.
   the same join Path of Building uses.
 - **Two-handedness** is derived from the item class, not from base-level tags
   (bases don't inherit weapon-class tags), which is the reliable signal.
+- **`modDomain`** is `BaseItemTypes.ModDomain` mapped through the `ModDomains` enum -
+  the same enum `@poe2-toolkit/mod-extractor` maps `Mods.Domain` through, so the two
+  strings join directly. Flasks and charms share the `Flask` domain; ordinary gear is
+  `Item`.
 - **`tags`** union the base's own `BaseItemTypes.Tags` with the tags its item class
   contributes and `default`. PoE2 stores only the specific tags on a base and leaves
   the class tags (`armour`, `weapon`, `bow`, ...) to the class, and GGPK has no
@@ -185,6 +205,10 @@ publish step left to you.
 - **Icons** are kept as their raw GGPK DDS paths in the data and decoded to PNG by
   `buildItemIcons`. An icon the source cannot serve is skipped and reported, never
   pulled from a vendored asset.
+- **Flask icons** ship in GGPK as a horizontal 3-frame fill-state sheet (empty,
+  partial, full); `buildItemIcons` crops each to the rightmost (full) frame, the one
+  the game renders, so a flask icon is a single bottle, not three. Charms and all
+  other items are single-frame and copied as-is.
 
 ## Attributions and legal
 
