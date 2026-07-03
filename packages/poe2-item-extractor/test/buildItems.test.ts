@@ -14,13 +14,17 @@ import { extractItems } from '../src/index';
 /** Minimal tables: a two-hander, a one-hander, a name dupe, an art-less base, a [DNT]. */
 const TABLES: Record<string, TableRow[]> = {
   BaseItemTypes: [
-    { Name: 'Greatsword', ItemClass: 0, ItemVisualIdentity: 0 },
+    // Base tags [0] union the class tags; the out-of-range index 99 is dropped.
+    { Name: 'Greatsword', ItemClass: 0, ItemVisualIdentity: 0, Tags: [0, 99] },
     { Name: 'Rapier', ItemClass: 1, ItemVisualIdentity: 1 },
     { Name: 'Greatsword', ItemClass: 0, ItemVisualIdentity: 2 },
     { Name: 'No Art', ItemClass: 1, ItemVisualIdentity: null },
     { Name: 'Dev Base [DNT]', ItemClass: 0, ItemVisualIdentity: 0 },
+    // An item class with no entry in CLASS_TAGS contributes only its own base tags.
+    { Name: 'Cobalt Jewel', ItemClass: 2, ItemVisualIdentity: 5, Tags: [1] },
   ],
-  ItemClasses: [{ Id: 'Two Hand Sword' }, { Id: 'One Hand Sword' }],
+  ItemClasses: [{ Id: 'Two Hand Sword' }, { Id: 'One Hand Sword' }, { Id: 'Jewel' }],
+  Tags: [{ Id: 'ezomyte_basetype' }, { Id: 'abyss_jewel' }],
   ItemVisualIdentity: [
     { Id: 'Greatsword', DDSFile: 'Art/2DItems/Weapons/greatsword.dds' },
     { Id: 'Rapier', DDSFile: 'Art/2DItems/Weapons/rapier.dds' },
@@ -28,6 +32,7 @@ const TABLES: Record<string, TableRow[]> = {
     // `_a` art-variant suffix: flavour text is keyed by the id without it.
     { Id: 'UniqueSwordOro_a', DDSFile: 'Art/2DItems/Weapons/oro.dds' },
     { Id: 'UniqueSwordBehemoth', DDSFile: 'Art/2DItems/Weapons/behemoth.dds' },
+    { Id: 'CobaltJewel', DDSFile: 'Art/2DItems/jewel.dds' },
   ],
   AttributeRequirements: [{ BaseItemType: 0, ReqStr: 40, ReqDex: 10, ReqInt: 0 }],
   FlavourText: [
@@ -67,6 +72,7 @@ describe('buildItems', () => {
       twoHanded: true,
       req: { str: 40, dex: 10, int: 0 },
       flavourText: null,
+      tags: ['default', 'ezomyte_basetype', 'sword', 'two_hand_weapon', 'twohand', 'weapon'],
     });
   });
 
@@ -88,6 +94,18 @@ describe('buildItems', () => {
     expect(items['No Art']).toBeUndefined();
     expect(items['Dev Base [DNT]']).toBeUndefined();
   });
+
+  it('derives a base one-hander\'s effective tags from its class plus default', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items.Rapier?.tags).toEqual(['default', 'one_hand_weapon', 'onehand', 'sword', 'weapon']);
+  });
+
+  it('gives a base whose class has no tag map only its own tags plus default', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items['Cobalt Jewel']?.tags).toEqual(['abyss_jewel', 'default']);
+  });
 });
 
 describe('buildItems - uniques', () => {
@@ -103,6 +121,8 @@ describe('buildItems - uniques', () => {
       req: { str: 0, dex: 0, int: 0 },
       // Joined via the `_a`-stripped ItemVisualIdentity id, split into lines.
       flavourText: ['A blade of fire.', 'Forged in endless war.'],
+      // Uniques carry no tags: their base type - hence its tags - is not in .dat.
+      tags: [],
     });
   });
 
@@ -142,7 +162,8 @@ describe('buildItemIcons', () => {
 
     expect(Object.keys(icons)).toContain('Art/2DItems/Weapons/greatsword.png');
     expect(report.packed).toBe(1);
-    expect(report.missing).toBe(3); // rapier.dds and the uniques' oro.dds / behemoth.dds have no decoded image here
+    // rapier.dds, jewel.dds and the uniques' oro.dds / behemoth.dds have no decoded image here
+    expect(report.missing).toBe(4);
   });
 });
 

@@ -77,7 +77,8 @@ Each value is an `Item`. A normal base and a unique:
   "category": null,
   "twoHanded": false,
   "req": { "str": 60, "dex": 0, "int": 0 },
-  "flavourText": null
+  "flavourText": null,
+  "tags": ["armour", "body_armour", "default", "str_armour", "vaal_basetype"]
 }
 
 "Kaom's Heart": {
@@ -87,7 +88,8 @@ Each value is an `Item`. A normal base and a unique:
   "category": "Body Armour",
   "twoHanded": false,
   "req": { "str": 0, "dex": 0, "int": 0 },
-  "flavourText": ["The warrior who fears will fall."]
+  "flavourText": ["The warrior who fears will fall."],
+  "tags": []
 }
 ```
 
@@ -108,8 +110,33 @@ Every field is present on every entry, but which ones carry a value follows from
 - **`flavourText` is the unique's lore**, as separate lines (GGG stores explicit
   line breaks). It is `null` on bases and on any unique without one - only uniques
   carry it.
+- **`tags` are the item's effective mod-matching tags** (`Tags.Id` vocabulary:
+  `armour`, `body_armour`, `str_armour`, `weapon`, `default`, ...) - the base's own
+  tags plus the tags its item class contributes plus `default`. This is the set GGG
+  matches a mod against, so it is how items join to
+  [`@poe2-toolkit/mod-extractor`](../poe2-mod-extractor) (see below). Empty on
+  uniques, whose base type - and thus its tags - is not in .dat.
 - **Bases win name clashes.** Bases are added first (first displayable base for a
   name wins); uniques fold in after and never overwrite a base of the same name.
+
+### Joining items to mods
+
+An item's `tags` and a mod's `spawnWeights[].tag` (from
+[`@poe2-toolkit/mod-extractor`](../poe2-mod-extractor)) share one vocabulary, so the
+mods that can roll on an item are a pure filter - no lookup tables, no shared code.
+A mod can roll when the **first** of its `spawnWeights` whose tag the item carries
+has a positive weight:
+
+```ts
+function compatibleMods(item: { tags: string[] }, mods: ModData): string[] {
+  return Object.entries(mods)
+    .filter(([, mod]) => {
+      const gate = mod.spawnWeights.find((sw) => sw.tag === 'default' || item.tags.includes(sw.tag));
+      return gate != null && gate.weight > 0;
+    })
+    .map(([id]) => id);
+}
+```
 
 ### `icons`: the decoded PNGs (`ItemIconsResult`)
 
@@ -150,6 +177,11 @@ publish step left to you.
   the same join Path of Building uses.
 - **Two-handedness** is derived from the item class, not from base-level tags
   (bases don't inherit weapon-class tags), which is the reliable signal.
+- **`tags`** union the base's own `BaseItemTypes.Tags` with the tags its item class
+  contributes and `default`. PoE2 stores only the specific tags on a base and leaves
+  the class tags (`armour`, `weapon`, `bow`, ...) to the class, and GGPK has no
+  single table for that inheritance, so the class map is carried here and validated
+  1:1 against Path of Building's base tags for every base (an optional test).
 - **Icons** are kept as their raw GGPK DDS paths in the data and decoded to PNG by
   `buildItemIcons`. An icon the source cannot serve is skipped and reported, never
   pulled from a vendored asset.

@@ -64,6 +64,17 @@ export interface Item {
    * one. Only uniques carry flavour text.
    */
   flavourText: string[] | null;
+  /**
+   * The item's effective item-type tags in the `Tags.Id` vocabulary
+   * (e.g. `armour`, `body_armour`, `str_armour`, `weapon`, `default`) - the base's
+   * own `BaseItemTypes.Tags` plus the tags its item class contributes plus
+   * `default`. This is the set GGG matches a mod's spawn tags against, so it is
+   * how items join to `@poe2-toolkit/mod-extractor`: a mod can roll on an item when
+   * the first of its `spawnWeights` whose tag is in `tags` has a positive weight.
+   * Empty on uniques: .dat has no unique-to-base-type link, so a unique's base
+   * tags are unknown (like its `req` and `itemClass`).
+   */
+  tags: string[];
 }
 
 /**
@@ -90,15 +101,88 @@ const TWO_HANDED_CATEGORIES = new Set([
   'SwordTwoHand', 'AxeTwoHand', 'MaceTwoHand', 'Bow', 'Crossbow', 'Staff', 'Warstaff',
 ]);
 
+/**
+ * The item-type tags each `ItemClasses.Id` contributes on top of a base's own
+ * `BaseItemTypes.Tags`. PoE2 stores only the specific tags on the base (e.g.
+ * `str_armour`) and leaves the item-class tags (`armour`, `body_armour`, `weapon`,
+ * `bow`, `two_hand_weapon`, ...) to be inherited from the class; GGPK has no single
+ * table for that inheritance, so this map encodes it. It was derived from and
+ * validated 1:1 against Path of Building's `Data/Bases` tag sets for every base
+ * (the residual differences are base-specific league tags that differ by data
+ * snapshot, not class tags). Classes absent here (jewels, currency, incursion
+ * pieces) contribute no class tags.
+ */
+const CLASS_TAGS: Record<string, readonly string[]> = {
+  Amulet: ['amulet'],
+  Belt: ['belt'],
+  Ring: ['ring'],
+  Quiver: ['quiver'],
+  'Body Armour': ['armour', 'body_armour'],
+  Boots: ['armour', 'boots'],
+  Gloves: ['armour', 'gloves'],
+  Helmet: ['armour', 'helmet'],
+  Shield: ['armour', 'shield'],
+  Buckler: ['armour', 'shield', 'buckler'],
+  Focus: ['armour', 'focus'],
+  Bow: ['weapon', 'bow', 'ranged', 'two_hand_weapon', 'twohand'],
+  Crossbow: ['weapon', 'crossbow', 'ranged', 'two_hand_weapon', 'twohand'],
+  Claw: ['weapon', 'claw', 'one_hand_weapon', 'onehand'],
+  Dagger: ['weapon', 'dagger', 'one_hand_weapon', 'onehand'],
+  Flail: ['weapon', 'flail', 'one_hand_weapon', 'onehand'],
+  'One Hand Axe': ['weapon', 'axe', 'one_hand_weapon', 'onehand'],
+  'One Hand Mace': ['weapon', 'mace', 'one_hand_weapon', 'onehand'],
+  'One Hand Sword': ['weapon', 'sword', 'one_hand_weapon', 'onehand'],
+  Spear: ['weapon', 'spear', 'one_hand_weapon', 'onehand'],
+  Sceptre: ['sceptre', 'onehand'],
+  Wand: ['wand', 'onehand'],
+  'Two Hand Axe': ['weapon', 'axe', 'two_hand_weapon', 'twohand'],
+  'Two Hand Mace': ['weapon', 'mace', 'two_hand_weapon', 'twohand'],
+  'Two Hand Sword': ['weapon', 'sword', 'two_hand_weapon', 'twohand'],
+  Warstaff: ['weapon', 'warstaff', 'two_hand_weapon', 'twohand'],
+  Talisman: ['weapon', 'talisman', 'two_hand_weapon', 'twohand'],
+  Staff: ['staff', 'twohand'],
+  TrapTool: ['trap', 'twohand'],
+  FishingRod: ['fishing_rod', 'twohand'],
+  LifeFlask: ['flask', 'life_flask'],
+  ManaFlask: ['flask', 'mana_flask'],
+  UtilityFlask: ['flask', 'utility_flask'],
+};
+
+/**
+ * The base's effective mod-matching tags: its own `BaseItemTypes.Tags`, the tags
+ * its item class contributes ({@link CLASS_TAGS}) and the universal `default`,
+ * sorted for a stable output. This is the set a mod's spawn tags are matched
+ * against.
+ */
+function effectiveTags(tagIndices: number[], classId: string | null, Tags: TagRow[]): string[] {
+  const tags = new Set<string>(['default']);
+
+  for (const index of tagIndices) {
+    const id = Tags[index]?.Id;
+
+    if (typeof id === 'string') {
+      tags.add(id);
+    }
+  }
+
+  for (const tag of (classId != null ? CLASS_TAGS[classId] : undefined) ?? []) {
+    tags.add(tag);
+  }
+
+  return [...tags].sort();
+}
+
 // --- raw GGPK row shapes (only the columns this build reads) -----------------
 
 interface BaseItemTypeRow {
   Name?: string;
   ItemClass?: number | null;
   ItemVisualIdentity?: number | null;
+  Tags?: number[];
 }
 
 interface ItemClassRow { Id?: string }
+interface TagRow { Id?: string }
 interface ItemVisualIdentityRow { Id?: string; DDSFile?: string }
 interface AttributeRequirementRow { BaseItemType?: number | null; ReqStr?: number; ReqDex?: number; ReqInt?: number }
 
@@ -142,6 +226,7 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
   const ItemClasses = (await source.table('ItemClasses')) as ItemClassRow[];
   const ItemVisualIdentity = (await source.table('ItemVisualIdentity')) as ItemVisualIdentityRow[];
   const AttributeRequirements = (await source.table('AttributeRequirements')) as AttributeRequirementRow[];
+  const Tags = (await source.table('Tags')) as TagRow[];
 
   const reqByBaseIndex = new Map<number, AttributeRequirementRow>();
 
@@ -185,6 +270,7 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
         int: req?.ReqInt ?? 0,
       },
       flavourText: null,
+      tags: effectiveTags(base.Tags ?? [], classId, Tags),
     };
   });
 
@@ -251,6 +337,7 @@ async function addUniques(
       twoHanded: category != null && TWO_HANDED_CATEGORIES.has(category),
       req: { str: 0, dex: 0, int: 0 },
       flavourText,
+      tags: [],
     };
   }
 }
