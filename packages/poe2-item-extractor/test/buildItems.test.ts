@@ -37,21 +37,32 @@ const TABLES: Record<string, TableRow[]> = {
     { Id: 'UniqueSwordOro_a', DDSFile: 'Art/2DItems/Weapons/oro.dds' },
     { Id: 'UniqueSwordBehemoth', DDSFile: 'Art/2DItems/Weapons/behemoth.dds' },
     { Id: 'CobaltJewel', DDSFile: 'Art/2DItems/jewel.dds' },
+    // Unique flasks reuse a base flask model, so their AOFile names the base type.
+    { Id: 'UniqueFlaskLife', DDSFile: 'Art/2DItems/Flasks/Uniques/lifeuniq.dds', AOFile: 'Metadata/Items/Flasks/Basetypes/FlaskLife7Drop.ao' },
+    { Id: 'UniqueFlaskMana', DDSFile: 'Art/2DItems/Flasks/Uniques/manauniq.dds', AOFile: 'Metadata/Items/Flasks/Basetypes/FlaskMana9Drop.ao' },
+    { Id: 'UniqueFlaskX', DDSFile: 'Art/2DItems/Flasks/Uniques/mystery.dds' }, // no AOFile -> stays Flask
   ],
   AttributeRequirements: [{ BaseItemType: 0, ReqStr: 40, ReqDex: 10, ReqInt: 0 }],
   FlavourText: [
     { Id: 'UniqueSwordOro', Text: 'A blade of fire.\r\nForged in endless war.' },
     { Id: 'UniqueSwordBehemoth', Text: 'Heavy is the blade.' },
   ],
-  // A one-handed unique, a two-handed unique, a [DNT] placeholder, and a name clashing with a base.
+  // A one-handed unique, a two-handed unique, a [DNT] placeholder, a name clashing
+  // with a base, and three unique flasks (life, mana, model-less).
   UniqueStashLayout: [
     { WordsKey: 0, ItemVisualIdentityKey: 3, UniqueStashTypesKey: 0 },
     { WordsKey: 3, ItemVisualIdentityKey: 4, UniqueStashTypesKey: 1 },
     { WordsKey: 1, ItemVisualIdentityKey: 0, UniqueStashTypesKey: 0 },
     { WordsKey: 2, ItemVisualIdentityKey: 1, UniqueStashTypesKey: 1 },
+    { WordsKey: 4, ItemVisualIdentityKey: 6, UniqueStashTypesKey: 2 },
+    { WordsKey: 5, ItemVisualIdentityKey: 7, UniqueStashTypesKey: 2 },
+    { WordsKey: 6, ItemVisualIdentityKey: 8, UniqueStashTypesKey: 2 },
   ],
-  Words: [{ Text: "Oro's Sacrifice" }, { Text: 'Dev Unique [DNT]' }, { Text: 'Greatsword' }, { Text: 'Behemoth' }],
-  UniqueStashTypes: [{ Id: 'Sword' }, { Id: 'SwordTwoHand' }],
+  Words: [
+    { Text: "Oro's Sacrifice" }, { Text: 'Dev Unique [DNT]' }, { Text: 'Greatsword' }, { Text: 'Behemoth' },
+    { Text: 'Sanguine Vial' }, { Text: 'Azure Vial' }, { Text: 'Mystery Vial' },
+  ],
+  UniqueStashTypes: [{ Id: 'Sword' }, { Id: 'SwordTwoHand' }, { Id: 'Flask' }],
 };
 
 function fakeSource(images: Record<string, RgbaImage | null> = {}): GgpkSource & { dds(path: string): Promise<RgbaImage | null> } {
@@ -153,6 +164,14 @@ describe('buildItems - uniques', () => {
     expect(items.Behemoth).toMatchObject({ category: 'SwordTwoHand', twoHanded: true });
   });
 
+  it('refines a unique flask category to Life/Mana from its AOFile, else keeps Flask', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items['Sanguine Vial']?.category).toBe('Life Flask'); // FlaskLife7Drop.ao
+    expect(items['Azure Vial']?.category).toBe('Mana Flask'); //    FlaskMana9Drop.ao
+    expect(items['Mystery Vial']?.category).toBe('Flask'); //       no AOFile -> unrefined
+  });
+
   it('skips [DNT] unique placeholders', async () => {
     const items = await buildItems(fakeSource());
 
@@ -176,8 +195,9 @@ describe('buildItemIcons', () => {
 
     expect(Object.keys(icons)).toContain('Art/2DItems/Weapons/greatsword.png');
     expect(report.packed).toBe(1);
-    // rapier.dds, jewel.dds and the uniques' oro.dds / behemoth.dds have no decoded image here
-    expect(report.missing).toBe(4);
+    // rapier.dds, jewel.dds, the uniques' oro.dds / behemoth.dds and the three unique
+    // flask icons have no decoded image here
+    expect(report.missing).toBe(7);
   });
 
   it('composites a flask sheet: fill (frame 2) over the glass-and-cap container (frame 0)', async () => {

@@ -43,7 +43,10 @@ export interface Item {
    * `Body Armour`, `SwordTwoHand`); `null` for bases. It is a unique's
    * closest-to-a-class, since .dat has no unique-to-base-type link. Its
    * vocabulary differs from {@link Item.itemClass} (`SwordTwoHand` vs
-   * `Two Hand Sword`, `Warstaff` vs `Quarterstaff`).
+   * `Two Hand Sword`, `Warstaff` vs `Quarterstaff`). A unique flask, which the
+   * stash lumps under a single `Flask` slot, is refined to `Life Flask` or
+   * `Mana Flask` from its `ItemVisualIdentity.AOFile` (the base flask model the
+   * unique reuses) - the one unique-to-base signal .dat leaks.
    */
   category: string | null;
   /**
@@ -214,7 +217,7 @@ interface BaseItemTypeRow {
 
 interface ItemClassRow { Id?: string }
 interface TagRow { Id?: string }
-interface ItemVisualIdentityRow { Id?: string; DDSFile?: string }
+interface ItemVisualIdentityRow { Id?: string; DDSFile?: string; AOFile?: string }
 interface AttributeRequirementRow { BaseItemType?: number | null; ReqStr?: number; ReqDex?: number; ReqInt?: number }
 
 /** One unique's slot in the unique stash: name, icon and category by row index. */
@@ -236,6 +239,31 @@ interface FlavourTextRow { Id?: string; Text?: string }
  */
 function normalizeUniqueId(id: string): string {
   return /^[^_]+/.exec(id)?.[0] ?? id;
+}
+
+/**
+ * Refine a unique's stash category with the flask liquid type when it is a flask.
+ * `UniqueStashTypes` lumps every unique flask under one `Flask` slot, but a unique
+ * flask reuses a base flask 3D model, so its `ItemVisualIdentity.AOFile` still names
+ * the base (`.../Basetypes/FlaskLife11Drop.ao` / `FlaskMana9Drop.ao`). That is the
+ * only unique-to-base signal .dat leaks - unique equipment carries a bespoke model,
+ * so no base is recoverable there. Returns `Life Flask` / `Mana Flask` for a flask
+ * whose model resolves, otherwise the category unchanged.
+ */
+function refineFlaskCategory(category: string | null, aoFile: string | undefined): string | null {
+  if (category !== 'Flask' || aoFile == null) {
+    return category;
+  }
+
+  if (/FlaskLife/i.test(aoFile)) {
+    return 'Life Flask';
+  }
+
+  if (/FlaskMana/i.test(aoFile)) {
+    return 'Mana Flask';
+  }
+
+  return category;
 }
 
 /** Split GGG flavour text into trimmed non-empty lines, or `null` when empty. */
@@ -358,7 +386,8 @@ async function addUniques(
     }
 
     const visual = row.ItemVisualIdentityKey != null ? ItemVisualIdentity[row.ItemVisualIdentityKey] : undefined;
-    const category = row.UniqueStashTypesKey != null ? UniqueStashTypes[row.UniqueStashTypesKey]?.Id ?? null : null;
+    const stashCategory = row.UniqueStashTypesKey != null ? UniqueStashTypes[row.UniqueStashTypesKey]?.Id ?? null : null;
+    const category = refineFlaskCategory(stashCategory, visual?.AOFile);
     const flavourText = visual?.Id != null ? flavourByUniqueId.get(normalizeUniqueId(visual.Id)) ?? null : null;
 
     items[name] = {

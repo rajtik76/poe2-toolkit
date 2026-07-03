@@ -103,7 +103,11 @@ Every field is present on every entry, but which ones carry a value follows from
   (`UniqueStashTypes.Id`, the stash slot) and `itemClass: null`. .dat has no
   unique-to-base-type link (see [How it works](#how-it-works)), so a unique's
   closest-to-a-class is its stash category. The two vocabularies differ -
-  `SwordTwoHand` vs `Two Hand Sword`, `Warstaff` vs `Quarterstaff`.
+  `SwordTwoHand` vs `Two Hand Sword`, `Warstaff` vs `Quarterstaff`. **Unique flasks**
+  are the one exception: the stash lumps them all under `Flask`, but each is refined
+  to `Life Flask` or `Mana Flask`, read from the base flask model its
+  `ItemVisualIdentity.AOFile` points at (the only unique-to-base signal .dat leaks;
+  unique equipment has a bespoke model, so no base is recoverable there).
 - **`req` on a unique is always `{ str: 0, dex: 0, int: 0 }`** - the requirement
   lives on the unique's (unknown) base type, so treat it as *not populated*, not
   as "no requirement". A base's `req` is the real str/dex/int to equip.
@@ -187,6 +191,11 @@ publish step left to you.
   `UniqueStashTypes` for the category. .dat has no unique-to-base-type link (the
   base a unique rolls on is decided at drop generation, not stored), so a unique
   carries its stash `category` (the item slot) instead of a concrete base type.
+  The lone exception is flasks: a unique flask reuses a base flask model, so its
+  `ItemVisualIdentity.AOFile` still names the base (`.../FlaskLife7Drop.ao`), which
+  refines the `Flask` stash slot to `Life Flask` / `Mana Flask`. Path of Building
+  hand-maintains this base per unique flask; here it is read straight from the model
+  path. Unique equipment has a bespoke model, so no base leaks there.
 - **Flavour text** comes from `FlavourText`, which has no foreign key to the
   unique: it lines up by the `ItemVisualIdentity` / `FlavourText` id with the
   `_`-suffixed art variant dropped (`FourUniqueRing33_a` -> `FourUniqueRing33`),
