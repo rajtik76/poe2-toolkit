@@ -180,20 +180,25 @@ describe('buildItemIcons', () => {
     expect(report.missing).toBe(4);
   });
 
-  it('crops a flask fill-state sheet to its rightmost (full) frame', async () => {
-    // A 9x3 "sheet": each column's red channel encodes its x (x * 10) so the crop
-    // is verifiable. The full frame is the last third, columns 6..8.
-    const width = 9;
-    const height = 3;
+  it('composites a flask sheet: fill (frame 2) over the glass-and-cap container (frame 0)', async () => {
+    // A 3x2 "sheet" of three 1px-wide layer frames. Frame 0 (col 0) is the
+    // container: an opaque cap on the top row, an empty (transparent) body below.
+    // Frame 2 (col 2) is the fill: no cap, an opaque coloured body. Column 1 is
+    // the ignored middle frame.
+    const width = 3;
+    const height = 2;
     const rgba = new Uint8Array(width * height * 4);
-
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        const i = (y * width + x) * 4;
-        rgba[i] = x * 10;
-        rgba[i + 3] = 255;
-      }
-    }
+    const put = (x: number, y: number, r: number, g: number, b: number, a: number): void => {
+      const i = (y * width + x) * 4;
+      rgba[i] = r;
+      rgba[i + 1] = g;
+      rgba[i + 2] = b;
+      rgba[i + 3] = a;
+    };
+    put(0, 0, 200, 100, 0, 255); // container cap (top)
+    put(0, 1, 0, 0, 0, 0); //       container body: empty
+    put(2, 0, 0, 0, 0, 0); //       fill: no cap
+    put(2, 1, 255, 0, 0, 255); //   fill body (red)
 
     const flaskPath = 'Art/2DItems/Flasks/Basetypes/FlaskLife01.dds';
     const source: GgpkSource & { dds(path: string): Promise<RgbaImage | null> } = {
@@ -204,13 +209,14 @@ describe('buildItemIcons', () => {
     const data = { 'Lesser Life Flask': { icon: flaskPath } } as unknown as Parameters<typeof buildItemIcons>[1];
 
     const { icons } = await buildItemIcons(source, data);
-    const png = icons['Art/2DItems/Flasks/Basetypes/FlaskLife01.png']!;
-    const decoded = decodePng(png);
+    const decoded = decodePng(icons['Art/2DItems/Flasks/Basetypes/FlaskLife01.png']!);
 
-    // Kept only the last third (round(9 / 3) = 3 columns), starting at x = 6.
-    expect(decoded.width).toBe(3);
-    expect(decoded.height).toBe(3);
-    expect([decoded.rgba[0], decoded.rgba[4], decoded.rgba[8]]).toEqual([60, 70, 80]);
+    // One frame wide (round(3 / 3) = 1 column), full height.
+    expect(decoded.width).toBe(1);
+    expect(decoded.height).toBe(2);
+    // Top row keeps the container's cap (frame 0), bottom row shows the fill (frame 2).
+    expect([...decoded.rgba.slice(0, 4)]).toEqual([200, 100, 0, 255]);
+    expect([...decoded.rgba.slice(4, 8)]).toEqual([255, 0, 0, 255]);
   });
 
   it('leaves a single-frame charm icon untouched', async () => {
@@ -225,7 +231,7 @@ describe('buildItemIcons', () => {
     const { icons } = await buildItemIcons(source, data);
     const decoded = decodePng(icons['Art/2DItems/Charms/Basetypes/RubyCharm.png']!);
 
-    expect(decoded.width).toBe(4); // charms are single-frame, no crop
+    expect(decoded.width).toBe(4); // charms are single-frame, no compositing
     expect(decoded.height).toBe(4);
   });
 });

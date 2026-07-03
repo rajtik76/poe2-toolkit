@@ -205,10 +205,12 @@ publish step left to you.
 - **Icons** are kept as their raw GGPK DDS paths in the data and decoded to PNG by
   `buildItemIcons`. An icon the source cannot serve is skipped and reported, never
   pulled from a vendored asset.
-- **Flask icons** ship in GGPK as a horizontal 3-frame fill-state sheet (empty,
-  partial, full); `buildItemIcons` crops each to the rightmost (full) frame, the one
-  the game renders, so a flask icon is a single bottle, not three. Charms and all
-  other items are single-frame and copied as-is.
+- **Flask icons** ship in GGPK as a horizontal 3-frame layer sheet - the glass
+  container with its cap (frame 0), a middle frame, and the coloured liquid fill
+  (frame 2) - so the raw art is three bottles wide. `buildItemIcons` composites the
+  fill over the container, the same as the in-game icon, so a flask icon is one full
+  bottle with its cap, not three layers. Charms and all other items are single-frame
+  and copied as-is.
 
 ## Attributions and legal
 
