@@ -23,7 +23,9 @@ interface LegacyPsgModule {
 }
 
 describe.skipIf(!existsSync(PSG_FILE))('parsePsg matches the legacy parser', () => {
-  it('produces an identical graph from the real .psg bytes', async () => {
+  // The .mjs reference scripts were retired after the port, so the parity check
+  // additionally skips unless the checkout still carries the legacy parser.
+  it.skipIf(!existsSync(LEGACY_PSG))('produces an identical graph from the real .psg bytes', async () => {
     const bytes = readFileSync(PSG_FILE);
     const legacy = (await import(pathToFileURL(LEGACY_PSG).href)) as LegacyPsgModule;
 

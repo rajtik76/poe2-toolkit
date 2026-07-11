@@ -24,7 +24,10 @@ interface LegacyStatsModule {
   renderBlock(index: StatIndex, statIds: string[], vals: number[]): { lines: string[]; unresolved: string[] };
 }
 
-describe.skipIf(!existsSync(CSD))('StatDescriptions matches the legacy engine', () => {
+// Skips without the extract, and also once the legacy engine is gone: the .mjs
+// reference scripts were retired after the port, so this parity check only runs
+// against a checkout that still carries them.
+describe.skipIf(!existsSync(CSD) || !existsSync(LEGACY))('StatDescriptions matches the legacy engine', () => {
   it('builds an identical stat index', async () => {
     const legacyMod = (await import(pathToFileURL(LEGACY).href)) as LegacyStatsModule;
 
