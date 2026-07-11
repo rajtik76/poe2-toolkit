@@ -163,6 +163,8 @@ The unit tests run without any game data. The integration and 1:1 verification
 tests need a local GGPK extract and golden fixtures (both kept outside the repo);
 point `POE2_GGPK_EXTRACT`, `POE2_TREE_GOLDEN`, and `POE2_TREE_DATA` at them to run
 those locally. Without the variables, those tests skip.
+[docs/GOLDEN_FIXTURES.md](docs/GOLDEN_FIXTURES.md) walks through generating
+both from your own game files.
 
 ## Attributions and legal
 
