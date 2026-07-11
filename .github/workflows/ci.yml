@@ -26,4 +26,6 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
+      # Coverage thresholds live in each package's vitest.config.ts; a package
+      # dropping below its floor fails this step.
+      - run: npm run test:coverage

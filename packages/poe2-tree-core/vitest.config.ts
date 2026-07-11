@@ -7,5 +7,11 @@ export default defineConfig({
   root: __dirname,
   test: {
     include: ['test/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**'],
+      exclude: ['src/index.ts', 'src/types.ts'],
+      thresholds: { statements: 85, branches: 78, functions: 85, lines: 85 },
+    },
   },
 });

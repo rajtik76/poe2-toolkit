@@ -7,5 +7,13 @@ export default defineConfig({
   root: __dirname,
   test: {
     include: ['test/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      // No thresholds yet: TreeView.tsx is one large canvas component and
+      // dominates the denominator. Add a floor once its logic is extracted
+      // into testable modules.
+      include: ['src/**'],
+      exclude: ['src/index.ts'],
+    },
   },
 });
