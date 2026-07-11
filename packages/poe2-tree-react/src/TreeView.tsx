@@ -2,10 +2,27 @@ import type { Scene, Viewport, WorldRect } from '@poe2-toolkit/tree-core';
 import { Application, BitmapText, Container, Graphics, ImageSource, Rectangle, Sprite, Texture } from 'pixi.js';
 import { useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, Ref } from 'react';
+import { isDragMotion, pinchSpread, resolveZoomLimits, wheelZoomFactor, ZOOM_STEP, zoomedViewport } from './interaction.js';
 import type { RenderResources } from './resources.js';
-import { effectKeyFor, frameKeyFor, iconKeyFor } from './spriteKeys.js';
+import {
+  ascendancyOffset,
+  DEFAULT_HIGHLIGHT,
+  EDGE_OVERLAY_CORE_WIDTH,
+  EDGE_OVERLAY_GLOW_WIDTH,
+  highlightPulse,
+  LABEL_MIN_SCALE,
+  nodeVisual,
+  outlineBase,
+  previewStroke,
+  railPasses,
+  resolveHighlightStyle,
+} from './sceneStyle.js';
+import { effectKeyFor } from './spriteKeys.js';
+import type { AllocationPreview, CentreSprite, EdgeOverlay, HighlightStyle, ResolvedHighlightStyle, ZoomLimits } from './types.js';
 import type { ResolvedZoom } from './viewport.js';
-import { centreViewport, clamp, clampViewport, edgeKey, hitTest, viewportForRect, worldToScreen } from './viewport.js';
+import { centreViewport, clampViewport, edgeKey, hitTest, viewportForRect, worldToScreen } from './viewport.js';
+
+export type { AllocationPreview, CentreSprite, EdgeOverlay, HighlightStyle, ZoomLimits } from './types.js';
 
 export interface TreeViewProps {
   /** Computed geometry from `@poe2-toolkit/tree-core`'s `buildScene`. */
@@ -92,65 +109,6 @@ export interface TreeViewProps {
   style?: CSSProperties;
 }
 
-/** Tunable zoom and pan extents (all optional; see defaults on each field). */
-export interface ZoomLimits {
-  /** Hard zoom-in cap as a world scale. Default 4. */
-  maxScale?: number;
-  /**
-   * Zoom-out floor as a multiple of the fit-the-whole-tree scale. 1 means you
-   * cannot zoom out past seeing the whole tree; below 1 leaves empty margin
-   * around it. Default 0.85.
-   */
-  minFitFactor?: number;
-  /**
-   * How far past the tree's edges you may pan, as a fraction of the viewport.
-   * Smaller keeps the tree tighter in frame. Default 0.5.
-   */
-  overscroll?: number;
-}
-
-/**
- * Tunable look of the search-highlight rings (all optional; see defaults on
- * each field). Two concentric strokes are drawn per matched node: a soft wide
- * `glow` and a bright thin `core`, both pulsing in alpha and radius.
- */
-export interface HighlightStyle {
-  /** Soft outer ring colour. Default `0x3fae9f` (teal). */
-  glowColor?: number;
-  /** Bright inner ring colour. Default `0x7df9e0` (light teal). */
-  coreColor?: number;
-  /** Outer ring stroke width, on-screen px. Default 8. */
-  glowWidth?: number;
-  /** Inner ring stroke width, on-screen px. Default 3. */
-  coreWidth?: number;
-  /** Gap between the node's frame and the ring, on-screen px. Default 6. */
-  radius?: number;
-  /**
-   * Pulse period divisor in ms (larger = slower). Default 320. Set to 0 for a
-   * still ring (no per-frame redraw — the ring is drawn once and left).
-   */
-  pulseMs?: number;
-  /** Extra radius added at the pulse peak, on-screen px. Default 5. */
-  pulseGrow?: number;
-  /** Outer ring alpha range `[trough, peak]` over the pulse. Default `[0.2, 0.65]`. */
-  glowAlpha?: [number, number];
-  /** Inner ring alpha range `[trough, peak]` over the pulse. Default `[0.55, 1]`. */
-  coreAlpha?: [number, number];
-}
-
-/** {@link HighlightStyle} with every field resolved to a concrete value. */
-interface ResolvedHighlightStyle {
-  glowColor: number;
-  coreColor: number;
-  glowWidth: number;
-  coreWidth: number;
-  radius: number;
-  pulseMs: number;
-  pulseGrow: number;
-  glowAlpha: [number, number];
-  coreAlpha: [number, number];
-}
-
 /** Imperative handle exposed via `controls` for external zoom buttons. */
 export interface TreeViewControls {
   /** Zoom in one step about the canvas centre, clamped to the zoom-in cap. */
@@ -158,123 +116,6 @@ export interface TreeViewControls {
   /** Zoom out one step about the canvas centre, clamped to the zoom-out floor. */
   zoomOut: () => void;
 }
-
-/** Hover preview of a pending allocate/remove: node ids + edge keys to glow. */
-export interface AllocationPreview {
-  /**
-   * Whether the pending click would allocate (`add`) or deallocate (`remove`).
-   * Drives the colour: `add` uses gold (or the weapon set's tint), `remove` red.
-   */
-  kind: 'add' | 'remove';
-  /**
-   * Skill ids the click would touch. For a `remove`, each is also ringed so a
-   * lone tip with no edge between two removed nodes still shows in the preview.
-   */
-  nodes: Set<number>;
-  /** Edge keys as `min-max` of the two node ids. */
-  edges: Set<string>;
-  /**
-   * Weapon set an `add` preview would allocate into (1 or 2); absent means basic.
-   * Tints the planned path in the set's colour so it matches the paint mode.
-   */
-  weaponSet?: 1 | 2;
-}
-
-/**
- * A group of edges to paint in one colour over the base render. The renderer is
- * agnostic about what the group means and only strokes the matching connectors.
- */
-export interface EdgeOverlay {
-  /** Edge keys (`min-max` of the two node ids) to paint. */
-  edges: Set<string>;
-  /** Stroke colour, `0xRRGGBB`. */
-  color: number;
-  /**
-   * Also paint edges whose endpoints are not both allocated (the dim base rails).
-   * Default false, so only lit connectors are painted. Set true to surface edges
-   * that the build does not yet hold, such as a route it is missing.
-   */
-  includeInactive?: boolean;
-}
-
-/** A sprite to draw at the hub: source image URL + the sub-rect to crop. */
-export interface CentreSprite {
-  /** Source image URL to load and crop from (e.g. a spritesheet). */
-  url: string;
-  /** Sub-rect left edge in the source image, px. */
-  sx: number;
-  /** Sub-rect top edge in the source image, px. */
-  sy: number;
-  /** Sub-rect width in the source image, px. */
-  sw: number;
-  /** Sub-rect height in the source image, px. */
-  sh: number;
-}
-
-const MIN_SCALE = 0.02;
-/** Defaults for {@link ZoomLimits}. */
-const MAX_SCALE = 4;
-const DEFAULT_MIN_FIT = 0.85;
-const DEFAULT_OVERSCROLL = 0.5;
-
-/** Defaults for {@link HighlightStyle} — the standing teal search pulse. */
-const DEFAULT_HIGHLIGHT: ResolvedHighlightStyle = {
-  glowColor: 0x3fae9f,
-  coreColor: 0x7df9e0,
-  glowWidth: 8,
-  coreWidth: 3,
-  radius: 6,
-  pulseMs: 320,
-  pulseGrow: 5,
-  glowAlpha: [0.2, 0.65],
-  coreAlpha: [0.55, 1],
-};
-/** Below this zoom the debug id labels are hidden (a tiny, costly, unreadable mess). */
-const LABEL_MIN_SCALE = 0.35;
-const ZOOM_STEP = 1.3;
-const ZOOM_SENSITIVITY = 0.0015;
-
-/** Connection rail look (world units). Two parallel rails with a gap between. */
-const RAIL_WIDTH = 3.6;
-const RAIL_GAP = 4.8;
-const RAIL_COLOR = 0x7d6836;
-const RAIL_GAP_ACTIVE = 0xfcde86;
-const RAIL_GAP_INACTIVE = 0x000000;
-
-/**
- * Tint for weapon-set allocations: set I green, set II blue, keeping the basic
- * tree on its gold rail. Applied to set nodes' frames and their active rails so
- * each weapon set reads apart in the single combined view.
- */
-const WEAPON_SET_COLOR: Record<1 | 2, number> = {
-  1: 0x4fbf7a,
-  2: 0x4fa8ff,
-};
-
-/** Multiply tint for unallocated node icons: 50% grey = half brightness, hue kept. */
-const ICON_DIM = 0x808080;
-
-/** Vector palette by node kind, used when no atlas art is supplied. */
-const KIND_COLOR: Record<string, number> = {
-  normal: 0x3a5b54,
-  notable: 0x6fe0d0,
-  keystone: 0xd9b86a,
-  mastery: 0x8a6fd0,
-  jewel: 0xd06f9a,
-  attribute: 0x4a6a62,
-  classStart: 0x9aa7a3,
-  ascendancyStart: 0xd9b86a,
-  ascendancyNormal: 0x5a7a72,
-  ascendancyNotable: 0x7fd0c0,
-};
-
-/** Item-rarity colours for the gem drawn inside a socketed jewel. */
-const RARITY_COLOR: Record<string, number> = {
-  NORMAL: 0xd6d6d6,
-  MAGIC: 0x8888ff,
-  RARE: 0xe8e84a,
-  UNIQUE: 0xcf7a3a,
-};
 
 /**
  * WebGL view over a core `Scene`, rendered with PixiJS. It owns nothing
@@ -350,11 +191,7 @@ export function TreeView({
   // Resolved zoom/pan extents, in a ref so the ticker, callbacks and clamp all
   // read the current values without re-subscribing. Kept current in the effect
   // below (never assigned during render).
-  const limitsRef = useRef<ResolvedZoom>({
-    maxScale: MAX_SCALE,
-    minFitFactor: DEFAULT_MIN_FIT,
-    overscroll: DEFAULT_OVERSCROLL,
-  });
+  const limitsRef = useRef<ResolvedZoom>(resolveZoomLimits(undefined));
 
   // Resolved highlight look, in a ref so the ticker and sync read current values
   // without re-subscribing. Kept current in the effect below (never during render).
@@ -502,28 +339,17 @@ export function TreeView({
     highlightRef.current = highlight ?? null;
     previewRef.current = preview ?? null;
     edgeOverlaysRef.current = edgeOverlays ?? null;
-    const resolvedStyle: ResolvedHighlightStyle = {
-      glowColor: highlightStyle?.glowColor ?? DEFAULT_HIGHLIGHT.glowColor,
-      coreColor: highlightStyle?.coreColor ?? DEFAULT_HIGHLIGHT.coreColor,
-      glowWidth: highlightStyle?.glowWidth ?? DEFAULT_HIGHLIGHT.glowWidth,
-      coreWidth: highlightStyle?.coreWidth ?? DEFAULT_HIGHLIGHT.coreWidth,
-      radius: highlightStyle?.radius ?? DEFAULT_HIGHLIGHT.radius,
-      pulseMs: highlightStyle?.pulseMs ?? DEFAULT_HIGHLIGHT.pulseMs,
-      pulseGrow: highlightStyle?.pulseGrow ?? DEFAULT_HIGHLIGHT.pulseGrow,
-      glowAlpha: highlightStyle?.glowAlpha ?? DEFAULT_HIGHLIGHT.glowAlpha,
-      coreAlpha: highlightStyle?.coreAlpha ?? DEFAULT_HIGHLIGHT.coreAlpha,
-    };
+    const resolvedStyle = resolveHighlightStyle(highlightStyle);
     highlightStyleRef.current = resolvedStyle;
     // Only run the per-frame pulse redraw when a set is present AND it animates;
     // a still ring (pulseMs 0) is drawn once by the sync() below, no ticker cost.
     highlightActiveRef.current = Boolean(highlight && highlight.size > 0 && resolvedStyle.pulseMs > 0);
     activeAscendancyRef.current = activeAscendancy;
-    limitsRef.current = {
-      maxScale: zoom?.maxScale ?? MAX_SCALE,
-      minFitFactor: zoom?.minFitFactor ?? DEFAULT_MIN_FIT,
-      overscroll: zoom?.overscroll ?? DEFAULT_OVERSCROLL,
-    };
+    limitsRef.current = resolveZoomLimits(zoom);
     sync();
+    // Depend on zoom's fields, not the object: a fresh literal with the same
+    // values must not re-run the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene, highlight, highlightStyle, preview, edgeOverlays, activeAscendancy, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
 
   // ---- Scene graph build ---------------------------------------------------
@@ -641,11 +467,10 @@ export function TreeView({
         return;
       }
 
-      const scale = clamp(viewport.scale * factor, MIN_SCALE, limitsRef.current.maxScale);
-      const ratio = scale / viewport.scale;
-      viewport.tx = px - (px - viewport.tx) * ratio;
-      viewport.ty = py - (py - viewport.ty) * ratio;
-      viewport.scale = scale;
+      const next = zoomedViewport(viewport, px, py, factor, limitsRef.current.maxScale);
+      viewport.scale = next.scale;
+      viewport.tx = next.tx;
+      viewport.ty = next.ty;
 
       const canvas = containerRef.current;
 
@@ -668,7 +493,7 @@ export function TreeView({
         const [a, b] = [...pointersRef.current.values()];
 
         if (a && b) {
-          pinchRef.current = Math.hypot(a.x - b.x, a.y - b.y);
+          pinchRef.current = pinchSpread(a, b);
         }
 
         dragRef.current = null;
@@ -701,7 +526,7 @@ export function TreeView({
         const [a, b] = [...tracked.values()];
 
         if (a && b) {
-          const dist = Math.hypot(a.x - b.x, a.y - b.y);
+          const dist = pinchSpread(a, b);
 
           if (pinchRef.current > 0 && dist > 0) {
             const rect = event.currentTarget.getBoundingClientRect();
@@ -728,7 +553,7 @@ export function TreeView({
         const dx = event.clientX - drag.x;
         const dy = event.clientY - drag.y;
 
-        if (Math.abs(dx) + Math.abs(dy) > 2) {
+        if (isDragMotion(dx, dy)) {
           drag.moved = true;
         }
 
@@ -846,8 +671,7 @@ export function TreeView({
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
       const rect = canvas.getBoundingClientRect();
-      const factor = Math.exp(-event.deltaY * ZOOM_SENSITIVITY);
-      zoomAt(event.clientX - rect.left, event.clientY - rect.top, factor);
+      zoomAt(event.clientX - rect.left, event.clientY - rect.top, wheelZoomFactor(event.deltaY));
     };
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
@@ -898,7 +722,7 @@ export function TreeView({
 }
 
 // ===========================================================================
-// Scene graph construction
+// Scene graph construction — executes the decisions `sceneStyle.ts` computes
 // ===========================================================================
 
 interface Layers {
@@ -965,27 +789,23 @@ function buildScene(
 
   // Active ascendancy disc: its nodes relocated into the hub. The originals stay
   // at their far world anchor in `nodeLayer`; this is the game-style overlay.
-  if (activeAscendancy) {
-    const disc = scene.centre.ascendancies.find((a) => a.id === activeAscendancy);
+  const offset = ascendancyOffset(scene, activeAscendancy);
 
-    if (disc) {
-      const offsetX = scene.centre.centre.x - disc.worldAnchor.x;
-      const offsetY = scene.centre.centre.y - disc.worldAnchor.y;
-      ascLayer.position.set(offsetX, offsetY);
-      const ascConns = scene.connections.filter((conn) => conn.ascendancy === activeAscendancy);
-      const ascGraphics = new Graphics();
-      buildConnections(ascGraphics, ascConns, true);
-      ascLayer.addChild(ascGraphics);
+  if (offset) {
+    ascLayer.position.set(offset.x, offset.y);
+    const ascConns = scene.connections.filter((conn) => conn.ascendancy === activeAscendancy);
+    const ascGraphics = new Graphics();
+    buildConnections(ascGraphics, ascConns, true);
+    ascLayer.addChild(ascGraphics);
 
-      for (const node of scene.nodes) {
-        if (node.ascendancy === activeAscendancy) {
-          buildNode(ascLayer, node, resources, tex);
+    for (const node of scene.nodes) {
+      if (node.ascendancy === activeAscendancy) {
+        buildNode(ascLayer, node, resources, tex);
 
-          // Debug ids live on the (un-offset) label layer, so add the disc's
-          // relocation offset to land each label on its relocated node.
-          if (debugIds) {
-            labelLayer.addChild(idLabel(node.skill, node.x + offsetX, node.y + offsetY));
-          }
+        // Debug ids live on the (un-offset) label layer, so add the disc's
+        // relocation offset to land each label on its relocated node.
+        if (debugIds) {
+          labelLayer.addChild(idLabel(node.skill, node.x + offset.x, node.y + offset.y));
         }
       }
     }
@@ -994,44 +814,9 @@ function buildScene(
 
 /** Draw all connections as twin parallel rails into a Graphics (world units). */
 function buildConnections(g: Graphics, connections: Scene['connections'], ascendancyOnly: boolean | null): void {
-  const gap = RAIL_GAP;
-  const rail = RAIL_WIDTH;
-
-  const visible = (conn: Scene['connections'][number]): boolean =>
-    !(ascendancyOnly === false && conn.ascendancy);
-
-  // Inactive rails first (under): bronze for the main tree, solid black for
-  // ascendancy edges.
-  const inactive = connections.filter((conn) => visible(conn) && !conn.active);
-
-  if (inactive.length > 0) {
-    addConnPaths(g, inactive);
-    g.stroke({ width: gap + rail * 2, color: ascendancyOnly ? RAIL_GAP_INACTIVE : RAIL_COLOR, cap: 'round' });
-
-    if (!ascendancyOnly) {
-      addConnPaths(g, inactive);
-      g.stroke({ width: gap, color: RAIL_GAP_INACTIVE, cap: 'round' });
-    }
-  }
-
-  // Active rails on top, drawn per weapon set so each reads in its own colour:
-  // basic gold first, then the two sets over it (the set II overlay stays
-  // visible even where it shares geometry with the basic tree).
-  const active = connections.filter((conn) => visible(conn) && conn.active);
-
-  for (const set of [undefined, 1, 2] as const) {
-    const want = active.filter((conn) => conn.weaponSet === set);
-
-    if (want.length === 0) {
-      continue;
-    }
-
-    const color = set === undefined ? RAIL_GAP_ACTIVE : WEAPON_SET_COLOR[set];
-
-    addConnPaths(g, want);
-    g.stroke({ width: gap + rail * 2, color, cap: 'round' });
-    addConnPaths(g, want);
-    g.stroke({ width: gap, color, cap: 'round' });
+  for (const pass of railPasses(connections, ascendancyOnly)) {
+    addConnPaths(g, pass.connections);
+    g.stroke({ width: pass.width, color: pass.color, cap: 'round' });
   }
 }
 
@@ -1056,35 +841,31 @@ function addConnPaths(g: Graphics, connections: Scene['connections'], ox = 0, oy
 
 /** Build a node's icon + frame sprites (and jewel gem) into the layer. */
 function buildNode(layer: Container, node: Scene['nodes'][number], resources: RenderResources | undefined, tex: TexCtx): void {
-  if (node.kind === 'mastery') {
-    return; // drawn as its effect pattern
+  const visual = nodeVisual(node);
+
+  if (!visual) {
+    return; // mastery — drawn as its effect pattern
   }
 
   let drew = false;
 
   if (resources) {
-    const iconKey = iconKeyFor(node.kind, node.icon);
-    const icon = iconKey ? atlasSprite(resources, iconKey, node.x, node.y, node.iconSize, tex) : null;
+    const icon = visual.icon ? atlasSprite(resources, visual.icon.key, node.x, node.y, node.iconSize, tex) : null;
 
     if (icon) {
-      // Unallocated nodes draw the same colour icon dimmed, as the game does: a
-      // 50% grey multiply (no desaturation — hue is kept, brightness halved).
-      if (!node.allocated) {
-        icon.tint = ICON_DIM;
+      if (visual.icon!.tint !== null) {
+        icon.tint = visual.icon!.tint;
       }
 
       layer.addChild(icon);
       drew = true;
     }
 
-    const frameKey = frameKeyFor(node.kind, node.allocated);
-    const frame = frameKey ? atlasSprite(resources, frameKey, node.x, node.y, node.frameSize, tex) : null;
+    const frame = visual.frame ? atlasSprite(resources, visual.frame.key, node.x, node.y, node.frameSize, tex) : null;
 
     if (frame) {
-      // Tint a weapon-set node's frame so it reads apart from the gold basic
-      // tree; basic nodes keep the untinted frame.
-      if (node.allocated && node.weaponSet) {
-        frame.tint = WEAPON_SET_COLOR[node.weaponSet];
+      if (visual.frame!.tint !== null) {
+        frame.tint = visual.frame!.tint;
       }
 
       layer.addChild(frame);
@@ -1093,26 +874,20 @@ function buildNode(layer: Container, node: Scene['nodes'][number], resources: Re
   }
 
   if (!drew) {
-    const radius = Math.max(1.2, node.radius);
-    const disc = new Graphics().circle(node.x, node.y, radius).fill({
-      color: KIND_COLOR[node.kind] ?? 0xffffff,
-      alpha: node.allocated ? 1 : 0.4,
+    const disc = new Graphics().circle(node.x, node.y, visual.fallback.radius).fill({
+      color: visual.fallback.color,
+      alpha: visual.fallback.alpha,
     });
     layer.addChild(disc);
   }
 
-  if (node.kind === 'jewel' && node.jewel) {
-    const frame = node.frameSize > 0 ? node.frameSize : node.iconSize;
-    const color = RARITY_COLOR[node.jewel.rarity ?? ''] ?? 0xd6d6d6;
-    const iconUrl = node.jewel.icon;
-
-    const sprite = iconUrl ? urlSprite(iconUrl, node.x, node.y, frame * 0.62, tex) : null;
+  if (visual.jewel) {
+    const sprite = visual.jewel.iconUrl ? urlSprite(visual.jewel.iconUrl, node.x, node.y, visual.jewel.spriteSize, tex) : null;
 
     if (sprite) {
       layer.addChild(sprite);
     } else {
-      const radius = Math.max(2, frame * 0.2);
-      const gem = new Graphics().circle(node.x, node.y, radius).fill({ color });
+      const gem = new Graphics().circle(node.x, node.y, visual.jewel.gemRadius).fill({ color: visual.jewel.gemColor });
       layer.addChild(gem);
     }
   }
@@ -1344,19 +1119,14 @@ function drawOverlay(
 
   // The active ascendancy's nodes are drawn relocated into the hub; its overlay
   // (preview/highlight/hover) must carry the same offset or it lands far away.
-  const disc = activeAscendancy ? scene.centre.ascendancies.find((a) => a.id === activeAscendancy) : undefined;
-  const ascOx = disc ? scene.centre.centre.x - disc.worldAnchor.x : 0;
-  const ascOy = disc ? scene.centre.centre.y - disc.worldAnchor.y : 0;
+  const ascOffset = ascendancyOffset(scene, activeAscendancy);
   const offsetFor = (ascendancy?: string): [number, number] =>
-    ascendancy && ascendancy === activeAscendancy ? [ascOx, ascOy] : [0, 0];
+    ascOffset && ascendancy && ascendancy === activeAscendancy ? [ascOffset.x, ascOffset.y] : [0, 0];
 
   // Caller-defined edge groups, painted under the preview and rings. Each group
   // strokes its matching connectors in its colour; a later group wins where two
   // share an edge. Widths match the lit rail so a coloured route reads as solid.
   if (edgeOverlays) {
-    const glowWidth = RAIL_GAP + RAIL_WIDTH * 2.5;
-    const coreWidth = RAIL_GAP + RAIL_WIDTH * 1.5;
-
     for (const overlay of edgeOverlays) {
       if (overlay.edges.size === 0) {
         continue;
@@ -1374,28 +1144,16 @@ function drawOverlay(
 
         const [ox, oy] = offsetFor(conn.ascendancy);
         addConnPaths(g, [conn], ox, oy);
-        g.stroke({ width: glowWidth, color: overlay.color, alpha: 0.3, cap: 'round' });
+        g.stroke({ width: EDGE_OVERLAY_GLOW_WIDTH, color: overlay.color, alpha: 0.3, cap: 'round' });
         addConnPaths(g, [conn], ox, oy);
-        g.stroke({ width: coreWidth, color: overlay.color, alpha: 0.95, cap: 'round' });
+        g.stroke({ width: EDGE_OVERLAY_CORE_WIDTH, color: overlay.color, alpha: 0.95, cap: 'round' });
       }
     }
   }
 
-  // Allocation preview rails (under the rings). Widths are world units (like the
-  // base rails), clamped to a small on-screen minimum, matching the Canvas2D
-  // `max(3, 9 * scale)` / `max(1.5, 4 * scale)` so the path tracks the zoom.
+  // Allocation preview rails (under the rings).
   if (preview) {
-    const remove = preview.kind === 'remove';
-    // Add preview takes the paint mode's tint (gold basic, set colours for I/II);
-    // removal is always red.
-    const color = remove ? 0xeb6060 : preview.weaponSet ? WEAPON_SET_COLOR[preview.weaponSet] : 0xffe296;
-    const glow = remove ? 0.35 : 0.4;
-    const core = remove ? 0.95 : 0.98;
-    // The removal line matches the active rail's full width (gap + rail*2) so it
-    // reads as thick as the gold connector it would cut; the add preview stays a
-    // slimmer guide.
-    const glowWidth = remove ? RAIL_GAP + RAIL_WIDTH * 3 : Math.max(9, px(3));
-    const coreWidth = remove ? RAIL_GAP + RAIL_WIDTH * 2 : Math.max(4, px(1.5));
+    const stroke = previewStroke(preview, scale);
 
     for (const conn of scene.connections) {
       if (!preview.edges.has(edgeKey(conn.from, conn.to))) {
@@ -1404,20 +1162,20 @@ function drawOverlay(
 
       // A removal only cuts lit rails: never paint a dim (inactive) connector red,
       // even if a removed node happens to touch one.
-      if (remove && !conn.active) {
+      if (stroke.remove && !conn.active) {
         continue;
       }
 
       const [ox, oy] = offsetFor(conn.ascendancy);
       addConnPaths(g, [conn], ox, oy);
-      g.stroke({ width: glowWidth, color, alpha: glow, cap: 'round' });
+      g.stroke({ width: stroke.glowWidth, color: stroke.color, alpha: stroke.glowAlpha, cap: 'round' });
       addConnPaths(g, [conn], ox, oy);
-      g.stroke({ width: coreWidth, color, alpha: core, cap: 'round' });
+      g.stroke({ width: stroke.coreWidth, color: stroke.color, alpha: stroke.coreAlpha, cap: 'round' });
     }
 
     // Ring every node the click removes, so the preview matches the deletion 1:1
     // even for a lone tip that has no edge between two removed nodes.
-    if (remove) {
+    if (stroke.remove) {
       for (const node of scene.nodes) {
         if (!preview.nodes.has(node.skill)) {
           continue;
@@ -1425,7 +1183,7 @@ function drawOverlay(
 
         const [ox, oy] = offsetFor(node.ascendancy);
         g.circle(node.x + ox, node.y + oy, node.radius * 0.92);
-        g.stroke({ width: coreWidth, color, alpha: core });
+        g.stroke({ width: stroke.coreWidth, color: stroke.color, alpha: stroke.coreAlpha });
       }
     }
   }
@@ -1434,11 +1192,7 @@ function drawOverlay(
   // via the resolved highlightStyle; pulseMs 0 freezes it at the peak.
   if (highlight && highlight.size > 0) {
     const hs = highlightStyle;
-    const pulse = hs.pulseMs > 0 ? (Math.sin(performance.now() / hs.pulseMs) + 1) / 2 : 1;
-    const lerp = (range: [number, number]): number => range[0] + pulse * (range[1] - range[0]);
-    const glowAlpha = lerp(hs.glowAlpha);
-    const coreAlpha = lerp(hs.coreAlpha);
-    const grow = pulse * hs.pulseGrow;
+    const pulse = highlightPulse(hs, performance.now());
 
     for (const node of scene.nodes) {
       if (!highlight.has(node.skill) || node.kind === 'mastery') {
@@ -1446,9 +1200,9 @@ function drawOverlay(
       }
 
       const [ox, oy] = offsetFor(node.ascendancy);
-      const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + px(hs.radius + grow);
-      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(hs.glowWidth), color: hs.glowColor, alpha: glowAlpha });
-      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(hs.coreWidth), color: hs.coreColor, alpha: coreAlpha });
+      const outline = outlineBase(node) + px(hs.radius + pulse.grow);
+      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(hs.glowWidth), color: hs.glowColor, alpha: pulse.glowAlpha });
+      g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(hs.coreWidth), color: hs.coreColor, alpha: pulse.coreAlpha });
     }
   }
 
@@ -1458,9 +1212,8 @@ function drawOverlay(
 
     if (node && node.kind !== 'mastery') {
       const [ox, oy] = offsetFor(node.ascendancy);
-      const outline = (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2 + px(3);
+      const outline = outlineBase(node) + px(3);
       g.circle(node.x + ox, node.y + oy, outline).stroke({ width: px(2), color: 0xffffff });
     }
   }
 }
-

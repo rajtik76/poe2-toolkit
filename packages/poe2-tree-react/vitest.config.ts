@@ -9,11 +9,13 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      // No thresholds yet: TreeView.tsx is one large canvas component and
-      // dominates the denominator. Add a floor once its logic is extracted
-      // into testable modules.
+      // The visual decisions and pan/zoom arithmetic live in sceneStyle.ts and
+      // interaction.ts (both fully covered); TreeView.tsx is the pixi execution
+      // layer, exercised by the host app's browser snapshot tests instead, so
+      // the line floor sits low while branches/functions stay strict.
       include: ['src/**'],
-      exclude: ['src/index.ts'],
+      exclude: ['src/index.ts', 'src/types.ts', 'src/resources.ts'],
+      thresholds: { statements: 25, branches: 90, functions: 90, lines: 25 },
     },
   },
 });
