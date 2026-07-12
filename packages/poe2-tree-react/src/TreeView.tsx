@@ -55,9 +55,9 @@ export interface TreeViewProps {
   /** Fires when a press starts on the canvas (pan/empty click) — e.g. to dismiss popovers. */
   onInteractStart?: () => void;
   /**
-   * Hover feedback out: the skill id (or null when leaving all nodes) and, when
-   * hovering a node, its centre in canvas pixels — so callers can anchor UI
-   * (e.g. an attribute picker) to the node.
+   * Hover feedback out: the skill id (or null when leaving all nodes or the
+   * canvas itself) and, when hovering a node, its centre in canvas pixels — so
+   * callers can anchor UI (e.g. an attribute picker) to the node.
    */
   onNodeHover?: (skill: number | null, screen?: { x: number; y: number }) => void;
   /**
@@ -611,6 +611,35 @@ export function TreeView({
     [scene, sync, onNodeHover, activeAscendancy, highlight, preview, edgeOverlays, zoomAt],
   );
 
+  // Leaving the canvas ends the hover: without this, a pointer that moves onto
+  // overlaid UI (or off the component entirely) stops producing moves and the
+  // caller's tooltip stays pinned to the last hovered node. Touch pointers are
+  // exempt — they always "leave" on lift, which would wipe the tap-driven
+  // detail the caller just showed.
+  const onPointerLeave = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.pointerType === 'touch' || hoverRef.current === null) {
+        return;
+      }
+
+      hoverRef.current = null;
+      onNodeHover?.(null);
+      drawOverlay(
+        overlayRef.current,
+        sceneRef.current,
+        viewportRef.current,
+        null,
+        highlightRef.current,
+        previewRef.current,
+        activeAscendancyRef.current,
+        highlightStyleRef.current,
+        colorsRef.current,
+        edgeOverlaysRef.current,
+      );
+    },
+    [onNodeHover],
+  );
+
   const onPointerUp = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -731,6 +760,7 @@ export function TreeView({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onPointerLeave={onPointerLeave}
       onLostPointerCapture={(event) => {
         dragRef.current = null;
         pointersRef.current.delete(event.pointerId);
