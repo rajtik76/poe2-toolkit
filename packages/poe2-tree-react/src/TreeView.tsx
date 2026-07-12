@@ -1,12 +1,13 @@
 import type { Scene, Viewport, WorldRect } from '@poe2-toolkit/tree-core';
 import { Application, BitmapText, Container, Graphics, ImageSource, Rectangle, Sprite, Texture } from 'pixi.js';
-import { useCallback, useEffect, useImperativeHandle, useRef } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, Ref } from 'react';
 import { isDragMotion, pinchSpread, resolveZoomLimits, wheelZoomFactor, ZOOM_STEP, zoomedViewport } from './interaction.js';
 import type { RenderResources } from './resources.js';
 import {
   ascendancyOffset,
   DEFAULT_HIGHLIGHT,
+  DEFAULT_TREE_COLORS,
   EDGE_OVERLAY_CORE_WIDTH,
   EDGE_OVERLAY_GLOW_WIDTH,
   highlightPulse,
@@ -16,13 +17,14 @@ import {
   previewStroke,
   railPasses,
   resolveHighlightStyle,
+  resolveTreeColors,
 } from './sceneStyle.js';
 import { effectKeyFor } from './spriteKeys.js';
-import type { AllocationPreview, CentreSprite, EdgeOverlay, HighlightStyle, ResolvedHighlightStyle, ZoomLimits } from './types.js';
+import type { AllocationPreview, CentreSprite, EdgeOverlay, HighlightStyle, ResolvedHighlightStyle, ResolvedTreeColors, TreeColors, ZoomLimits } from './types.js';
 import type { ResolvedZoom } from './viewport.js';
 import { centreViewport, clampViewport, edgeKey, hitTest, viewportForRect, worldToScreen } from './viewport.js';
 
-export type { AllocationPreview, CentreSprite, EdgeOverlay, HighlightStyle, ZoomLimits } from './types.js';
+export type { AllocationPreview, CentreSprite, EdgeOverlay, HighlightStyle, TreeColors, ZoomLimits } from './types.js';
 
 export interface TreeViewProps {
   /** Computed geometry from `@poe2-toolkit/tree-core`'s `buildScene`. */
@@ -96,6 +98,12 @@ export interface TreeViewProps {
    * keep its default; omit the whole prop for the standing teal pulse.
    */
   highlightStyle?: HighlightStyle;
+  /**
+   * Allocation palette — the weapon-set tints and the removal-preview colour.
+   * Omit any field to keep its default; omit the whole prop for the in-game
+   * colours (set I red, set II green) with a magenta removal preview.
+   */
+  colors?: TreeColors;
   /** Debug: draw each node's skill id over it, to cross-check geometry/edges. */
   debugIds?: boolean;
   /** Zoom and pan extents. Omit any field to keep its default. */
@@ -144,6 +152,7 @@ export function TreeView({
   focus,
   highlight,
   highlightStyle,
+  colors,
   debugIds,
   zoom,
   className,
@@ -197,6 +206,16 @@ export function TreeView({
   // without re-subscribing. Kept current in the effect below (never during render).
   const highlightStyleRef = useRef<ResolvedHighlightStyle>(DEFAULT_HIGHLIGHT);
 
+  // Resolved allocation palette. Memoised on the fields, not the object, so a
+  // fresh literal with the same values never rebuilds the scene graph. The ref
+  // mirrors it for the ticker and sync (kept current in the effect below).
+  const resolvedColors = useMemo(
+    () => resolveTreeColors(colors),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [colors?.weaponSet1, colors?.weaponSet2, colors?.removePreview],
+  );
+  const colorsRef = useRef<ResolvedTreeColors>(DEFAULT_TREE_COLORS);
+
   // Apply the current viewport to the world container and refresh the overlay.
   // O(1) — no sprite touches. Stable (reads refs), so panning/zooming never
   // rebuilds the scene graph.
@@ -219,6 +238,7 @@ export function TreeView({
       previewRef.current,
       activeAscendancyRef.current,
       highlightStyleRef.current,
+      colorsRef.current,
       edgeOverlaysRef.current,
     );
 
@@ -309,6 +329,7 @@ export function TreeView({
               previewRef.current,
               activeAscendancyRef.current,
               highlightStyleRef.current,
+              colorsRef.current,
               edgeOverlaysRef.current,
             );
           }
@@ -345,12 +366,13 @@ export function TreeView({
     // a still ring (pulseMs 0) is drawn once by the sync() below, no ticker cost.
     highlightActiveRef.current = Boolean(highlight && highlight.size > 0 && resolvedStyle.pulseMs > 0);
     activeAscendancyRef.current = activeAscendancy;
+    colorsRef.current = resolvedColors;
     limitsRef.current = resolveZoomLimits(zoom);
     sync();
     // Depend on zoom's fields, not the object: a fresh literal with the same
     // values must not re-run the effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, highlight, highlightStyle, preview, edgeOverlays, activeAscendancy, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
+  }, [scene, highlight, highlightStyle, preview, edgeOverlays, activeAscendancy, resolvedColors, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
 
   // ---- Scene graph build ---------------------------------------------------
 
@@ -375,6 +397,7 @@ export function TreeView({
       activeAscendancy,
       texRef.current,
       debugIds ?? false,
+      resolvedColors,
     );
 
     // Centre the view on first build, then keep it across rebuilds.
@@ -385,7 +408,7 @@ export function TreeView({
     }
 
     sync();
-  }, [scene, resources, centreSprites, activeClassId, activeAscendancy, debugIds, sync]);
+  }, [scene, resources, centreSprites, activeClassId, activeAscendancy, debugIds, resolvedColors, sync]);
 
   useEffect(() => {
     rebuildRef.current = rebuild;
@@ -582,7 +605,7 @@ export function TreeView({
         hoverRef.current = hit;
         const node = hit !== null ? scene.nodes.find((candidate) => candidate.skill === hit) : undefined;
         onNodeHover?.(hit, node ? worldToScreen(viewport, node.x, node.y) : undefined);
-        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null, activeAscendancy, highlightStyleRef.current, edgeOverlays ?? null);
+        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null, activeAscendancy, highlightStyleRef.current, colorsRef.current, edgeOverlays ?? null);
       }
     },
     [scene, sync, onNodeHover, activeAscendancy, highlight, preview, edgeOverlays, zoomAt],
@@ -744,6 +767,7 @@ function buildScene(
   activeAscendancy: string | undefined,
   tex: TexCtx,
   debugIds: boolean,
+  colors: ResolvedTreeColors,
 ): void {
   const { centreLayer, effectLayer, connLayer, nodeLayer, ascLayer, labelLayer } = layers;
 
@@ -773,14 +797,14 @@ function buildScene(
 
   // Main map excludes ascendancy nodes/edges: they live far out in world space
   // and are only drawn relocated into the hub when their disc is active (below).
-  buildConnections(connLayer, scene.connections, false);
+  buildConnections(connLayer, scene.connections, false, colors);
 
   for (const node of scene.nodes) {
     if (node.ascendancy) {
       continue;
     }
 
-    buildNode(nodeLayer, node, resources, tex);
+    buildNode(nodeLayer, node, resources, tex, colors);
 
     if (debugIds) {
       labelLayer.addChild(idLabel(node.skill, node.x, node.y));
@@ -795,12 +819,12 @@ function buildScene(
     ascLayer.position.set(offset.x, offset.y);
     const ascConns = scene.connections.filter((conn) => conn.ascendancy === activeAscendancy);
     const ascGraphics = new Graphics();
-    buildConnections(ascGraphics, ascConns, true);
+    buildConnections(ascGraphics, ascConns, true, colors);
     ascLayer.addChild(ascGraphics);
 
     for (const node of scene.nodes) {
       if (node.ascendancy === activeAscendancy) {
-        buildNode(ascLayer, node, resources, tex);
+        buildNode(ascLayer, node, resources, tex, colors);
 
         // Debug ids live on the (un-offset) label layer, so add the disc's
         // relocation offset to land each label on its relocated node.
@@ -813,8 +837,8 @@ function buildScene(
 }
 
 /** Draw all connections as twin parallel rails into a Graphics (world units). */
-function buildConnections(g: Graphics, connections: Scene['connections'], ascendancyOnly: boolean | null): void {
-  for (const pass of railPasses(connections, ascendancyOnly)) {
+function buildConnections(g: Graphics, connections: Scene['connections'], ascendancyOnly: boolean | null, colors: ResolvedTreeColors): void {
+  for (const pass of railPasses(connections, ascendancyOnly, colors)) {
     addConnPaths(g, pass.connections);
     g.stroke({ width: pass.width, color: pass.color, cap: 'round' });
   }
@@ -840,8 +864,8 @@ function addConnPaths(g: Graphics, connections: Scene['connections'], ox = 0, oy
 }
 
 /** Build a node's icon + frame sprites (and jewel gem) into the layer. */
-function buildNode(layer: Container, node: Scene['nodes'][number], resources: RenderResources | undefined, tex: TexCtx): void {
-  const visual = nodeVisual(node);
+function buildNode(layer: Container, node: Scene['nodes'][number], resources: RenderResources | undefined, tex: TexCtx, colors: ResolvedTreeColors): void {
+  const visual = nodeVisual(node, colors);
 
   if (!visual) {
     return; // mastery — drawn as its effect pattern
@@ -1107,6 +1131,7 @@ function drawOverlay(
   preview: AllocationPreview | null,
   activeAscendancy: string | undefined,
   highlightStyle: ResolvedHighlightStyle,
+  colors: ResolvedTreeColors,
   edgeOverlays: EdgeOverlay[] | null = null,
 ): void {
   if (!g || !viewport) {
@@ -1153,15 +1178,15 @@ function drawOverlay(
 
   // Allocation preview rails (under the rings).
   if (preview) {
-    const stroke = previewStroke(preview, scale);
+    const stroke = previewStroke(preview, scale, colors);
 
     for (const conn of scene.connections) {
       if (!preview.edges.has(edgeKey(conn.from, conn.to))) {
         continue;
       }
 
-      // A removal only cuts lit rails: never paint a dim (inactive) connector red,
-      // even if a removed node happens to touch one.
+      // A removal only cuts lit rails: never paint a dim (inactive) connector in
+      // the removal colour, even if a removed node happens to touch one.
       if (stroke.remove && !conn.active) {
         continue;
       }

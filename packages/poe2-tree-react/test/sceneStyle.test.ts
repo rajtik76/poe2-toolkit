@@ -10,12 +10,14 @@ import { describe, expect, it } from 'vitest';
 import {
   ascendancyOffset,
   DEFAULT_HIGHLIGHT,
+  DEFAULT_TREE_COLORS,
   highlightPulse,
   nodeVisual,
   outlineBase,
   previewStroke,
   railPasses,
   resolveHighlightStyle,
+  resolveTreeColors,
 } from '../src/sceneStyle';
 import type { AllocationPreview } from '../src/types';
 
@@ -60,10 +62,16 @@ describe('nodeVisual', () => {
   });
 
   it('tints an allocated weapon-set frame but never a basic or unallocated one', () => {
-    expect(nodeVisual(node({ allocated: true, weaponSet: 1 }))!.frame!.tint).toBe(0x4fbf7a);
-    expect(nodeVisual(node({ allocated: true, weaponSet: 2 }))!.frame!.tint).toBe(0x4fa8ff);
+    expect(nodeVisual(node({ allocated: true, weaponSet: 1 }))!.frame!.tint).toBe(0xe05252);
+    expect(nodeVisual(node({ allocated: true, weaponSet: 2 }))!.frame!.tint).toBe(0x4fbf7a);
     expect(nodeVisual(node({ allocated: true }))!.frame!.tint).toBeNull();
     expect(nodeVisual(node({ allocated: false, weaponSet: 1 }))!.frame!.tint).toBeNull();
+  });
+
+  it('tints a weapon-set frame with the caller\'s palette', () => {
+    const colors = resolveTreeColors({ weaponSet1: 0x111111 });
+
+    expect(nodeVisual(node({ allocated: true, weaponSet: 1 }), colors)!.frame!.tint).toBe(0x111111);
   });
 
   it('describes the vector fall-back disc by kind and allocation', () => {
@@ -102,7 +110,7 @@ describe('railPasses', () => {
       0x7d6836, // bronze outer rail
       0x000000, // its gap
       0xfcde86, 0xfcde86, // basic gold outer + gap
-      0x4fa8ff, 0x4fa8ff, // set II over it
+      0x4fbf7a, 0x4fbf7a, // set II over it
     ]);
     expect(passes[0]!.width).toBeGreaterThan(passes[1]!.width);
     expect(passes[0]!.connections).toEqual([inactive]);
@@ -127,6 +135,13 @@ describe('railPasses', () => {
   it('returns nothing for no connections', () => {
     expect(railPasses([], false)).toEqual([]);
   });
+
+  it('paints active set rails with the caller\'s palette', () => {
+    const colors = resolveTreeColors({ weaponSet2: 0x222222 });
+    const passes = railPasses([activeSet2], false, colors);
+
+    expect(passes.map((pass) => pass.color)).toEqual([0x222222, 0x222222]);
+  });
 });
 
 describe('previewStroke', () => {
@@ -135,13 +150,20 @@ describe('previewStroke', () => {
 
   it('paints an add preview gold, or in the weapon set\'s colour', () => {
     expect(previewStroke(preview('add'), 1).color).toBe(0xffe296);
-    expect(previewStroke(preview('add', 1), 1).color).toBe(0x4fbf7a);
+    expect(previewStroke(preview('add', 1), 1).color).toBe(0xe05252);
   });
 
-  it('paints a removal red at the full rail width regardless of zoom', () => {
+  it('paints a removal magenta at the full rail width regardless of zoom', () => {
     const stroke = previewStroke(preview('remove'), 0.1);
 
-    expect(stroke).toMatchObject({ remove: true, color: 0xeb6060, glowWidth: 4.8 + 3.6 * 3, coreWidth: 4.8 + 3.6 * 2 });
+    expect(stroke).toMatchObject({ remove: true, color: 0xff4fa8, glowWidth: 4.8 + 3.6 * 3, coreWidth: 4.8 + 3.6 * 2 });
+  });
+
+  it('paints with the caller\'s palette when supplied', () => {
+    const colors = resolveTreeColors({ weaponSet1: 0x111111, removePreview: 0x333333 });
+
+    expect(previewStroke(preview('add', 1), 1, colors).color).toBe(0x111111);
+    expect(previewStroke(preview('remove'), 1, colors).color).toBe(0x333333);
   });
 
   it('clamps the add guide to an on-screen minimum when zoomed in', () => {
@@ -149,6 +171,21 @@ describe('previewStroke', () => {
     expect(previewStroke(preview('add'), 2)).toMatchObject({ glowWidth: 9, coreWidth: 4 });
     // Zoomed out (scale 0.1): widths track the zoom to stay readable.
     expect(previewStroke(preview('add'), 0.1)).toMatchObject({ glowWidth: 30, coreWidth: 15 });
+  });
+});
+
+describe('resolveTreeColors', () => {
+  it('resolves a partial palette against the in-game-colour defaults', () => {
+    const resolved = resolveTreeColors({ removePreview: 0x123456 });
+
+    expect(resolved.removePreview).toBe(0x123456);
+    expect(resolved.weaponSet).toEqual(DEFAULT_TREE_COLORS.weaponSet);
+    expect(resolveTreeColors(undefined)).toEqual(DEFAULT_TREE_COLORS);
+  });
+
+  it('defaults to the in-game weapon-set colours: set I red, set II green', () => {
+    expect(DEFAULT_TREE_COLORS.weaponSet[1]).toBe(0xe05252);
+    expect(DEFAULT_TREE_COLORS.weaponSet[2]).toBe(0x4fbf7a);
   });
 });
 

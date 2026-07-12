@@ -22,6 +22,27 @@ export interface ZoomLimits {
 }
 
 /**
+ * Tunable allocation palette (all optional; see defaults on each field). The
+ * defaults mirror the in-game weapon-set colours: set I red, set II green. The
+ * removal preview defaults to magenta so it reads apart from both sets and from
+ * the gold basic tree.
+ */
+export interface TreeColors {
+  /** Weapon set I tint (node frames, active rails, add preview). Default `0xe05252` (red). */
+  weaponSet1?: number;
+  /** Weapon set II tint (node frames, active rails, add preview). Default `0x4fbf7a` (green). */
+  weaponSet2?: number;
+  /** Removal-preview stroke colour (cut rails and removed-node rings). Default `0xff4fa8` (magenta). */
+  removePreview?: number;
+}
+
+/** {@link TreeColors} with every field resolved to a concrete value. */
+export interface ResolvedTreeColors {
+  weaponSet: Record<1 | 2, number>;
+  removePreview: number;
+}
+
+/**
  * Tunable look of the search-highlight rings (all optional; see defaults on
  * each field). Two concentric strokes are drawn per matched node: a soft wide
  * `glow` and a bright thin `core`, both pulsing in alpha and radius.
@@ -67,7 +88,8 @@ export interface ResolvedHighlightStyle {
 export interface AllocationPreview {
   /**
    * Whether the pending click would allocate (`add`) or deallocate (`remove`).
-   * Drives the colour: `add` uses gold (or the weapon set's tint), `remove` red.
+   * Drives the colour: `add` uses gold (or the weapon set's tint), `remove` the
+   * removal colour ({@link TreeColors.removePreview}).
    */
   kind: 'add' | 'remove';
   /**

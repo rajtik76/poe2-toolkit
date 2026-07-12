@@ -102,9 +102,10 @@ skill-icon atlas, not a separate inactive one.
 
 **Weapon sets.** When the scene's nodes/rails carry a `weaponSet` tag (set by
 `core.buildScene` from the build's `weaponSets`), `TreeView` tints them apart
-from the gold basic tree: set I green, set II blue, on both the node frame and
-its active rail. A rail bridging the two sets is drawn inactive, since it belongs
-to neither set's view.
+from the gold basic tree: set I red, set II green by default (the in-game
+colours), on both the node frame and its active rail. A rail bridging the two
+sets is drawn inactive, since it belongs to neither set's view. The set tints
+and the removal-preview colour are tunable through the `colors` prop.
 
 The hub artwork (class portrait and ornate ring) comes in through the optional
 `centreSprites` prop, holding up to three `CentreSprite`s (`portrait`,
@@ -121,10 +122,11 @@ placeholder.
   activeClassId={classId}       // rotates the active ring onto the class
   activeAscendancy={ascId}      // relocates that ascendancy disc into the hub
   centreSprites={centreSprites} // optional portrait + ring artwork
-  preview={preview}             // hover highlight: pending add (gold, or the set's tint) / remove (red, ringing each removed node)
+  preview={preview}             // hover highlight: pending add (gold, or the set's tint) / remove (magenta, ringing each removed node)
   edgeOverlays={overlays}       // paint groups of edges, each in its own colour (a diff, a route, a plan)
   highlight={searchHits}        // skill ids to ring with a standing teal ring (e.g. search hits)
   highlightStyle={ringStyle}    // tune the highlight rings' colours, widths and pulse
+  colors={palette}              // tune the weapon-set tints + removal-preview colour (defaults: set I red, set II green, removal magenta)
   focus={worldRect}             // pass a fresh rect to pan + zoom-fit to it
   wheelZoom                     // turn on wheel zoom (off by default)
   debugIds                      // overlay each node's skill id (debug; off by default)

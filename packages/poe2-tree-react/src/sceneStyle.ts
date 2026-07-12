@@ -7,7 +7,7 @@
 
 import type { Scene } from '@poe2-toolkit/tree-core';
 import { frameKeyFor, iconKeyFor } from './spriteKeys.js';
-import type { AllocationPreview, HighlightStyle, ResolvedHighlightStyle } from './types.js';
+import type { AllocationPreview, HighlightStyle, ResolvedHighlightStyle, ResolvedTreeColors, TreeColors } from './types.js';
 
 /** Defaults for {@link HighlightStyle} — the standing teal search pulse. */
 export const DEFAULT_HIGHLIGHT: ResolvedHighlightStyle = {
@@ -33,14 +33,30 @@ const RAIL_GAP_ACTIVE = 0xfcde86;
 const RAIL_GAP_INACTIVE = 0x000000;
 
 /**
- * Tint for weapon-set allocations: set I green, set II blue, keeping the basic
- * tree on its gold rail. Applied to set nodes' frames and their active rails so
- * each weapon set reads apart in the single combined view.
+ * Defaults for {@link TreeColors}. Weapon sets mirror the in-game colours (set I
+ * red, set II green), keeping the basic tree on its gold rail; the tint is
+ * applied to set nodes' frames and their active rails so each weapon set reads
+ * apart in the single combined view. The removal preview is magenta: still a
+ * warning hue, but distinct from the red of set I and the gold chrome.
  */
-export const WEAPON_SET_COLOR: Record<1 | 2, number> = {
-  1: 0x4fbf7a,
-  2: 0x4fa8ff,
+export const DEFAULT_TREE_COLORS: ResolvedTreeColors = {
+  weaponSet: {
+    1: 0xe05252,
+    2: 0x4fbf7a,
+  },
+  removePreview: 0xff4fa8,
 };
+
+/** Resolve a caller-supplied palette against the in-game-colour defaults. */
+export function resolveTreeColors(colors: TreeColors | undefined): ResolvedTreeColors {
+  return {
+    weaponSet: {
+      1: colors?.weaponSet1 ?? DEFAULT_TREE_COLORS.weaponSet[1],
+      2: colors?.weaponSet2 ?? DEFAULT_TREE_COLORS.weaponSet[2],
+    },
+    removePreview: colors?.removePreview ?? DEFAULT_TREE_COLORS.removePreview,
+  };
+}
 
 /** Multiply tint for unallocated node icons: 50% grey = half brightness, hue kept. */
 const ICON_DIM = 0x808080;
@@ -99,7 +115,7 @@ export interface RailPass {
  * @param ascendancyOnly - `false` renders the main map (ascendancy edges are
  *   skipped); `true` renders a relocated ascendancy disc's own edges.
  */
-export function railPasses(connections: Scene['connections'], ascendancyOnly: boolean | null): RailPass[] {
+export function railPasses(connections: Scene['connections'], ascendancyOnly: boolean | null, colors: ResolvedTreeColors = DEFAULT_TREE_COLORS): RailPass[] {
   const visible = (conn: Scene['connections'][number]): boolean =>
     !(ascendancyOnly === false && conn.ascendancy);
 
@@ -123,7 +139,7 @@ export function railPasses(connections: Scene['connections'], ascendancyOnly: bo
       continue;
     }
 
-    const color = set === undefined ? RAIL_GAP_ACTIVE : WEAPON_SET_COLOR[set];
+    const color = set === undefined ? RAIL_GAP_ACTIVE : colors.weaponSet[set];
     passes.push({ connections: want, width: RAIL_GAP + RAIL_WIDTH * 2, color });
     passes.push({ connections: want, width: RAIL_GAP, color });
   }
@@ -147,7 +163,7 @@ export interface NodeVisual {
  * Every visual decision for one node: sprite keys, tints and fall-backs.
  * Returns null for mastery nodes — they are drawn as their effect pattern.
  */
-export function nodeVisual(node: Scene['nodes'][number]): NodeVisual | null {
+export function nodeVisual(node: Scene['nodes'][number], colors: ResolvedTreeColors = DEFAULT_TREE_COLORS): NodeVisual | null {
   if (node.kind === 'mastery') {
     return null;
   }
@@ -160,7 +176,7 @@ export function nodeVisual(node: Scene['nodes'][number]): NodeVisual | null {
   // tree; basic nodes keep the untinted frame.
   const visual: NodeVisual = {
     icon: iconKey ? { key: iconKey, tint: node.allocated ? null : ICON_DIM } : null,
-    frame: frameKey ? { key: frameKey, tint: node.allocated && node.weaponSet ? WEAPON_SET_COLOR[node.weaponSet] : null } : null,
+    frame: frameKey ? { key: frameKey, tint: node.allocated && node.weaponSet ? colors.weaponSet[node.weaponSet] : null } : null,
     fallback: {
       radius: Math.max(1.2, node.radius),
       color: KIND_COLOR[node.kind] ?? 0xffffff,
@@ -220,18 +236,18 @@ export interface PreviewStroke {
 
 /**
  * The allocation preview's stroke: add takes the paint mode's tint (gold basic,
- * set colours for I/II), removal is always red. The removal line matches the
- * active rail's full width (gap + rail*2) so it reads as thick as the gold
- * connector it would cut; the add preview stays a slimmer zoom-tracking guide,
- * clamped to a small on-screen minimum (matching the Canvas2D
- * `max(3, 9 * scale)` / `max(1.5, 4 * scale)`).
+ * set colours for I/II), removal always the palette's removal colour. The
+ * removal line matches the active rail's full width (gap + rail*2) so it reads
+ * as thick as the gold connector it would cut; the add preview stays a slimmer
+ * zoom-tracking guide, clamped to a small on-screen minimum (matching the
+ * Canvas2D `max(3, 9 * scale)` / `max(1.5, 4 * scale)`).
  */
-export function previewStroke(preview: AllocationPreview, scale: number): PreviewStroke {
+export function previewStroke(preview: AllocationPreview, scale: number, colors: ResolvedTreeColors = DEFAULT_TREE_COLORS): PreviewStroke {
   const remove = preview.kind === 'remove';
 
   return {
     remove,
-    color: remove ? 0xeb6060 : preview.weaponSet ? WEAPON_SET_COLOR[preview.weaponSet] : 0xffe296,
+    color: remove ? colors.removePreview : preview.weaponSet ? colors.weaponSet[preview.weaponSet] : 0xffe296,
     glowAlpha: remove ? 0.35 : 0.4,
     coreAlpha: remove ? 0.95 : 0.98,
     glowWidth: remove ? RAIL_GAP + RAIL_WIDTH * 3 : Math.max(9, 3 / scale),
