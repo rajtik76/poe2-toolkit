@@ -16,7 +16,10 @@ import { buildGemIcons } from './buildIcons.js';
 import type { GemIconsResult } from './buildIcons.js';
 
 export { buildGems, gemStatRequirement, stripBbcode } from './buildGems.js';
-export type { GemData, Gem, GemReq, GemLevel, GemRequirement, GemKind, GemColor } from './buildGems.js';
+export type {
+  GemData, Gem, GemReq, GemLevel, GemRequirement, GemKind, GemColor,
+  GemStatLine, GemLevelScaling, GemScaling,
+} from './buildGems.js';
 
 export { buildGemIcons } from './buildIcons.js';
 export type { GemIconsResult } from './buildIcons.js';

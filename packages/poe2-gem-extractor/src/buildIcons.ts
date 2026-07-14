@@ -1,7 +1,7 @@
 /**
- * Decodes the gem icons referenced by {@link GemData} into PNGs, keyed by their
- * output path (the GGPK DDS path with a `.png` extension). One PNG per distinct
- * icon. Source: GGPK only.
+ * Decodes the gem icons and hover-art backgrounds referenced by {@link GemData}
+ * into PNGs, keyed by their output path (the GGPK DDS path with a `.png`
+ * extension). One PNG per distinct path. Source: GGPK only.
  *
  * Unlike the legacy script this has no vendored fallback: an icon the source
  * cannot serve is skipped and reported, never pulled from a bundled asset.
@@ -43,6 +43,10 @@ export async function buildGemIcons(source: DdsSource, data: GemData): Promise<G
   for (const gem of Object.values(data.gems)) {
     if (gem.icon && gem.icon.toLowerCase().endsWith('.dds')) {
       ddsPaths.add(gem.icon);
+    }
+
+    if (gem.hoverImage && gem.hoverImage.toLowerCase().endsWith('.dds')) {
+      ddsPaths.add(gem.hoverImage);
     }
   }
 
