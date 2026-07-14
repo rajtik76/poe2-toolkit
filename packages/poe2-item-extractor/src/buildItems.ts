@@ -26,6 +26,25 @@ export interface ItemReq {
   int: number;
 }
 
+/**
+ * Base defensive stats of an armour or shield base, in the base's own raw units
+ * (before quality and mods). A `0` field means the base carries that defence but
+ * at value 0; a `null` {@link Item.armour} means the base has no defensive row at
+ * all (weapons, jewels, flasks, ...) - the two are distinct.
+ */
+export interface ItemArmour {
+  /** Base armour rating (`ArmourTypes.Armour`). */
+  armour: number;
+  /** Base evasion rating (`ArmourTypes.Evasion`). */
+  evasion: number;
+  /** Base energy shield (`ArmourTypes.EnergyShield`). */
+  energyShield: number;
+  /** Base ward (`ArmourTypes.Ward`). */
+  ward: number;
+  /** Base block chance (`ShieldTypes.Block`); non-zero only on shields. */
+  block: number;
+}
+
 /** One displayable item: a normal-rarity base or a unique. */
 export interface Item {
   /** `unique` if the item is a unique, else `normal` (an ordinary base). */
@@ -61,6 +80,16 @@ export interface Item {
    * (unknown) base type, so read it as *not populated*, not "no requirement".
    */
   req: ItemReq;
+  /**
+   * Base defensive stats from `ArmourTypes` / `ShieldTypes` (armour, evasion,
+   * energy shield, ward, block), or `null` when the base has no defensive row -
+   * weapons, jewels, flasks and every other non-armour base. Always `null` on a
+   * unique: .dat has no unique-to-base-type link (see {@link Item.req} /
+   * {@link Item.tags} / {@link Item.itemClass}), so a unique's defences live on
+   * its unknown base and are not populated here. A `null` object means "no
+   * defensive row"; a `0` field means "has the stat, value 0".
+   */
+  armour: ItemArmour | null;
   /**
    * The unique's flavour / lore text as separate lines (GGG stores explicit line
    * breaks that matter for display), or `null` for bases and any unique without
@@ -219,6 +248,8 @@ interface ItemClassRow { Id?: string }
 interface TagRow { Id?: string }
 interface ItemVisualIdentityRow { Id?: string; DDSFile?: string; AOFile?: string }
 interface AttributeRequirementRow { BaseItemType?: number | null; ReqStr?: number; ReqDex?: number; ReqInt?: number }
+interface ArmourTypeRow { BaseItemType?: number | null; Armour?: number; Evasion?: number; EnergyShield?: number; Ward?: number }
+interface ShieldTypeRow { BaseItemType?: number | null; Block?: number }
 
 /** One unique's slot in the unique stash: name, icon and category by row index. */
 interface UniqueStashLayoutRow {
@@ -266,6 +297,46 @@ function refineFlaskCategory(category: string | null, aoFile: string | undefined
   return category;
 }
 
+/**
+ * Merge `ArmourTypes` (armour / evasion / energy shield / ward) and `ShieldTypes`
+ * (block) into one {@link ItemArmour} per `BaseItemTypes` index. Both tables key
+ * on a `BaseItemType` row index, the same join as `AttributeRequirements`; a
+ * shield appears in both, an ordinary armour only in `ArmourTypes`. A base absent
+ * from both is absent from the map (yields `null`, not zeros), so a consumer can
+ * tell "no defensive row" from "row present, stat 0".
+ */
+function armourByBaseIndex(ArmourTypes: ArmourTypeRow[], ShieldTypes: ShieldTypeRow[]): Map<number, ItemArmour> {
+  const map = new Map<number, ItemArmour>();
+
+  for (const row of ArmourTypes) {
+    if (row.BaseItemType != null) {
+      map.set(row.BaseItemType, {
+        armour: row.Armour ?? 0,
+        evasion: row.Evasion ?? 0,
+        energyShield: row.EnergyShield ?? 0,
+        ward: row.Ward ?? 0,
+        block: 0,
+      });
+    }
+  }
+
+  for (const row of ShieldTypes) {
+    if (row.BaseItemType == null) {
+      continue;
+    }
+
+    const existing = map.get(row.BaseItemType);
+
+    if (existing) {
+      existing.block = row.Block ?? 0;
+    } else {
+      map.set(row.BaseItemType, { armour: 0, evasion: 0, energyShield: 0, ward: 0, block: row.Block ?? 0 });
+    }
+  }
+
+  return map;
+}
+
 /** Split GGG flavour text into trimmed non-empty lines, or `null` when empty. */
 function splitFlavourText(text: string): string[] | null {
   const lines = text
@@ -285,6 +356,8 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
   const ItemClasses = (await source.table('ItemClasses')) as ItemClassRow[];
   const ItemVisualIdentity = (await source.table('ItemVisualIdentity')) as ItemVisualIdentityRow[];
   const AttributeRequirements = (await source.table('AttributeRequirements')) as AttributeRequirementRow[];
+  const ArmourTypes = (await source.table('ArmourTypes')) as ArmourTypeRow[];
+  const ShieldTypes = (await source.table('ShieldTypes')) as ShieldTypeRow[];
   const Tags = (await source.table('Tags')) as TagRow[];
 
   const reqByBaseIndex = new Map<number, AttributeRequirementRow>();
@@ -294,6 +367,8 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
       reqByBaseIndex.set(row.BaseItemType, row);
     }
   }
+
+  const armourByBase = armourByBaseIndex(ArmourTypes, ShieldTypes);
 
   const items: ItemData = {};
 
@@ -328,6 +403,7 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
         dex: req?.ReqDex ?? 0,
         int: req?.ReqInt ?? 0,
       },
+      armour: armourByBase.get(baseIndex) ?? null,
       flavourText: null,
       modDomain: modDomainName(base.ModDomain),
       tags: effectiveTags(base.Tags ?? [], classId, Tags),
@@ -397,6 +473,7 @@ async function addUniques(
       category,
       twoHanded: category != null && TWO_HANDED_CATEGORIES.has(category),
       req: { str: 0, dex: 0, int: 0 },
+      armour: null,
       flavourText,
       modDomain: null,
       tags: [],

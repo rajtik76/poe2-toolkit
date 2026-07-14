@@ -59,7 +59,7 @@ The two steps are exported separately too: `buildItems(source)` for the data and
 `buildItemIcons(source, data)` for the PNGs.
 
 Field-level docs live on the exported types themselves - `Item`, `ItemReq`,
-`ItemIconsResult` - so your editor shows each field's meaning on hover and they
+`ItemArmour`, `ItemIconsResult` - so your editor shows each field's meaning on hover and they
 ship in the `.d.ts`. The rest of this section is the shape and the rules that the
 types alone don't tell you.
 
@@ -77,6 +77,7 @@ Each value is an `Item`. A normal base and a unique:
   "category": null,
   "twoHanded": false,
   "req": { "str": 60, "dex": 0, "int": 0 },
+  "armour": { "armour": 145, "evasion": 0, "energyShield": 0, "ward": 0, "block": 0 },
   "flavourText": null,
   "modDomain": "Item",
   "tags": ["armour", "body_armour", "default", "str_armour", "vaal_basetype"]
@@ -89,6 +90,7 @@ Each value is an `Item`. A normal base and a unique:
   "category": "Body Armour",
   "twoHanded": false,
   "req": { "str": 0, "dex": 0, "int": 0 },
+  "armour": null,
   "flavourText": ["The warrior who fears will fall."],
   "modDomain": null,
   "tags": []
@@ -111,6 +113,12 @@ Every field is present on every entry, but which ones carry a value follows from
 - **`req` on a unique is always `{ str: 0, dex: 0, int: 0 }`** - the requirement
   lives on the unique's (unknown) base type, so treat it as *not populated*, not
   as "no requirement". A base's `req` is the real str/dex/int to equip.
+- **`armour` is the base's defensive stats** (`armour`, `evasion`, `energyShield`,
+  `ward` from `ArmourTypes`, `block` from `ShieldTypes`), or `null` when the base
+  has no defensive row - weapons, jewels, flasks, every non-armour base. A shield
+  merges both tables into one value; an ordinary armour has `block: 0`. A `null`
+  object means "no defensive row", a `0` field means "has the stat, value 0". It
+  is always `null` on a unique, the same not-populated caveat as `req`.
 - **`twoHanded` is derived**, from `itemClass` for bases and from the weapon
   `category` for uniques, so it is correct for uniques even without a base type.
 - **`flavourText` is the unique's lore**, as separate lines (GGG stores explicit
@@ -183,9 +191,23 @@ publish step left to you.
 
 ## How it works
 
+> **Required tables.** `buildItems` reads these GGPK tables through the source:
+> `BaseItemTypes`, `ItemClasses`, `ItemVisualIdentity`, `AttributeRequirements`,
+> `ArmourTypes`, `ShieldTypes`, `Tags`, `UniqueStashLayout`, `Words`,
+> `UniqueStashTypes`, `FlavourText`. A `createCdnSource` reads each from
+> `tablesDir` on demand, so your dat extract must decode all of them - a missing
+> table throws when the build reaches it. `ArmourTypes` and `ShieldTypes` are new
+> in this line; add them to your extract config when upgrading.
+
 - **Normal bases** join `BaseItemTypes` to its `ItemClasses`, `ItemVisualIdentity`
-  (icon) and `AttributeRequirements`. Only displayable equipment bases (those
-  with a visual identity) are kept; `[DNT]` dev placeholders are dropped.
+  (icon), `AttributeRequirements` and `ArmourTypes` / `ShieldTypes` (defences).
+  Only displayable equipment bases (those with a visual identity) are kept; `[DNT]`
+  dev placeholders are dropped.
+- **Defensive stats** come from `ArmourTypes` (armour / evasion / energy shield /
+  ward) and `ShieldTypes` (block), both keyed on the `BaseItemTypes` row index like
+  `AttributeRequirements`. A shield is in both tables and its values are merged; a
+  base in neither carries `armour: null`, so "no defensive row" stays distinct from
+  "row present, stat 0".
 - **Uniques** come from `UniqueStashLayout` (the authoritative unique list),
   joined with `Words` for the name, `ItemVisualIdentity` for the icon and
   `UniqueStashTypes` for the category. .dat has no unique-to-base-type link (the
