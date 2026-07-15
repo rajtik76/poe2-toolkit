@@ -293,8 +293,10 @@ They are pure graph functions, free of any rendering concern.
 ```ts
 import { buildTreeGraph, toggleAllocation } from '@poe2-toolkit/tree-core';
 
-// Build the walkable adjacency graph once and reuse it across clicks.
-const graph = buildTreeGraph(data);
+// Build the walkable adjacency graph once and reuse it across clicks. Pass the
+// active class's start node so paths stay within that class and can't route
+// through another class's start.
+const graph = buildTreeGraph(data, classStartNode);
 
 // Click a node: allocate the shortest path to it from the class start, or, if it
 // is already allocated, remove it and everything beyond it.
