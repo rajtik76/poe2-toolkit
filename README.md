@@ -85,6 +85,12 @@ That's the whole loop: **the core computes where everything goes, React draws it
 and reports clicks.** Add atlas `resources` for real art - see
 [`tree-react`](./packages/poe2-tree-react) for graphics and the full prop list.
 
+## Used by
+
+**[exile2exile](https://github.com/rajtik76/exile2exile)** is a free, open-source
+Path of Exile 2 companion - build planner, passive tree, loot filter generator,
+and shareable builds - built on top of this toolkit's packages.
+
 ## Live demo and patch webhook
 
 A running instance of the passive tree built from these packages is live at
