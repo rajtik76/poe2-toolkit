@@ -120,16 +120,17 @@ unsubscribe endpoints, and retry behavior.
 | [`@poe2-toolkit/item-extractor`](./packages/poe2-item-extractor) | Builds item data and icons from a GGPK source. | Ready |
 | [`@poe2-toolkit/gem-extractor`](./packages/poe2-gem-extractor) | Builds gem data and icons from a GGPK source. | Ready |
 | [`@poe2-toolkit/rune-extractor`](./packages/poe2-rune-extractor) | Builds rune / soul-core data from a GGPK source (data only). | Ready |
+| [`@poe2-toolkit/mod-extractor`](./packages/poe2-mod-extractor) | Builds item-mod data - affix ranges, tiers and spawn tags - from a GGPK source (data only). | Ready |
 
 ## How it fits together
 
 ```
                     @poe2-toolkit/ggpk          fetch + decode GGPK / patch server
                           |                     (GgpkSource: table() / file())
-        +-----------+-----------+-----------+
-        v           v           v           v
-     tree-       item-       gem-        rune-       extraction: data in, typed data out
-   extractor   extractor   extractor   extractor
+        +-----------+-----------+-----------+-----------+
+        v           v           v           v           v
+     tree-       item-       gem-        rune-        mod-       extraction: data in, typed data out
+   extractor   extractor   extractor   extractor    extractor
         |
         v
    tree-core  -->  tree-react                        rendering: scene in, pixels out
