@@ -187,6 +187,7 @@ interface TreeNode {
   unlockAscendancy?: string;
   unlockNodes?: number[];          // ids that must all be allocated to reveal it
   classesStart?: string[];         // class-start node: which classes start here
+  recipe?: string[];               // crafting/recipe hint lines, when present
 }
 ```
 

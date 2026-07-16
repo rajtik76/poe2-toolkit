@@ -37,7 +37,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@poe2-toolkit/ggpk": "^0.3.0"
+    "@poe2-toolkit/ggpk": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

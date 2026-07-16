@@ -26,7 +26,7 @@ export type { GemIconsResult } from './buildIcons.js';
 
 /** Everything the extractor produces for one game version. */
 export interface GemBundle {
-  /** The gem data (gems + per-level requirement curves). */
+  /** The gem data (gems + per-level requirement curves + tooltip scaling). */
   data: GemData;
   /** Decoded icon PNGs plus a report of what packed or was skipped. */
   icons: GemIconsResult;

@@ -3,7 +3,7 @@
  * Command-line entry: extract item data + icons from the patch CDN and write
  * them to an output directory (`items.json` and the icon PNG tree under `icons/`).
  *
- *   poe2-item-extract --patch 4.5.3.1.8 --tables ./tables/English \
+ *   poe2-item-extract --patch 4.5.4.1 --tables ./tables/English \
  *                     --cache ./.cache --out ./out/items
  */
 

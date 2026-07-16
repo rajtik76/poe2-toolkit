@@ -6,7 +6,7 @@
  * Output is PNG + JSON, mirroring the renderer's atlas layout. Converting the
  * PNGs to WebP for the web is a separate publish step, left to the consumer.
  *
- *   poe2-tree-extract --patch 4.5.3.1.7 --tables ./tables/English \
+ *   poe2-tree-extract --patch 4.5.4.1 --tables ./tables/English \
  *                     --cache ./.cache --out ./out/tree
  */
 

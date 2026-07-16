@@ -4,7 +4,7 @@
  *
  * The package is source-agnostic: it never downloads anything itself. Pass any
  * `@poe2-toolkit/ggpk` source (the CDN-backed `createCdnSource`, or your own) and it
- * returns the `data.json` payload, the four sprite atlases, and the centre art —
+ * returns the `data.json` payload, the three sprite atlases, and the centre art —
  * all as plain data, ready to write wherever you publish them.
  */
 
@@ -44,7 +44,7 @@ export type { CentreSource } from './buildCentre.js';
 export interface TreeBundle {
   /** The `data.json` payload (`@poe2-toolkit/tree-core`'s normalize input). */
   data: TreeExport;
-  /** The four sprite atlases plus a report of what packed or was skipped. */
+  /** The three sprite atlases plus a report of what packed or was skipped. */
   graphics: GraphicsResult;
   /** Centre art keyed by output name (e.g. `portrait-ranger`), PNG bytes. */
   centre: Record<string, Buffer>;

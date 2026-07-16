@@ -105,7 +105,9 @@ skill-icon atlas, not a separate inactive one.
 from the gold basic tree: set I red, set II green by default (the in-game
 colours), on both the node frame and its active rail. A rail bridging the two
 sets is drawn inactive, since it belongs to neither set's view. The set tints
-and the removal-preview colour are tunable through the `colors` prop.
+and the removal-preview colour are tunable through the `colors` prop; the
+defaults are also exported as `DEFAULT_TREE_COLORS` if you want to extend
+rather than replace them.
 
 The hub artwork (class portrait and ornate ring) comes in through the optional
 `centreSprites` prop, holding up to three `CentreSprite`s (`portrait`,

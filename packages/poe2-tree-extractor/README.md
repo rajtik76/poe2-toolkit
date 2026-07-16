@@ -108,9 +108,10 @@ coordinates and stat text vary per extract. The rules the types don't spell out:
 - **Geometry is optional.** Graph nodes carry `group`/`orbit`/`orbitIndex`/`x`/`y`
   and `out`; data-only class-override nodes (swapped in per class) carry only
   `skill`/`name`/`icon`/`stats`, no coordinates or edges.
-- **The passive-point budget is split.** `maxBasicPoints` is what the main tree
-  can spend at the level cap; `maxWeaponSetPoints` is how far a single weapon set
-  may additionally diverge. Both are computed from GGPK, never hardcoded.
+- **The passive-point budget is split.** `maxWeaponSetPoints` is every campaign
+  weapon-set passive point; `maxBasicPoints` is the level-based budget **plus**
+  `maxWeaponSetPoints` folded in, so it already covers spending those points on
+  the shared tree too. Both are computed from GGPK, never hardcoded.
 
 ### `graphics`: the sprite atlases (`GraphicsResult`)
 
@@ -170,8 +171,9 @@ publish step left to you.
   `WeaponPassives` column of `QuestStaticRewards`, summed; optional non-campaign
   grants like fishing and logbook runes are filtered out by their `QuestFlags`
   id, as Path of Building also excludes them). `maxBasicPoints` adds one point
-  per level above the first (the level cap from `ExperienceLevels`). The
-  exporter config must request `QuestStaticRewards`, `QuestFlags` and
+  per level above the first (the level cap from `ExperienceLevels`) **plus**
+  `maxWeaponSetPoints`, since those points can also be spent on the shared tree.
+  The exporter config must request `QuestStaticRewards`, `QuestFlags` and
   `ExperienceLevels`.
 - **Sprites** are decoded from GGPK DDS art and packed into atlases keyed exactly
   as the renderer expects. Skill icons pack a single colour sprite per node; the
