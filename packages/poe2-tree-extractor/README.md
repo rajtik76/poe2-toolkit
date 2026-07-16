@@ -128,6 +128,12 @@ asymmetry with `skills`/`masteryEffects` is intentional.
 `ascendancy-deadeye`, `ring-static`, ...), which the CLI writes as files under
 `centre/`.
 
+Unlike `graphics`, this is all-or-nothing: a class/ascendancy row or hub ring
+sprite the source cannot serve throws rather than being skipped. Centre art has
+no in-game "skip and dim" fallback the way an unallocated node icon does, so a
+silently incomplete set is worse than a hard failure - callers should retry
+rather than treat a caught error as "no centre art this patch".
+
 ## CLI: write the bundle to disk
 
 When you do want files, the bundled CLI writes the whole bundle to a

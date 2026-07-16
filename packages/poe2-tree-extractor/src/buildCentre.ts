@@ -26,7 +26,15 @@ function isReleased(asc: AscendancyRow): boolean {
   return Boolean(asc.Name) && !asc.Name!.includes('[DNT') && !asc.Disabled;
 }
 
-/** Decode a DDS path to a PNG buffer, or `null` if the source can't serve it. */
+/**
+ * Decode a DDS path to a PNG buffer, or `null` when the row simply has no art
+ * (no path, or not a `.dds` reference). A row that DOES name a `.dds` file but
+ * whose bytes cannot be fetched or decoded (e.g. the patch CDN has not finished
+ * propagating a freshly released version) throws rather than being skipped -
+ * silently omitting it would stage an incomplete release that promotes as if
+ * it were whole. See the Contract suite's centre-art completeness test, which
+ * is the last-resort gate if this ever regresses.
+ */
 async function emit(source: CentreSource, ddsPath: string | undefined): Promise<Buffer | null> {
   if (!ddsPath?.toLowerCase().endsWith('.dds')) {
     return null;
@@ -34,7 +42,11 @@ async function emit(source: CentreSource, ddsPath: string | undefined): Promise<
 
   const img = await source.dds(ddsPath);
 
-  return img ? encodePng(img.width, img.height, img.rgba) : null;
+  if (!img) {
+    throw new Error(`centre art source could not serve ${ddsPath}`);
+  }
+
+  return encodePng(img.width, img.height, img.rgba);
 }
 
 /**
@@ -82,10 +94,17 @@ export async function buildCentre(source: CentreSource): Promise<Record<string, 
     }
   }
 
-  // Hub ring: static ornate circle + active-class edge marker.
+  // Hub ring: static ornate circle + active-class edge marker. Unlike class/
+  // ascendancy art these are never conditionally absent, so an unresolved
+  // sprite is a hard failure too, not a skip.
   for (const { out: name, name: logical } of RING) {
     const ref = await source.resolveSprite(logical);
-    const png = ref ? await emit(source, ref.path) : null;
+
+    if (!ref) {
+      throw new Error(`could not resolve hub ring sprite: ${logical}`);
+    }
+
+    const png = await emit(source, ref.path);
 
     if (png) {
       out[name] = png;
