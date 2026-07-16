@@ -51,7 +51,7 @@ describe('CdnCachingLoader', () => {
 
     expect(got).toEqual(bytes);
     // Raw slashes on the wire, `@`-flattened on disk.
-    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(`${HOST}/${PATCH}/Bundles2/${NAME}`);
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(`${HOST}/${PATCH}/Bundles2/${NAME}`, expect.anything());
     const cached = await readFile(join(cacheDir, NAME.replace(/\//g, '@')));
     expect(new Uint8Array(cached)).toEqual(bytes);
   });
@@ -82,6 +82,6 @@ describe('CdnCachingLoader', () => {
 
     await loader.fetchFile(NAME);
 
-    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(`https://example.test/${PATCH}/Bundles2/${NAME}`);
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(`https://example.test/${PATCH}/Bundles2/${NAME}`, expect.anything());
   });
 });

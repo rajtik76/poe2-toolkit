@@ -26,7 +26,13 @@ const DXGI_BGRA8 = new Set([87, 88]); // B8G8R8A8_UNORM(_SRGB)
  * @returns The decoded {@link RgbaImage}.
  * @throws If the buffer is not a DDS or its format is unsupported.
  */
+const MAX_DIMENSION = 8192; // generous upper bound for any real PoE2 texture
+
 export function decodeDds(buf: Uint8Array): RgbaImage {
+  if (buf.byteLength < 128) {
+    throw new Error(`truncated DDS header: need at least 128 bytes, have ${buf.byteLength}`);
+  }
+
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
   if (dv.getUint32(0, true) !== 0x20534444) {
@@ -35,12 +41,21 @@ export function decodeDds(buf: Uint8Array): RgbaImage {
 
   const height = dv.getUint32(12, true);
   const width = dv.getUint32(16, true);
+
+  if (width === 0 || height === 0 || width > MAX_DIMENSION || height > MAX_DIMENSION) {
+    throw new Error(`implausible DDS dimensions ${width}x${height}`);
+  }
+
   const fourCC = String.fromCharCode(buf[84]!, buf[85]!, buf[86]!, buf[87]!);
 
   let kind: BlockKind;
   let dataOffset: number;
 
   if (fourCC === 'DX10') {
+    if (buf.byteLength < 148) {
+      throw new Error(`truncated DX10 DDS header: need at least 148 bytes, have ${buf.byteLength}`);
+    }
+
     const dxgi = dv.getUint32(128, true);
     dataOffset = 148;
 
@@ -74,9 +89,16 @@ export function decodeDds(buf: Uint8Array): RgbaImage {
     }
   }
 
-  const rgba = new Uint8Array(width * height * 4);
   const blocksX = Math.max(1, width >> 2);
   const blocksY = Math.max(1, height >> 2);
+  const bytesPerBlock = kind === 'bc1' ? 8 : 16;
+  const needed = dataOffset + blocksX * blocksY * bytesPerBlock;
+
+  if (buf.byteLength < needed) {
+    throw new Error(`truncated DDS: need ${needed} bytes for ${width}x${height} ${kind}, have ${buf.byteLength}`);
+  }
+
+  const rgba = new Uint8Array(width * height * 4);
   let p = dataOffset;
 
   for (let by = 0; by < blocksY; by++) {

@@ -116,14 +116,32 @@ export function buildStatIndex(csd: string): StatIndex {
 
     i += 1;
 
+    if (i >= lines.length) {
+      throw new Error(`malformed stat_descriptions.csd: "description" at line ${i - 1} has no header line`);
+    }
+
     // "\t<N> <id1> ... <idN>"
     const header = lines[i]!.trim().split(/\s+/);
     const statCount = Number(header[0]);
+
+    if (!Number.isInteger(statCount) || statCount < 0 || header.length < 1 + statCount) {
+      throw new Error(`malformed stat_descriptions.csd: bad stat-count header "${lines[i]}" at line ${i}`);
+    }
+
     const statIds = header.slice(1, 1 + statCount);
     i += 1;
 
+    if (i >= lines.length) {
+      throw new Error(`malformed stat_descriptions.csd: header at line ${i - 1} has no line-count line`);
+    }
+
     // English line count (first language block, before any `lang`).
     const lineCount = Number(lines[i]!.trim());
+
+    if (!Number.isInteger(lineCount) || lineCount < 0) {
+      throw new Error(`malformed stat_descriptions.csd: bad line count "${lines[i]}" at line ${i}`);
+    }
+
     i += 1;
 
     const variants: Variant[] = [];

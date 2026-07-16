@@ -72,6 +72,9 @@ export interface CdnSourceOptions {
 
 const DEFAULT_CDN_HOST = 'https://patch-poe2.poecdn.com';
 
+/** Patch server can stall; give up rather than hang extraction forever. */
+const FETCH_TIMEOUT_MS = 30_000;
+
 /** GGG's bundle root under each patch version on the CDN. */
 const BUNDLES_DIR = 'Bundles2';
 
@@ -102,7 +105,9 @@ export class CdnCachingLoader implements BundleLoader {
       /* not cached yet */
     }
 
-    const res = await fetch(`${this.cdnHost}/${this.patch}/${BUNDLES_DIR}/${name}`);
+    const res = await fetch(`${this.cdnHost}/${this.patch}/${BUNDLES_DIR}/${name}`, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
 
     if (!res.ok) {
       throw new Error(`CDN ${res.status} ${name}`);
@@ -141,7 +146,13 @@ export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSou
   }
 
   async function table(name: string): Promise<TableRow[]> {
-    return JSON.parse(await readFile(join(tablesDir, `${name}.json`), 'utf8')) as TableRow[];
+    const parsed: unknown = JSON.parse(await readFile(join(tablesDir, `${name}.json`), 'utf8'));
+
+    if (!Array.isArray(parsed)) {
+      throw new Error(`table "${name}" is not an array (got ${typeof parsed}) - the tables directory may be stale or corrupted`);
+    }
+
+    return parsed as TableRow[];
   }
 
   async function dds(path: string): Promise<RgbaImage | null> {
@@ -150,12 +161,18 @@ export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSou
     }
 
     let image: RgbaImage | null = null;
+    const bytes = await file(path); // null: not on the CDN for this patch, a genuine miss
 
-    try {
-      const bytes = await file(path);
-      image = bytes ? decodeDds(bytes) : null;
-    } catch {
-      image = null; // CDN 404 or undecodable
+    if (bytes) {
+      try {
+        image = decodeDds(bytes);
+      } catch (error) {
+        // Unlike a CDN miss, this is bytes we *did* get but couldn't decode - a
+        // format the decoder doesn't handle or a regression in it. Still skipped
+        // like a miss (no vendored fallback), but surfaced so it isn't silently
+        // folded into the same "missing" bucket as an expected absence.
+        console.warn(`[poe2-toolkit/ggpk] failed to decode DDS at "${path}": ${(error as Error).message}`);
+      }
     }
 
     ddsCache.set(path, image);
