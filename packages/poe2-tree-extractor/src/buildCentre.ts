@@ -10,6 +10,8 @@
 import { encodePng   } from '@poe2-toolkit/ggpk';
 import type {GgpkImageSource, GgpkSource} from '@poe2-toolkit/ggpk';
 
+import { assertRequiredRows } from './assertRequiredRows.js';
+
 interface CharacterRow { Name: string; PassiveTreeImage?: string }
 interface AscendancyRow { Name?: string; Character?: number | null; Disabled?: boolean; PassiveTreeImage?: string }
 
@@ -54,8 +56,8 @@ async function emit(source: CentreSource, ddsPath: string | undefined): Promise<
  * `portrait-ranger`, `ascendancy-deadeye`, `ring-static`) to its PNG bytes.
  */
 export async function buildCentre(source: CentreSource): Promise<Record<string, Buffer>> {
-  const Characters = (await source.table('Characters')) as unknown as CharacterRow[];
-  const Ascendancy = (await source.table('Ascendancy')) as unknown as AscendancyRow[];
+  const Characters = assertRequiredRows<CharacterRow>(await source.table('Characters'), 'Characters', ['Name']);
+  const Ascendancy = (await source.table('Ascendancy')) as AscendancyRow[];
 
   const out: Record<string, Buffer> = {};
 

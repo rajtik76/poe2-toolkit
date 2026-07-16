@@ -154,7 +154,18 @@ interface ModRow {
   Level?: number;
   SpawnWeight_Tags?: number[];
   SpawnWeight_Values?: number[];
-  [statColumn: string]: unknown;
+  Stat1?: number | null;
+  Stat1Value?: [number, number];
+  Stat2?: number | null;
+  Stat2Value?: [number, number];
+  Stat3?: number | null;
+  Stat3Value?: [number, number];
+  Stat4?: number | null;
+  Stat4Value?: [number, number];
+  Stat5?: number | null;
+  Stat5Value?: [number, number];
+  Stat6?: number | null;
+  Stat6Value?: [number, number];
 }
 
 interface ModTypeRow { Name?: string }
@@ -229,14 +240,17 @@ function readRolls(mod: ModRow, Stats: StatRow[]): ModRoll[] {
   const rolls: ModRoll[] = [];
 
   for (let slot = 1; slot <= STAT_SLOTS; slot += 1) {
-    const statIndex = mod[`Stat${slot}`] as number | null | undefined;
+    // `Stat1..Stat6`/`Stat1Value..Stat6Value` are declared fields on `ModRow`, not
+    // an open index signature - the cast below only ever names one of those six
+    // pairs, so it can't silently accept a typo'd or unrelated column.
+    const statIndex = mod[`Stat${slot}` as keyof ModRow] as number | null | undefined;
 
     if (statIndex == null) {
       continue;
     }
 
     const stat = Stats[statIndex]?.Id;
-    const value = mod[`Stat${slot}Value`] as [number, number] | undefined;
+    const value = mod[`Stat${slot}Value` as keyof ModRow] as [number, number] | undefined;
 
     if (typeof stat !== 'string' || !value) {
       continue;

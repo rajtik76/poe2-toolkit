@@ -117,6 +117,8 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
     // "Spell and Minion Damage" art over the generic "Spell Damage").
     const overrideTarget = overridePairs?.[node.skill];
     const overrideIcon = overrideTarget !== undefined ? data.nodes[overrideTarget]?.icon : undefined;
+    const isAllocated = allocated.has(node.skill);
+    const weaponSet = weaponSetOf(node.skill);
 
     nodes.push({
       skill: node.skill,
@@ -130,10 +132,8 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
       iconSize: size.icon * 2,
       frameSize: size.overlay * 2,
       radius: Math.max(size.icon, size.overlay),
-      allocated: allocated.has(node.skill),
-      ...(allocated.has(node.skill) && weaponSetOf(node.skill) !== undefined
-        ? { weaponSet: weaponSetOf(node.skill) as WeaponSet }
-        : {}),
+      allocated: isAllocated,
+      ...(isAllocated && weaponSet !== undefined ? { weaponSet } : {}),
       ...(node.ascendancyName !== undefined ? { ascendancy: node.ascendancyName } : {}),
       // Display-only jewel socketed here (from the build); no radius effect.
       ...(opts.allocation?.jewels?.[node.skill] ? { jewel: opts.allocation.jewels[node.skill] } : {}),

@@ -7,13 +7,10 @@
  * cannot serve is skipped and reported, never pulled from a bundled asset.
  */
 
-import { encodePng } from '@poe2-toolkit/ggpk';
-import type { GgpkImageSource, RgbaImage } from '@poe2-toolkit/ggpk';
+import { decodeDdsIcons } from '@poe2-toolkit/ggpk';
+import type { DdsIconsResult, DdsSource, RgbaImage } from '@poe2-toolkit/ggpk';
 
 import type { ItemData } from './buildItems.js';
-
-/** The only capability the icon build needs: decode a DDS by its GGPK path. */
-type DdsSource = Pick<GgpkImageSource, 'dds'>;
 
 /** Number of layer frames a flask icon sheet packs side by side. */
 const FLASK_FRAMES = 3;
@@ -85,45 +82,21 @@ function renderFlaskIcon(img: RgbaImage): RgbaImage {
 }
 
 /** Decoded icons plus a count of what was packed or skipped. */
-export interface ItemIconsResult {
-  /** PNG bytes keyed by output path (`<dds path without extension>.png`). */
-  icons: Record<string, Buffer>;
-  report: { packed: number; missing: number };
-}
-
-/** Replace a trailing `.dds` (any case) with `.png`. */
-function toPngPath(ddsPath: string): string {
-  return `${ddsPath.slice(0, -4)}.png`;
-}
+export type ItemIconsResult = DdsIconsResult;
 
 /**
- * Decode every distinct item icon in `data` from the {@link GgpkImageSource}.
- * The source is responsible for path casing; the returned keys keep the original case.
+ * Decode every distinct item icon in `data` from the {@link DdsSource}. The
+ * source is responsible for path casing; the returned keys keep the original
+ * case. Flask sheets are composited to their final icon (see {@link isFlaskSheet}).
  */
 export async function buildItemIcons(source: DdsSource, data: ItemData): Promise<ItemIconsResult> {
-  const ddsPaths = new Set<string>();
+  const ddsPaths: string[] = [];
 
   for (const item of Object.values(data)) {
     if (item.icon && item.icon.toLowerCase().endsWith('.dds')) {
-      ddsPaths.add(item.icon);
+      ddsPaths.push(item.icon);
     }
   }
 
-  const icons: Record<string, Buffer> = {};
-  let missing = 0;
-
-  for (const ddsPath of ddsPaths) {
-    const decoded = await source.dds(ddsPath);
-
-    if (!decoded) {
-      missing += 1;
-      continue;
-    }
-
-    const img = isFlaskSheet(ddsPath, decoded) ? renderFlaskIcon(decoded) : decoded;
-
-    icons[toPngPath(ddsPath)] = encodePng(img.width, img.height, img.rgba);
-  }
-
-  return { icons, report: { packed: Object.keys(icons).length, missing } };
+  return decodeDdsIcons(source, ddsPaths, (img, ddsPath) => (isFlaskSheet(ddsPath, img) ? renderFlaskIcon(img) : img));
 }

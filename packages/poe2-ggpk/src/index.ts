@@ -15,3 +15,6 @@ export { encodePng, decodePng } from './image/png.js';
 
 export { buildStatIndex, renderBlock } from './statDescriptions.js';
 export type { StatIndex, RenderedBlock } from './statDescriptions.js';
+
+export { decodeDdsIcons } from './decodeDdsIcons.js';
+export type { DdsSource, DdsIconsResult } from './decodeDdsIcons.js';

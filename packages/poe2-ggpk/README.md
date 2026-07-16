@@ -103,6 +103,7 @@ one place rather than being reimplemented per extractor:
 | `decodePng(bytes)` | Decode an 8-bit RGBA/RGB PNG to RGBA8. |
 | `buildStatIndex(csd)` | Parse a `stat_descriptions.csd` (UTF-16 text) into a per-stat index. |
 | `renderBlock(index, statIds, vals)` | Render numeric `(stat, value)` pairs into human-readable lines. |
+| `decodeDdsIcons(source, ddsPaths, transform?)` | Decode a set of distinct DDS paths to PNG, skipping and reporting what the source can't serve. |
 
 `buildStatIndex` returns a `StatIndex`; pass it to `renderBlock` along with
 parallel `statIds`/`vals` arrays. `renderBlock` returns a `RenderedBlock` with
@@ -111,8 +112,32 @@ block). `RgbaImage` (`{ width, height, rgba }`) is the shape returned by every
 image decoder. All of these types are exported; see the exported types for full
 field docs.
 
+`decodeDdsIcons` is the icon-decode loop every icon-shipping extractor (item,
+gem, rune) runs: given a `DdsSource` (anything with a `dds(path)` method) and an
+iterable of DDS paths, it decodes each distinct path to PNG and returns a
+`DdsIconsResult` (`{ icons, report: { packed, missing } }`) - no vendored
+fallback, a path the source can't serve or decode is just skipped and counted.
+The optional `transform(img, ddsPath)` hook runs on the decoded image before
+encoding, for extractor-specific post-processing (e.g. item-extractor's
+flask-sheet compositing).
+
 All of it is pure TypeScript with no native dependencies, which keeps extraction
 portable across machines and CI.
+
+## CLI building blocks (`@poe2-toolkit/ggpk/cli`)
+
+A separate subpath export for extractor CLIs, kept out of the main entry since
+it's a CLI-authoring concern rather than part of the GGPK access layer:
+
+| Export | What it does |
+| --- | --- |
+| `parseExtractorArgs(argv, usage)` | Parse `--patch/--tables/--cache/--out`; throws with `usage` on a missing flag. |
+| `writeIconTree(iconsDir, icons)` | Write a `{ path: png }` icon map under `iconsDir`, creating subdirectories as needed. |
+| `runCli(main)` | Run a CLI `main`, printing its error to stderr and setting exit code 1 on failure. |
+
+Every extractor's CLI is a few lines of package-specific output on top of these
+three: parse the flags, `createCdnSource`, run the extractor, write its output,
+print a summary.
 
 ## A note on `pathofexile-dat`
 

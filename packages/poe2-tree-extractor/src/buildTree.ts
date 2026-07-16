@@ -13,6 +13,7 @@
 import { buildStatIndex, renderBlock   } from '@poe2-toolkit/ggpk';
 import type {GgpkSource, StatIndex} from '@poe2-toolkit/ggpk';
 
+import { assertRequiredRows } from './assertRequiredRows.js';
 import { parsePsg } from './psg.js';
 import type { Psg, PsgNode } from './psg.js';
 
@@ -366,10 +367,15 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   const Stats = (await source.table('Stats')) as StatRow[];
   const MasteryGroups = (await source.table('PassiveSkillMasteryGroups')) as MasteryGroupRow[];
   const MasteryArt = (await source.table('PassiveSkillTreeMasteryArt')) as MasteryArtRow[];
-  const Characters = (await source.table('Characters')) as unknown as CharacterRow[];
-  const Ascendancy = (await source.table('Ascendancy')) as unknown as AscendancyRow[];
+  const Characters = assertRequiredRows<CharacterRow>(
+    await source.table('Characters'), 'Characters', ['Name', 'BaseStrength', 'BaseDexterity', 'BaseIntelligence'],
+  );
+  const Ascendancy = assertRequiredRows<AscendancyRow>(await source.table('Ascendancy'), 'Ascendancy', ['Id']);
   const JewelSlots = (await source.table('PassiveJewelSlots')) as JewelSlotRow[];
-  const ClassOverrides = (await source.table('ClassPassiveSkillOverrides')) as unknown as ClassOverrideRow[];
+  const ClassOverrides = assertRequiredRows<ClassOverrideRow>(
+    await source.table('ClassPassiveSkillOverrides'), 'ClassPassiveSkillOverrides',
+    ['SkillToOverride', 'Override', 'CharacterToOverrideFor'],
+  );
   const QuestStaticRewards = (await source.table('QuestStaticRewards')) as QuestStaticRewardRow[];
   const ExperienceLevels = (await source.table('ExperienceLevels')) as ExperienceLevelRow[];
   const QuestFlags = (await source.table('QuestFlags')) as QuestFlagRow[];

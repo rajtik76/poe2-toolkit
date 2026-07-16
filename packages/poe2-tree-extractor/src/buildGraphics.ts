@@ -128,7 +128,7 @@ export async function buildGraphics(source: GraphicsSource, tree: TreeExport): P
   // The UIArt "Character" row drives the main tree, "Ascendancy" the disc frames.
   // NodeFrameArt Normal/CanAllocate/Active map to the renderer's states.
 
-  const UIArt = (await source.table('PassiveSkillTreeUIArt')) as unknown as UIArtRow[];
+  const UIArt = (await source.table('PassiveSkillTreeUIArt')) as UIArtRow[];
   const NodeFrameArt = (await source.table('PassiveSkillTreeNodeFrameArt')) as NodeFrameArtRow[];
   const mainUi = UIArt.find((r) => r.Id === 'Character');
   const ascUi = UIArt.find((r) => r.Id === 'Ascendancy');

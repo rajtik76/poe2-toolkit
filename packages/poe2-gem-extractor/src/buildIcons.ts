@@ -7,62 +7,30 @@
  * cannot serve is skipped and reported, never pulled from a bundled asset.
  */
 
-import { encodePng } from '@poe2-toolkit/ggpk';
-import type { GgpkImageSource } from '@poe2-toolkit/ggpk';
+import { decodeDdsIcons } from '@poe2-toolkit/ggpk';
+import type { DdsIconsResult, DdsSource } from '@poe2-toolkit/ggpk';
 
 import type { GemData } from './buildGems.js';
 
-/** The only capability the icon build needs: decode a DDS by its GGPK path. */
-type DdsSource = Pick<GgpkImageSource, 'dds'>;
-
 /** Decoded icons plus a count of what was packed or skipped. */
-export interface GemIconsResult {
-  /** PNG bytes keyed by output path (`<dds path without extension>.png`). */
-  icons: Record<string, Buffer>;
-  /** How the decode went. */
-  report: {
-    /** Distinct icons decoded to PNG successfully. */
-    packed: number;
-    /** Distinct icons the source could not serve or decode (skipped, never substituted). */
-    missing: number;
-  };
-}
-
-/** Replace a trailing `.dds` (any case) with `.png`. */
-function toPngPath(ddsPath: string): string {
-  return `${ddsPath.slice(0, -4)}.png`;
-}
+export type GemIconsResult = DdsIconsResult;
 
 /**
- * Decode every distinct gem icon in `data` from the {@link GgpkImageSource}. The
+ * Decode every distinct gem icon in `data` from the {@link DdsSource}. The
  * source is responsible for path casing; the returned keys keep the original case.
  */
 export async function buildGemIcons(source: DdsSource, data: GemData): Promise<GemIconsResult> {
-  const ddsPaths = new Set<string>();
+  const ddsPaths: string[] = [];
 
   for (const gem of Object.values(data.gems)) {
     if (gem.icon && gem.icon.toLowerCase().endsWith('.dds')) {
-      ddsPaths.add(gem.icon);
+      ddsPaths.push(gem.icon);
     }
 
     if (gem.hoverImage && gem.hoverImage.toLowerCase().endsWith('.dds')) {
-      ddsPaths.add(gem.hoverImage);
+      ddsPaths.push(gem.hoverImage);
     }
   }
 
-  const icons: Record<string, Buffer> = {};
-  let missing = 0;
-
-  for (const ddsPath of ddsPaths) {
-    const img = await source.dds(ddsPath);
-
-    if (!img) {
-      missing += 1;
-      continue;
-    }
-
-    icons[toPngPath(ddsPath)] = encodePng(img.width, img.height, img.rgba);
-  }
-
-  return { icons, report: { packed: Object.keys(icons).length, missing } };
+  return decodeDdsIcons(source, ddsPaths);
 }
