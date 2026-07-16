@@ -1,7 +1,7 @@
 {
   "name": "@poe2-toolkit/rune-extractor",
   "version": "0.4.0",
-  "description": "Builds Path of Exile 2 rune / soul-core data straight from the official GGPK / patch server. Code only - ships no game data or art.",
+  "description": "Builds Path of Exile 2 rune / soul-core data and icons straight from the official GGPK / patch server. Code only - ships no game data or art.",
   "keywords": [
     "path-of-exile",
     "poe2",
