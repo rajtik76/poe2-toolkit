@@ -14,7 +14,8 @@
     "test": "npm run test --workspaces --if-present",
     "test:coverage": "npm run test --workspaces --if-present -- --coverage",
     "lint": "eslint packages",
-    "ci": "npm run build && npm run typecheck && npm run lint && npm run test:coverage"
+    "check:readme": "node scripts/check-readme-packages.mjs",
+    "ci": "npm run build && npm run typecheck && npm run lint && npm run check:readme && npm run test:coverage"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
