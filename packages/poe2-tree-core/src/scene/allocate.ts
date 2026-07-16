@@ -36,8 +36,14 @@ export function freshAllocation(classId: number): BuildAllocation {
  * like it starts at "the nearest point of the circle". Pathing must root at the
  * class start (or the nearest allocated node) and stay in the tree, never cross
  * the hub, so the centre node is excluded.
+ *
+ * Each class start is also a real rim node, linking the two gateways that flank
+ * it. Left walkable, a foreign start lets a path bridge those gateways by stepping
+ * *through* it — a Witch reaching into Monk's sector through the Monk start. So
+ * when `activeStart` is given, every other class's start (a `classesStart` node
+ * whose skill isn't `activeStart`) is excluded.
  */
-function isWalkable(node: TreeNode): boolean {
+function isWalkable(node: TreeNode, activeStart?: number): boolean {
   if (Number.isNaN(node.skill)) {
     return false;
   }
@@ -50,14 +56,22 @@ function isWalkable(node: TreeNode): boolean {
     return false;
   }
 
+  if (activeStart !== undefined && node.classesStart?.length && node.skill !== activeStart) {
+    return false;
+  }
+
   return true;
 }
 
 /**
  * Build the undirected adjacency graph of walkable nodes. Class-start edges are
  * kept (unlike in the drawn scene) so paths can root at the start node.
+ *
+ * Pass `activeStart` to scope the graph to that class: every other class's
+ * start is dropped, so a path can't slip through a foreign start to bridge the
+ * gateways flanking it.
  */
-export function buildTreeGraph(data: TreeData): TreeGraph {
+export function buildTreeGraph(data: TreeData, activeStart?: number): TreeGraph {
   const graph: TreeGraph = new Map();
   const link = (from: number, to: number): void => {
     let set = graph.get(from);
@@ -71,7 +85,7 @@ export function buildTreeGraph(data: TreeData): TreeGraph {
   };
 
   for (const node of Object.values(data.nodes)) {
-    if (!isWalkable(node)) {
+    if (!isWalkable(node, activeStart)) {
       continue;
     }
 
@@ -82,7 +96,7 @@ export function buildTreeGraph(data: TreeData): TreeGraph {
     for (const conn of node.connections) {
       const target = data.nodes[conn.id];
 
-      if (!target || !isWalkable(target)) {
+      if (!target || !isWalkable(target, activeStart)) {
         continue;
       }
 
@@ -272,7 +286,7 @@ export function toggleAllocation(
   startNode: number,
   allocated: ReadonlySet<number>,
   target: number,
-  graph: TreeGraph = buildTreeGraph(data),
+  graph: TreeGraph = buildTreeGraph(data, startNode),
 ): number[] {
   if (target === startNode) {
     return [...allocated];
@@ -425,7 +439,7 @@ export function toggleAllocationInMode(
   current: WeaponSetAllocation,
   target: number,
   mode: AllocMode,
-  graph: TreeGraph = buildTreeGraph(data),
+  graph: TreeGraph = buildTreeGraph(data, startNode),
 ): WeaponSetAllocation {
   if (target === startNode) {
     return current;

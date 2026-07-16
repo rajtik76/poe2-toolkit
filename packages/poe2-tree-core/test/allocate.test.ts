@@ -83,6 +83,36 @@ describe('buildTreeGraph', () => {
     // start, so a path can't cross the centre to the nearest rim.
     expect(pathToNode(graph, new Set([0]), 11)).toBeNull();
   });
+
+  it('drops other class start nodes when scoped to the active class', () => {
+    // Ranger start(0) - 1 - g1(2) ; Witch start(10) flanked by gateways g1(2) and
+    // g2(3), reachable from each other only through the Witch start. A Ranger must
+    // not step through Witch's start to bridge g1 and g2.
+    const shared: TreeData = {
+      ...lineData(),
+      nodes: {
+        0: node(0, [1], { classesStart: ['Ranger'] }),
+        1: node(1, [0, 2]),
+        2: node(2, [1, 10]), // g1
+        3: node(3, [10]), // g2
+        10: node(10, [2, 3], { classesStart: ['Witch'] }), // foreign start bridges g1<->g2
+      },
+    };
+
+    // Class-agnostic graph keeps the foreign start (backwards compatible).
+    const raw = buildTreeGraph(shared);
+    expect(raw.has(10)).toBe(true);
+    expect(pathToNode(raw, new Set([0]), 3)).toEqual([1, 2, 10, 3]); // bridges through Witch start
+
+    // Scoped to Ranger (start 0): Witch's start is dropped, so g2 is unreachable —
+    // g1 and g2 are no longer bridged through the foreign start.
+    const scoped = buildTreeGraph(shared, 0);
+    expect(scoped.has(10)).toBe(false);
+    expect(scoped.get(2)?.has(10)).toBe(false);
+    expect(pathToNode(scoped, new Set([0]), 3)).toBeNull();
+    // toggleAllocation defaults to the scoped graph, so clicking g2 does nothing.
+    expect(toggleAllocation(shared, 0, new Set([1, 2]), 3).sort()).toEqual([1, 2]);
+  });
 });
 
 describe('pathToNode', () => {
