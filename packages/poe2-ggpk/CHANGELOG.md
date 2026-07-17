@@ -4,6 +4,20 @@ All notable changes to `@poe2-toolkit/ggpk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-07-17
+
+### Fixed
+
+- Bundle cache writes are now atomic (temp file + rename). Previously a
+  concurrent `fetchFile` could read a partially written cache file - `readFile`
+  happily returns truncated bytes mid-`writeFile` - and the bundle then failed
+  to decompress with ooz-wasm's "Failed to decode". Impossible to hit before
+  0.6.0's concurrency (fetches never overlapped), near-certain on a cold cache
+  with concurrent extractors or `decodeDdsIcons`' 16-way decode; a warm cache
+  masked it entirely. Also makes one cache directory safe to share across
+  worker threads and processes, whose separate in-flight maps cannot
+  deduplicate each other's fetches.
+
 ## [0.6.0] - 2026-07-17
 
 ### Added

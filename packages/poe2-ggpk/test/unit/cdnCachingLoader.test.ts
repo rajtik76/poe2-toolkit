@@ -7,7 +7,7 @@
  * and no game data and runs in CI.
  */
 
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -103,6 +103,32 @@ describe('CdnCachingLoader', () => {
     stubFetch({ status: 200, body: bytes });
 
     await expect(loader.fetchFile(NAME)).resolves.toEqual(bytes);
+  });
+
+  it('publishes the cache file atomically - no temp files left after a fetch', async () => {
+    stubFetch({ status: 200, body: new Uint8Array([1, 2, 3]) });
+    const loader = new CdnCachingLoader(HOST, PATCH, cacheDir);
+
+    await loader.fetchFile(NAME);
+
+    // Only the final flattened name may exist; a lingering *.tmp would mean
+    // the write was published non-atomically (a concurrent reader could have
+    // seen a partial bundle - the "Failed to decode" production failure).
+    expect(await readdir(cacheDir)).toEqual([NAME.replace(/\//g, '@')]);
+  });
+
+  it('never serves a leftover temp file from an interrupted write', async () => {
+    // A crash mid-write leaves `<name>.<pid>.<seq>.tmp` behind; the loader
+    // must ignore it (it reads only the exact final name) and fetch fresh.
+    await writeFile(join(cacheDir, `${NAME.replace(/\//g, '@')}.99999.0.tmp`), Buffer.from([9, 9]));
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    const fetchMock = stubFetch({ status: 200, body: bytes });
+    const loader = new CdnCachingLoader(HOST, PATCH, cacheDir);
+
+    const got = await loader.fetchFile(NAME);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(got).toEqual(bytes);
   });
 
   it('uses the configured CDN host', async () => {

@@ -132,7 +132,10 @@ aren't affected by which call happens to finish first.
 Concurrent requests for a bundle the CDN cache hasn't fetched yet (e.g. two
 `decodeDdsIcons` workers whose DDS paths happen to live in the same bundle)
 share a single in-flight fetch instead of each downloading the same bytes -
-handled internally by `createCdnSource`, nothing callers need to do.
+handled internally by `createCdnSource`, nothing callers need to do. Cache
+writes are published atomically (temp file + rename), so a cache directory is
+safe to share across worker threads and processes: a concurrent reader either
+sees a complete bundle or no file, never a partial write.
 
 All of it is pure TypeScript with no native dependencies, which keeps extraction
 portable across machines and CI.

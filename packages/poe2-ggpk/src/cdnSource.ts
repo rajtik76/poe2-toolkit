@@ -16,7 +16,7 @@
  * past the package's exports into its `dist/` internals.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { FileLoader } from 'pathofexile-dat/bundles.js';
@@ -97,6 +97,9 @@ const BUNDLES_DIR = 'Bundles2';
 export class CdnCachingLoader implements BundleLoader {
   private readonly inflight = new Map<string, Promise<Uint8Array>>();
 
+  /** Monotonic suffix so concurrent writes in one process never share a temp name. */
+  private static tmpSeq = 0;
+
   constructor(
     private readonly cdnHost: string,
     private readonly patch: string,
@@ -135,7 +138,26 @@ export class CdnCachingLoader implements BundleLoader {
     }
 
     const buf = Buffer.from(await res.arrayBuffer());
-    await writeFile(cached, buf);
+
+    // `writeFile` is not atomic: the file is visible with partial content for
+    // the whole duration of the write, and a concurrent `fetchFile`'s
+    // `readFile` happily returns those truncated bytes - the bundle then fails
+    // to decompress downstream ("Failed to decode"). The in-flight map above
+    // cannot prevent that: it only covers this loader instance, not another
+    // worker thread or process sharing the same cache directory, and even here
+    // the cache read happens before the map is consulted. Publish through a
+    // unique temp file + rename (atomic within a directory) so a reader only
+    // ever sees a complete bundle or no file at all.
+    const tmp = `${cached}.${process.pid}.${CdnCachingLoader.tmpSeq++}.tmp`;
+
+    try {
+      await writeFile(tmp, buf);
+      await rename(tmp, cached);
+    } catch (error) {
+      await rm(tmp, { force: true });
+
+      throw error;
+    }
 
     return new Uint8Array(buf);
   }
