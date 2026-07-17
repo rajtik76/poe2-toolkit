@@ -30,6 +30,10 @@ const SAMPLE = [
   '\t1 attack_speed_+%_per_minute',
   '\t1',
   '\t\t# "{0} Attacks per Second" per_minute_to_per_second 1',
+  'description',
+  '\t1 body_armour_+%',
+  '\t1',
+  '\t\t# "{}% increased [Armour] from Equipped Body Armour"',
 ].join('\n');
 
 const index = buildStatIndex(SAMPLE);
@@ -85,6 +89,12 @@ describe('renderBlock', () => {
 
   it('applies value-scaling handlers before filling the template', () => {
     expect(renderBlock(index, ['attack_speed_+%_per_minute'], [240]).lines).toEqual(['2 Attacks per Second']);
+  });
+
+  it('fills a bare {} placeholder as the implicit next value', () => {
+    expect(renderBlock(index, ['body_armour_+%'], [80]).lines).toEqual([
+      '80% increased Armour from Equipped Body Armour',
+    ]);
   });
 
   it('reports stats that match no block as unresolved, in input order', () => {

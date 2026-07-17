@@ -4,6 +4,14 @@ All notable changes to `@poe2-toolkit/ggpk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-07-17
+
+### Fixed
+
+- `renderBlock` now fills GGG's bare `{}` placeholder (implicit next value),
+  not just `{0}`-style. Previously left the literal `{}` unrendered, e.g. in
+  "{}% increased [Armour] from Equipped Body Armour".
+
 ## [0.5.0] - 2026-07-17
 
 ### Changed

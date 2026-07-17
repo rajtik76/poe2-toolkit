@@ -216,10 +216,12 @@ function selectVariant(variants: Variant[], rawValues: number[]): Variant | null
   return variants[0] ?? null;
 }
 
-/** Fill `{0}`, `{0:+d}`, `{0:d}` placeholders with rounded values. */
+/** Fill `{0}`, `{0:+d}`, `{0:d}` placeholders, and GGG's bare `{}` (implicit next index), with rounded values. */
 function fillTemplate(text: string, values: number[]): string {
-  return text.replace(/\{(\d+)(?::([^}]+))?\}/g, (_, index: string, format: string | undefined) => {
-    const value = values[Number(index)];
+  let implicitIndex = 0;
+
+  return text.replace(/\{(\d*)(?::([^}]+))?\}/g, (_, index: string, format: string | undefined) => {
+    const value = values[index === '' ? implicitIndex++ : Number(index)];
 
     if (value == null) {
       return '';
