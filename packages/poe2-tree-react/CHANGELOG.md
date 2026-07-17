@@ -4,6 +4,14 @@ All notable changes to `@poe2-toolkit/tree-react` are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [Semantic Versioning](https://semver.org/).
 
+## [0.8.2] - 2026-07-17
+
+### Changed
+
+- Test-only release: covered every `spriteKeys` branch (icon, frame and
+  connector key helpers), lifting the module from 73% to 100% line coverage.
+  No runtime changes.
+
 ## [0.8.1] - 2026-07-12
 
 ### Fixed
