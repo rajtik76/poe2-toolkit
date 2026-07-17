@@ -8,13 +8,22 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { normalizeGggTree } from '../src/ggg/normalize.js';
 import type { GggTreeJson } from '../src/ggg/normalize.js';
 import type { TreeData } from '../src/types.js';
 
-/** Path to a local tree `data.json`, or a path that never exists. */
-export const TREE_DATA = process.env.POE2_TREE_DATA ?? '/nonexistent/poe2-tree-data.json';
+/** Repo root — where scripts/golden-fixtures/setup.mjs writes its (gitignored) output. */
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
+/**
+ * Path to a local tree `data.json`. Defaults to the file `scripts/golden-
+ * fixtures/setup.mjs --bless` writes; point `POE2_TREE_DATA` elsewhere to
+ * override.
+ */
+export const TREE_DATA = process.env.POE2_TREE_DATA ?? join(REPO_ROOT, '.golden-fixtures/tree/data.json');
 
 /** Whether a local tree `data.json` is configured and present. */
 export function treeDataAvailable(): boolean {

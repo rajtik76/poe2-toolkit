@@ -1,0 +1,421 @@
+{
+  "patch": "4.5.4.4",
+  "translations": [
+    "English"
+  ],
+  "files": [],
+  "tables": [
+    {
+      "name": "PassiveSkills",
+      "columns": [
+        "Id",
+        "Name",
+        "Icon_DDSFile",
+        "Stats",
+        "Stat1Value",
+        "Stat2Value",
+        "Stat3Value",
+        "Stat4Value",
+        "Stat5Value",
+        "PassiveSkillGraphId",
+        "IsKeystone",
+        "IsNotable",
+        "IsJewelSocket",
+        "IsAscendancyStartingNode",
+        "Ascendancy",
+        "MasteryGroup",
+        "SkillPointsGranted",
+        "IsMultipleChoice",
+        "IsMultipleChoiceOption",
+        "Characters",
+        "FlavourText",
+        "SkillType",
+        "IsAttribute",
+        "GrantedSkill",
+        "UnlockedBy",
+        "NodeFrameArt"
+      ]
+    },
+    {
+      "name": "QuestStaticRewards",
+      "columns": [
+        "QuestFlag",
+        "WeaponPassives"
+      ]
+    },
+    {
+      "name": "ExperienceLevels",
+      "columns": [
+        "Level"
+      ]
+    },
+    {
+      "name": "PassiveSkillMasteryGroups",
+      "columns": [
+        "Id",
+        "MasteryEffects",
+        "Art"
+      ]
+    },
+    {
+      "name": "PassiveSkillTreeMasteryArt",
+      "columns": [
+        "Id",
+        "InactiveIcon",
+        "ActiveIcon",
+        "ActiveEffectImage"
+      ]
+    },
+    {
+      "name": "PassiveSkillTreeNodeFrameArt",
+      "columns": [
+        "Id",
+        "Normal",
+        "CanAllocate",
+        "Active"
+      ]
+    },
+    {
+      "name": "PassiveSkillTreeUIArt",
+      "columns": [
+        "Id",
+        "Connection",
+        "PassiveFrame",
+        "NotableFrame",
+        "KeystoneFrame",
+        "JewelFrame",
+        "AscendancyStart",
+        "MultipleChoiceFrame"
+      ]
+    },
+    {
+      "name": "Characters",
+      "columns": [
+        "Id",
+        "Name",
+        "BaseStrength",
+        "BaseDexterity",
+        "BaseIntelligence",
+        "PassiveTreeImage",
+        "StartingPassive"
+      ]
+    },
+    {
+      "name": "Ascendancy",
+      "columns": [
+        "Id",
+        "ClassNo",
+        "Character",
+        "Name",
+        "CoordinateRect",
+        "PassiveTreeImage",
+        "BaseAscendancy",
+        "Disabled"
+      ]
+    },
+    {
+      "name": "PassiveJewelSlots",
+      "columns": [
+        "Slot"
+      ]
+    },
+    {
+      "name": "ClassPassiveSkillOverrides",
+      "columns": [
+        "CharacterToOverrideFor",
+        "SkillToOverride",
+        "Override"
+      ]
+    },
+    {
+      "name": "Stats",
+      "columns": [
+        "Id"
+      ]
+    },
+    {
+      "name": "Mods",
+      "columns": [
+        "Id",
+        "Name",
+        "Level",
+        "Domain",
+        "GenerationType",
+        "ModType",
+        "Families",
+        "SpawnWeight_Tags",
+        "SpawnWeight_Values",
+        "Stat1",
+        "Stat2",
+        "Stat3",
+        "Stat4",
+        "Stat5",
+        "Stat6",
+        "Stat1Value",
+        "Stat2Value",
+        "Stat3Value",
+        "Stat4Value",
+        "Stat5Value",
+        "Stat6Value",
+        "IsEssenceOnlyModifier",
+        "CraftingItemClassRestrictions"
+      ]
+    },
+    {
+      "name": "ModType",
+      "columns": [
+        "Name"
+      ]
+    },
+    {
+      "name": "ModFamily",
+      "columns": [
+        "Id"
+      ]
+    },
+    {
+      "name": "BaseItemTypes",
+      "columns": [
+        "Id",
+        "Name",
+        "ItemClass",
+        "Tags",
+        "ItemVisualIdentity",
+        "DropLevel",
+        "ModDomain",
+        "IsCorrupted",
+        "Implicit_Mods",
+        "FlavourText"
+      ]
+    },
+    {
+      "name": "ItemClasses",
+      "columns": [
+        "Id",
+        "Name",
+        "ItemClassCategory"
+      ]
+    },
+    {
+      "name": "ItemVisualIdentity",
+      "columns": [
+        "Id",
+        "DDSFile",
+        "AOFile"
+      ]
+    },
+    {
+      "name": "UniqueStashLayout",
+      "columns": [
+        "WordsKey",
+        "ItemVisualIdentityKey",
+        "UniqueStashTypesKey"
+      ]
+    },
+    {
+      "name": "Words",
+      "columns": [
+        "Text"
+      ]
+    },
+    {
+      "name": "UniqueStashTypes",
+      "columns": [
+        "Id"
+      ]
+    },
+    {
+      "name": "FlavourText",
+      "columns": [
+        "Id",
+        "Text"
+      ]
+    },
+    {
+      "name": "AttributeRequirements",
+      "columns": [
+        "BaseItemType",
+        "ReqStr",
+        "ReqDex",
+        "ReqInt"
+      ]
+    },
+    {
+      "name": "ArmourTypes",
+      "columns": [
+        "BaseItemType",
+        "Armour",
+        "Evasion",
+        "EnergyShield",
+        "Ward"
+      ]
+    },
+    {
+      "name": "ShieldTypes",
+      "columns": [
+        "BaseItemType",
+        "Block"
+      ]
+    },
+    {
+      "name": "Tags",
+      "columns": [
+        "Id",
+        "DisplayString"
+      ]
+    },
+    {
+      "name": "SkillGems",
+      "columns": [
+        "BaseItemType",
+        "StrengthRequirementPercent",
+        "DexterityRequirementPercent",
+        "IntelligenceRequirementPercent",
+        "GemType",
+        "GemColour",
+        "MinLevelReq",
+        "GemEffects",
+        "UI_Image",
+        "Tier",
+        "BaseSkillGem"
+      ]
+    },
+    {
+      "name": "ActiveSkills",
+      "columns": [
+        "Id",
+        "DisplayedName",
+        "Description",
+        "ShortDescription",
+        "Icon_DDSFile",
+        "GrantedEffect",
+        "ActiveSkillTypes",
+        "WebsiteDescription"
+      ]
+    },
+    {
+      "name": "GrantedEffects",
+      "columns": [
+        "Id",
+        "ActiveSkill",
+        "IsSupport",
+        "SupportGemLetter",
+        "StatSet",
+        "CastTime",
+        "AllowedActiveSkillTypes"
+      ]
+    },
+    {
+      "name": "GrantedEffectsPerLevel",
+      "columns": [
+        "GrantedEffect",
+        "Level",
+        "ActorLevel",
+        "CostAmounts",
+        "CostMultiplier",
+        "AttackTime",
+        "Cooldown",
+        "Reservation",
+        "EffectOnPlayer"
+      ]
+    },
+    {
+      "name": "SupportGems",
+      "columns": [
+        "SkillGem",
+        "Icon",
+        "Family",
+        "FlavourText",
+        "VisualIdentity",
+        "IsLineage"
+      ]
+    },
+    {
+      "name": "GemEffects",
+      "columns": [
+        "Id",
+        "Name",
+        "GrantedEffect",
+        "SupportText",
+        "SupportName",
+        "GemTags",
+        "ItemColor",
+        "AdditionalGrantedEffects"
+      ]
+    },
+    {
+      "name": "GemTags",
+      "columns": [
+        "Id",
+        "Name"
+      ]
+    },
+    {
+      "name": "GrantedEffectStatSets",
+      "columns": [
+        "Id",
+        "ConstantStats",
+        "ConstantStatsValues"
+      ]
+    },
+    {
+      "name": "GrantedEffectStatSetsPerLevel",
+      "columns": [
+        "StatSet",
+        "GemLevel",
+        "SpellCritChance",
+        "AttackCritChance",
+        "BaseResolvedValues",
+        "AdditionalStatsValues",
+        "FloatStats",
+        "AdditionalStats"
+      ]
+    },
+    {
+      "name": "GrantedEffectQualityStats",
+      "columns": [
+        "GrantedEffect",
+        "Stats",
+        "StatsValuesPermille",
+        "AltStats",
+        "AltStatValuesPermille"
+      ]
+    },
+    {
+      "name": "SoulCores",
+      "columns": [
+        "BaseItemType",
+        "RequiredLevel",
+        "Limit",
+        "Description",
+        "ExtraDescription",
+        "Type",
+        "IsSocketBound"
+      ]
+    },
+    {
+      "name": "SoulCoreStats",
+      "columns": [
+        "SoulCore",
+        "StatCategory",
+        "Stats",
+        "StatsValues",
+        "BondedStats",
+        "BondedStatsValues"
+      ]
+    },
+    {
+      "name": "SoulCoreStatCategories",
+      "columns": [
+        "Id",
+        "Display"
+      ]
+    },
+    {
+      "name": "QuestFlags",
+      "columns": [
+        "Id"
+      ]
+    }
+  ]
+}

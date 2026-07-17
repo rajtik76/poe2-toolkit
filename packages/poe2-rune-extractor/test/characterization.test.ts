@@ -15,6 +15,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createCdnSource } from '@poe2-toolkit/ggpk';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -22,8 +23,11 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { buildRunes } from '../src/buildRunes';
 import type { RuneData } from '../src/buildRunes';
 
-const EXTRACT = process.env.POE2_GGPK_EXTRACT ?? '/nonexistent/poe2-ggpk-extract';
-const GOLDEN = process.env.POE2_DATA_GOLDEN ?? '/nonexistent/poe2-data-golden';
+/** Repo root — where scripts/golden-fixtures/setup.mjs writes its (gitignored) output. */
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
+const EXTRACT = process.env.POE2_GGPK_EXTRACT ?? join(REPO_ROOT, '.ggpk-extract');
+const GOLDEN = process.env.POE2_DATA_GOLDEN ?? join(REPO_ROOT, '.golden-fixtures/data');
 const TABLES_DIR = join(EXTRACT, 'tables/English');
 const CACHE_DIR = join(EXTRACT, '.cache');
 const GOLDEN_RUNES = join(GOLDEN, 'runes.json');

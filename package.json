@@ -15,7 +15,9 @@
     "test:coverage": "npm run test --workspaces --if-present -- --coverage",
     "lint": "eslint packages",
     "check:readme": "node scripts/check-readme-packages.mjs",
-    "ci": "npm run build && npm run typecheck && npm run lint && npm run check:readme && npm run test:coverage"
+    "ci": "npm run build && npm run typecheck && npm run lint && npm run check:readme && npm run test:coverage",
+    "fixtures:extract": "node scripts/golden-fixtures/setup.mjs",
+    "fixtures:bless": "node scripts/golden-fixtures/setup.mjs --bless"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -28,6 +30,8 @@
     "eslint-plugin-react": "^7.37.3",
     "eslint-plugin-react-hooks": "^7.0.0",
     "globals": "^15.14.0",
+    "pathofexile-dat": "^15.2.0",
+    "pathofexile-dat-schema": "^8.0.0",
     "typescript-eslint": "^8.23.0"
   },
   "engines": {

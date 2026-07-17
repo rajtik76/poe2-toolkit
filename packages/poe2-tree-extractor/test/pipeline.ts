@@ -20,19 +20,20 @@ import { fileURLToPath } from 'node:url';
 /** This package's root directory. */
 export const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
+/** Repo root — where scripts/golden-fixtures/setup.mjs writes its (gitignored) output. */
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
 /**
  * Golden fixtures (data.json, atlas frame-maps, the PNG hash manifest) live
- * OUTSIDE this repo — they derive from GGG game data. Point `POE2_TREE_GOLDEN`
- * at the directory holding them to run the golden-contract and 1:1 tests;
- * without it they skip. Nothing fixture-related is stored inside the package.
+ * OUTSIDE this repo — they derive from GGG game data. `scripts/golden-fixtures/
+ * setup.mjs --bless` generates them locally into the gitignored default below;
+ * point `POE2_TREE_GOLDEN` elsewhere to override. Without either, the
+ * golden-contract and 1:1 tests skip (as they do in CI, which has neither).
  */
-export const GOLDEN_DIR = process.env.POE2_TREE_GOLDEN ?? '/nonexistent/poe2-tree-golden';
-
-/** A path that never exists, so the gated tests skip when no extract is configured. */
-const NO_EXTRACT = '/nonexistent/poe2-ggpk-extract';
+export const GOLDEN_DIR = process.env.POE2_TREE_GOLDEN ?? join(REPO_ROOT, '.golden-fixtures/tree');
 
 /** Root of the local GGPK extract, configured via `POE2_GGPK_EXTRACT`. */
-export const TOOLS_DIR = process.env.POE2_GGPK_EXTRACT ?? NO_EXTRACT;
+export const TOOLS_DIR = process.env.POE2_GGPK_EXTRACT ?? join(REPO_ROOT, '.ggpk-extract');
 
 /** Decoded tables and bundle cache the CDN source reads from. */
 export const TABLES_DIR = join(TOOLS_DIR, 'tables/English');
