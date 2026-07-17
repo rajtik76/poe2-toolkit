@@ -48,8 +48,10 @@ export type RuneSource = GgpkSource & GgpkImageSource;
  */
 export async function extractRunes(source: RuneSource): Promise<RuneBundle> {
   const data = await buildRunes(source);
-  const runeIcons = await buildRuneIcons(source, data);
-  const socketIcons = await buildSocketIcons(source);
+  const [runeIcons, socketIcons] = await Promise.all([
+    buildRuneIcons(source, data),
+    buildSocketIcons(source),
+  ]);
 
   const icons: RuneIconsResult = {
     icons: { ...runeIcons.icons, ...socketIcons.icons },

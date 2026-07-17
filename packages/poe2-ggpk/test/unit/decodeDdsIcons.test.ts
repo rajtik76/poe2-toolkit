@@ -80,4 +80,28 @@ describe('decodeDdsIcons', () => {
 
     expect(result).toEqual({ icons: {}, report: { packed: 0, missing: 0 } });
   });
+
+  it('decodes distinct paths concurrently, up to the concurrency cap', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const source: DdsSource = {
+      dds: async (path: string) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+
+        await Promise.resolve();
+
+        inFlight -= 1;
+
+        return path === 'Art/miss.dds' ? null : RED_1X1;
+      },
+    };
+
+    const paths = Array.from({ length: 10 }, (_, i) => `Art/${i}.dds`);
+
+    const result = await decodeDdsIcons(source, paths, undefined, 4);
+
+    expect(maxInFlight).toBe(4);
+    expect(result.report).toEqual({ packed: 10, missing: 0 });
+  });
 });

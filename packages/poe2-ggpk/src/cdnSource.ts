@@ -87,9 +87,16 @@ const BUNDLES_DIR = 'Bundles2';
  * This throws on a miss and caches by the `@`-flattened name `FileLoader`
  * expects, leaving the loader free to surface the error to the caller.
  *
+ * Concurrent callers asking for the same not-yet-cached bundle (e.g. several
+ * `dds()` paths from {@link decodeDdsIcons}'s worker pool that happen to live
+ * in the same bundle) share a single in-flight fetch instead of each racing
+ * their own CDN request for identical bytes.
+ *
  * Exported for unit testing; not part of the package's public API.
  */
 export class CdnCachingLoader implements BundleLoader {
+  private readonly inflight = new Map<string, Promise<Uint8Array>>();
+
   constructor(
     private readonly cdnHost: string,
     private readonly patch: string,
@@ -105,6 +112,20 @@ export class CdnCachingLoader implements BundleLoader {
       /* not cached yet */
     }
 
+    const pending = this.inflight.get(name);
+
+    if (pending) {
+      return pending;
+    }
+
+    const fetching = this.fetchAndCache(name, cached).finally(() => this.inflight.delete(name));
+
+    this.inflight.set(name, fetching);
+
+    return fetching;
+  }
+
+  private async fetchAndCache(name: string, cached: string): Promise<Uint8Array> {
     const res = await fetch(`${this.cdnHost}/${this.patch}/${BUNDLES_DIR}/${name}`, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });

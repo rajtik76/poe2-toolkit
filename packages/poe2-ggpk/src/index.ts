@@ -18,3 +18,5 @@ export type { StatIndex, RenderedBlock } from './statDescriptions.js';
 
 export { decodeDdsIcons } from './decodeDdsIcons.js';
 export type { DdsSource, DdsIconsResult } from './decodeDdsIcons.js';
+
+export { mapConcurrent } from './mapConcurrent.js';

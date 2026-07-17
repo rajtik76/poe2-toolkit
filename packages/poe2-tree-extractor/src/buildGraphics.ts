@@ -11,6 +11,7 @@
  */
 
 import type { GgpkImageSource, GgpkSource } from '@poe2-toolkit/ggpk';
+import { mapConcurrent } from '@poe2-toolkit/ggpk';
 
 import { packAtlas } from './atlas.js';
 import type {AtlasSprite, PackedAtlas} from './atlas.js';
@@ -61,6 +62,9 @@ interface UIArtRow {
   AscendancyStart?: number | null;
 }
 
+/** Distinct sprite fetches to run concurrently (I/O-bound: network fetch + decode). */
+const CONCURRENCY = 16;
+
 type FrameState = 'Normal' | 'CanAllocate' | 'Active';
 type NodeFrameArtRow = Partial<Record<FrameState, string>> & { Id?: string };
 
@@ -110,19 +114,15 @@ export async function buildGraphics(source: GraphicsSource, tree: TreeExport): P
     }
   }
 
-  const active: AtlasSprite[] = [];
-  let iconsMissing = 0;
-
-  for (const { variant, icon } of wanted.values()) {
+  const wantedList = [...wanted.values()];
+  const activeSlots = await mapConcurrent(wantedList, CONCURRENCY, async ({ variant, icon }) => {
     const img = await source.dds(icon);
 
-    if (!img) {
-      iconsMissing += 1;
-      continue;
-    }
+    return img ? { key: `${variant}Active:${icon}`, width: img.width, height: img.height, rgba: img.rgba } : null;
+  });
 
-    active.push({ key: `${variant}Active:${icon}`, width: img.width, height: img.height, rgba: img.rgba });
-  }
+  const active = activeSlots.filter((s): s is AtlasSprite => s !== null);
+  const iconsMissing = activeSlots.length - active.length;
 
   // --- node frames: frame atlas ----------------------------------------------
   // The UIArt "Character" row drives the main tree, "Ascendancy" the disc frames.
@@ -175,19 +175,15 @@ export async function buildGraphics(source: GraphicsSource, tree: TreeExport): P
     }
   }
 
-  const masterySprites: AtlasSprite[] = [];
-  let masteryMissing = 0;
-
-  for (const path of effectImages) {
+  const effectList = [...effectImages];
+  const masterySlots = await mapConcurrent(effectList, CONCURRENCY, async (path) => {
     const img = await source.uiSprite(path);
 
-    if (!img) {
-      masteryMissing += 1;
-      continue;
-    }
+    return img ? { key: `masteryEffectActive:${path}.png`, width: img.width, height: img.height, rgba: img.rgba } : null;
+  });
 
-    masterySprites.push({ key: `masteryEffectActive:${path}.png`, width: img.width, height: img.height, rgba: img.rgba });
-  }
+  const masterySprites = masterySlots.filter((s): s is AtlasSprite => s !== null);
+  const masteryMissing = masterySlots.length - masterySprites.length;
 
   // Patterns are large (~775²); a wide sheet keeps both dimensions under webp's
   // 16383px cap.

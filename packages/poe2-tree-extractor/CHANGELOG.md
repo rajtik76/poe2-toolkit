@@ -4,6 +4,16 @@ All notable changes to `@poe2-toolkit/tree-extractor` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] - 2026-07-17
+
+### Changed
+
+- `buildGraphics` now fetches skill-icon and mastery-effect sprites
+  concurrently (via `@poe2-toolkit/ggpk`'s `mapConcurrent`) instead of one
+  path at a time.
+- Bumped the pinned `@poe2-toolkit/ggpk` range from `^0.5.0` to `^0.6.0` to
+  match the minimum version required (`mapConcurrent`).
+
 ## [0.6.2] - 2026-07-17
 
 ### Changed

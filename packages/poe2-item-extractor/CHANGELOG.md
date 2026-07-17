@@ -4,6 +4,13 @@ All notable changes to `@poe2-toolkit/item-extractor` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.11.2] - 2026-07-17
+
+### Changed
+
+- Bumped the pinned `@poe2-toolkit/ggpk` range from `^0.5.0` to `^0.6.0` to
+  match the current minimum version.
+
 ## [0.11.1] - 2026-07-17
 
 ### Changed

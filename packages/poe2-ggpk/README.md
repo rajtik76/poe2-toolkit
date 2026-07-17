@@ -103,7 +103,8 @@ one place rather than being reimplemented per extractor:
 | `decodePng(bytes)` | Decode an 8-bit RGBA/RGB PNG to RGBA8. |
 | `buildStatIndex(csd)` | Parse a `stat_descriptions.csd` (UTF-16 text) into a per-stat index. |
 | `renderBlock(index, statIds, vals)` | Render numeric `(stat, value)` pairs into human-readable lines. |
-| `decodeDdsIcons(source, ddsPaths, transform?)` | Decode a set of distinct DDS paths to PNG, skipping and reporting what the source can't serve. |
+| `decodeDdsIcons(source, ddsPaths, transform?, concurrency?)` | Decode a set of distinct DDS paths to PNG, skipping and reporting what the source can't serve. |
+| `mapConcurrent(items, concurrency, fn)` | Run `fn` over `items` with at most `concurrency` calls in flight, preserving output order. |
 
 `buildStatIndex` returns a `StatIndex`; pass it to `renderBlock` along with
 parallel `statIds`/`vals` arrays. `renderBlock` returns a `RenderedBlock` with
@@ -119,7 +120,19 @@ iterable of DDS paths, it decodes each distinct path to PNG and returns a
 fallback, a path the source can't serve or decode is just skipped and counted.
 The optional `transform(img, ddsPath)` hook runs on the decoded image before
 encoding, for extractor-specific post-processing (e.g. item-extractor's
-flask-sheet compositing).
+flask-sheet compositing). Up to `concurrency` distinct paths (default 16)
+decode in flight at once - each decode is dominated by an awaited network
+fetch, not CPU work, so overlapping them cuts wall-clock time without
+changing the result. `mapConcurrent` is the general-purpose version of that
+same worker-pool loop, for any other independent-awaits-in-a-loop case (e.g.
+the tree extractor's sprite atlas build); it guarantees results land at their
+original index, so callers that depend on input order (like atlas packing)
+aren't affected by which call happens to finish first.
+
+Concurrent requests for a bundle the CDN cache hasn't fetched yet (e.g. two
+`decodeDdsIcons` workers whose DDS paths happen to live in the same bundle)
+share a single in-flight fetch instead of each downloading the same bytes -
+handled internally by `createCdnSource`, nothing callers need to do.
 
 All of it is pure TypeScript with no native dependencies, which keeps extraction
 portable across machines and CI.

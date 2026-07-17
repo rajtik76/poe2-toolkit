@@ -76,6 +76,35 @@ describe('CdnCachingLoader', () => {
     await expect(loader.fetchFile(NAME)).rejects.toThrow(`CDN 404 ${NAME}`);
   });
 
+  it('coalesces concurrent misses for the same bundle into a single fetch', async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    const fetchMock = stubFetch({ status: 200, body: bytes });
+    const loader = new CdnCachingLoader(HOST, PATCH, cacheDir);
+
+    const [a, b, c] = await Promise.all([
+      loader.fetchFile(NAME),
+      loader.fetchFile(NAME),
+      loader.fetchFile(NAME),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(a).toEqual(bytes);
+    expect(b).toEqual(bytes);
+    expect(c).toEqual(bytes);
+  });
+
+  it('fetches again after a failed request instead of caching the rejection', async () => {
+    stubFetch({ status: 404 });
+    const loader = new CdnCachingLoader(HOST, PATCH, cacheDir);
+
+    await expect(loader.fetchFile(NAME)).rejects.toThrow(`CDN 404 ${NAME}`);
+
+    const bytes = new Uint8Array([5, 6]);
+    stubFetch({ status: 200, body: bytes });
+
+    await expect(loader.fetchFile(NAME)).resolves.toEqual(bytes);
+  });
+
   it('uses the configured CDN host', async () => {
     const fetchMock = stubFetch({ status: 200, body: new Uint8Array([1]) });
     const loader = new CdnCachingLoader('https://example.test', PATCH, cacheDir);

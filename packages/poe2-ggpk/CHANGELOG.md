@@ -4,6 +4,24 @@ All notable changes to `@poe2-toolkit/ggpk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-07-17
+
+### Added
+
+- `mapConcurrent(items, concurrency, fn)`: a general-purpose bounded-concurrency
+  loop for independent awaited calls. Results land at their original index
+  regardless of completion order, so callers that depend on input order (e.g.
+  sprite-atlas packing) are unaffected by which call finishes first.
+
+### Changed
+
+- `decodeDdsIcons` decodes up to 16 distinct DDS paths concurrently by default
+  (new optional `concurrency` parameter), instead of one path at a time - each
+  decode is dominated by an awaited network fetch, not CPU work.
+- `CdnCachingLoader` (`createCdnSource`'s internals) now coalesces concurrent
+  requests for the same not-yet-cached bundle into a single fetch, instead of
+  each caller racing its own CDN request for identical bytes.
+
 ## [0.5.1] - 2026-07-17
 
 ### Fixed
