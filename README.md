@@ -173,6 +173,13 @@ those locally. Without the variables, those tests skip.
 [docs/GOLDEN_FIXTURES.md](docs/GOLDEN_FIXTURES.md) walks through generating
 both from your own game files.
 
+## Release
+
+Before tagging a release for a package, fill in `packages/<pkg>/CHANGELOG.md`
+with the changes since that package's last release tag. The tag's commit
+should carry an up-to-date changelog, since the tag/release snapshot is
+frozen the moment it's pushed.
+
 ## Attributions and legal
 
 This is an unofficial, fan-made project. It is **not** affiliated with, endorsed
