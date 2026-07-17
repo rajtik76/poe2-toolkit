@@ -1,5 +1,5 @@
 /**
- * Golden-contract tests for the rendered half of the extract: the four sprite
+ * Golden-contract tests for the rendered half of the extract: the three sprite
  * atlases (`assets/`) and the centre art (`centre/`).
  *
  * The golden fixtures derive from GGG art (atlas frame-maps keyed by asset
@@ -51,9 +51,9 @@ describe.skipIf(!goldenArtAvailable())('graphics golden contract', () => {
     }
   });
 
-  it('pins the full set of rendered PNGs (4 atlases + 33 centre)', () => {
-    expect(manifest()).toHaveLength(37);
-    expect(manifest().filter((entry) => entry.path.startsWith('assets/'))).toHaveLength(4);
+  it('pins the full set of rendered PNGs (3 atlases + 33 centre)', () => {
+    expect(manifest()).toHaveLength(36);
+    expect(manifest().filter((entry) => entry.path.startsWith('assets/'))).toHaveLength(3);
     expect(manifest().filter((entry) => entry.path.startsWith('centre/'))).toHaveLength(33);
   });
 

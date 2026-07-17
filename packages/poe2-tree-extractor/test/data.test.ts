@@ -19,13 +19,24 @@ interface TreeFile {
   classes: { name: string; ascendancies: unknown[] }[];
   groups: Record<string, unknown>;
   nodes: Record<string, TreeNode>;
-  edges: unknown[];
+  edges: TreeEdge[];
+  roots: { id: number; curvature: number }[];
   skillOverrides: Record<string, unknown>;
   jewelSlots: number[];
+  maxBasicPoints: number;
+  maxWeaponSetPoints: number;
   min_x: number | null;
   min_y: number | null;
   max_x: number | null;
   max_y: number | null;
+}
+
+interface TreeEdge {
+  from: number;
+  to: number;
+  orbit: number;
+  orbitX: number;
+  orbitY: number;
 }
 
 interface TreeNode {
@@ -49,11 +60,14 @@ describe.skipIf(!goldenDataAvailable())('data.json golden contract', () => {
         'edges',
         'groups',
         'jewelSlots',
+        'maxBasicPoints',
+        'maxWeaponSetPoints',
         'max_x',
         'max_y',
         'min_x',
         'min_y',
         'nodes',
+        'roots',
         'skillOverrides',
         'tree',
       ].sort(),
@@ -68,6 +82,8 @@ describe.skipIf(!goldenDataAvailable())('data.json golden contract', () => {
     expect(data().jewelSlots).toHaveLength(31);
     expect(Object.keys(data().skillOverrides)).toHaveLength(3);
     expect(data().classes.reduce((sum, cls) => sum + cls.ascendancies.length, 0)).toBe(23);
+    expect(data().edges).toHaveLength(2932);
+    expect(data().roots.length).toBeGreaterThan(0);
   });
 
   it('lists the eight released classes in extraction order', () => {
@@ -83,8 +99,14 @@ describe.skipIf(!goldenDataAvailable())('data.json golden contract', () => {
     ]);
   });
 
-  it('ships an empty top-level edges table (arc geometry lives on the nodes)', () => {
-    expect(data().edges).toEqual([]);
+  it('gives every edge its directed arc geometry', () => {
+    for (const edge of data().edges) {
+      expect(typeof edge.from).toBe('number');
+      expect(typeof edge.to).toBe('number');
+      expect(typeof edge.orbit).toBe('number');
+      expect(typeof edge.orbitX).toBe('number');
+      expect(typeof edge.orbitY).toBe('number');
+    }
   });
 
   // KNOWN BUG, pinned deliberately: the data-only override nodes appended after
