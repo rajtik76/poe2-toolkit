@@ -34,6 +34,10 @@ const SAMPLE = [
   '\t1 body_armour_+%',
   '\t1',
   '\t\t# "{}% increased [Armour] from Equipped Body Armour"',
+  'description',
+  '\t2 minimum_added_cold_damage maximum_added_cold_damage',
+  '\t1',
+  '\t\t# # "Adds {} to {} [Cold|Cold] Damage"',
 ].join('\n');
 
 const index = buildStatIndex(SAMPLE);
@@ -95,6 +99,12 @@ describe('renderBlock', () => {
     expect(renderBlock(index, ['body_armour_+%'], [80]).lines).toEqual([
       '80% increased Armour from Equipped Body Armour',
     ]);
+  });
+
+  it('fills successive bare {} placeholders from successive values, in order', () => {
+    const out = renderBlock(index, ['minimum_added_cold_damage', 'maximum_added_cold_damage'], [3, 7]);
+
+    expect(out.lines).toEqual(['Adds 3 to 7 Cold Damage']);
   });
 
   it('reports stats that match no block as unresolved, in input order', () => {
