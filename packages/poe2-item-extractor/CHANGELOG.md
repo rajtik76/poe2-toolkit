@@ -4,6 +4,27 @@ All notable changes to `@poe2-toolkit/item-extractor` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-07-17
+
+### Added
+
+- Base weapon stats on every item as `weapon` (with the exported `ItemWeapon`
+  type): physical `damageMin` / `damageMax`, `critical` (crit chance x 100),
+  `attackTime` and `reloadTime` in milliseconds, and `rangeMax`, read from the
+  PoE2 `WeaponTypes` table. `null` on bases without a weapon row (armour,
+  jewellery, off-hands, caster weapons) and on uniques.
+- `spirit`: the base spirit granted, read from `ItemSpirit` (non-zero only on
+  sceptre bases).
+- `dropLevel`: the level the base starts dropping at, from
+  `BaseItemTypes.DropLevel` (`0` on uniques, which carry no base link).
+
+### Changed
+
+- `buildItems` now also reads the `WeaponTypes` and `ItemSpirit` tables - add
+  both to your dat-extract config when upgrading, or the build throws on the
+  missing table. Mind that the schema ships two `WeaponTypes` variants; the
+  PoE2 one (columns `BaseItemType`, `CritChance`, ...) is required.
+
 ## [0.11.2] - 2026-07-17
 
 ### Changed

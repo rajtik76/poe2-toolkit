@@ -16,7 +16,7 @@ import { buildItems } from './buildItems.js';
 import type { ItemData } from './buildItems.js';
 
 export { buildItems } from './buildItems.js';
-export type { ItemData, Item, ItemReq, ItemArmour } from './buildItems.js';
+export type { ItemData, Item, ItemReq, ItemArmour, ItemWeapon } from './buildItems.js';
 
 export { buildItemIcons } from './buildIcons.js';
 export type { ItemIconsResult } from './buildIcons.js';

@@ -45,6 +45,27 @@ export interface ItemArmour {
   block: number;
 }
 
+/**
+ * Base offensive stats of a weapon base, in the base's own raw GGPK units
+ * (before quality and mods). A `null` {@link Item.weapon} means the base has no
+ * `WeaponTypes` row at all: armour, jewellery, flasks, off-hands, and also the
+ * caster weapons (sceptres, wands, staves), which carry no base attack stats.
+ */
+export interface ItemWeapon {
+  /** Minimum physical damage (`WeaponTypes.DamageMin`). Base weapons deal physical only; elemental/chaos comes from mods. */
+  damageMin: number;
+  /** Maximum physical damage (`WeaponTypes.DamageMax`). */
+  damageMax: number;
+  /** Critical hit chance times 100 (`WeaponTypes.CritChance`): `500` is 5.00 %. */
+  critical: number;
+  /** Attack time in milliseconds (`WeaponTypes.Speed`): attacks per second is `1000 / attackTime`. */
+  attackTime: number;
+  /** Melee strike range (`WeaponTypes.RangeMax`). */
+  rangeMax: number;
+  /** Reload time in milliseconds (`WeaponTypes.ReloadTime`); non-zero only on crossbows. */
+  reloadTime: number;
+}
+
 /** One displayable item: a normal-rarity base or a unique. */
 export interface Item {
   /** `unique` if the item is a unique, else `normal` (an ordinary base). */
@@ -90,6 +111,26 @@ export interface Item {
    * defensive row"; a `0` field means "has the stat, value 0".
    */
   armour: ItemArmour | null;
+  /**
+   * Base offensive stats from `WeaponTypes` (physical damage, crit, attack time,
+   * range, reload time), or `null` when the base has no weapon row - armour,
+   * jewellery, flasks, off-hands (shields, bucklers, foci, quivers) and caster
+   * weapons (sceptres, wands, staves; a sceptre grants {@link Item.spirit}
+   * instead). Always `null` on a unique: .dat has no unique-to-base-type link
+   * (see {@link Item.armour}), so a unique's weapon stats live on its unknown base.
+   */
+  weapon: ItemWeapon | null;
+  /**
+   * Base spirit granted (`ItemSpirit.SpiritGranted`); non-zero only on sceptre
+   * bases. `0` when the base has no spirit row, and always `0` on a unique (no
+   * base link) - read the unique's `0` as *not populated*.
+   */
+  spirit: number;
+  /**
+   * The level the base starts dropping at (`BaseItemTypes.DropLevel`). `0` on a
+   * unique (no base link) - read it as *not populated*, real bases start at 1.
+   */
+  dropLevel: number;
   /**
    * The unique's flavour / lore text as separate lines (GGG stores explicit line
    * breaks that matter for display), or `null` for bases and any unique without
@@ -241,6 +282,7 @@ interface BaseItemTypeRow {
   ItemClass?: number | null;
   ItemVisualIdentity?: number | null;
   ModDomain?: number | null;
+  DropLevel?: number;
   Tags?: number[];
 }
 
@@ -250,6 +292,8 @@ interface ItemVisualIdentityRow { Id?: string; DDSFile?: string; AOFile?: string
 interface AttributeRequirementRow { BaseItemType?: number | null; ReqStr?: number; ReqDex?: number; ReqInt?: number }
 interface ArmourTypeRow { BaseItemType?: number | null; Armour?: number; Evasion?: number; EnergyShield?: number; Ward?: number }
 interface ShieldTypeRow { BaseItemType?: number | null; Block?: number }
+interface WeaponTypeRow { BaseItemType?: number | null; CritChance?: number; Speed?: number; DamageMin?: number; DamageMax?: number; RangeMax?: number; ReloadTime?: number }
+interface ItemSpiritRow { BaseItemType?: number | null; SpiritGranted?: number }
 
 /** One unique's slot in the unique stash: name, icon and category by row index. */
 interface UniqueStashLayoutRow {
@@ -337,6 +381,43 @@ function armourByBaseIndex(ArmourTypes: ArmourTypeRow[], ShieldTypes: ShieldType
   return map;
 }
 
+/**
+ * Index `WeaponTypes` into one {@link ItemWeapon} per `BaseItemTypes` row index -
+ * the same `BaseItemType` join as `ArmourTypes`. A base absent from the table is
+ * absent from the map (yields `null`, not zeros): only weapon bases carry a row.
+ */
+function weaponByBaseIndex(WeaponTypes: WeaponTypeRow[]): Map<number, ItemWeapon> {
+  const map = new Map<number, ItemWeapon>();
+
+  for (const row of WeaponTypes) {
+    if (row.BaseItemType != null) {
+      map.set(row.BaseItemType, {
+        damageMin: row.DamageMin ?? 0,
+        damageMax: row.DamageMax ?? 0,
+        critical: row.CritChance ?? 0,
+        attackTime: row.Speed ?? 0,
+        rangeMax: row.RangeMax ?? 0,
+        reloadTime: row.ReloadTime ?? 0,
+      });
+    }
+  }
+
+  return map;
+}
+
+/** Index `ItemSpirit.SpiritGranted` per `BaseItemTypes` row index (sceptres only). */
+function spiritByBaseIndex(ItemSpirit: ItemSpiritRow[]): Map<number, number> {
+  const map = new Map<number, number>();
+
+  for (const row of ItemSpirit) {
+    if (row.BaseItemType != null) {
+      map.set(row.BaseItemType, row.SpiritGranted ?? 0);
+    }
+  }
+
+  return map;
+}
+
 /** Split GGG flavour text into trimmed non-empty lines, or `null` when empty. */
 function splitFlavourText(text: string): string[] | null {
   const lines = text
@@ -358,6 +439,8 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
   const AttributeRequirements = (await source.table('AttributeRequirements')) as AttributeRequirementRow[];
   const ArmourTypes = (await source.table('ArmourTypes')) as ArmourTypeRow[];
   const ShieldTypes = (await source.table('ShieldTypes')) as ShieldTypeRow[];
+  const WeaponTypes = (await source.table('WeaponTypes')) as WeaponTypeRow[];
+  const ItemSpirit = (await source.table('ItemSpirit')) as ItemSpiritRow[];
   const Tags = (await source.table('Tags')) as TagRow[];
 
   const reqByBaseIndex = new Map<number, AttributeRequirementRow>();
@@ -369,6 +452,8 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
   }
 
   const armourByBase = armourByBaseIndex(ArmourTypes, ShieldTypes);
+  const weaponByBase = weaponByBaseIndex(WeaponTypes);
+  const spiritByBase = spiritByBaseIndex(ItemSpirit);
 
   const items: ItemData = {};
 
@@ -404,6 +489,9 @@ export async function buildItems(source: GgpkSource): Promise<ItemData> {
         int: req?.ReqInt ?? 0,
       },
       armour: armourByBase.get(baseIndex) ?? null,
+      weapon: weaponByBase.get(baseIndex) ?? null,
+      spirit: spiritByBase.get(baseIndex) ?? 0,
+      dropLevel: base.DropLevel ?? 0,
       flavourText: null,
       modDomain: modDomainName(base.ModDomain),
       tags: effectiveTags(base.Tags ?? [], classId, Tags),
@@ -474,6 +562,9 @@ async function addUniques(
       twoHanded: category != null && TWO_HANDED_CATEGORIES.has(category),
       req: { str: 0, dex: 0, int: 0 },
       armour: null,
+      weapon: null,
+      spirit: 0,
+      dropLevel: 0,
       flavourText,
       modDomain: null,
       tags: [],

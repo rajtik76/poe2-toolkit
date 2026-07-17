@@ -59,7 +59,7 @@ The two steps are exported separately too: `buildItems(source)` for the data and
 `buildItemIcons(source, data)` for the PNGs.
 
 Field-level docs live on the exported types themselves - `Item`, `ItemReq`,
-`ItemArmour`, `ItemIconsResult` - so your editor shows each field's meaning on hover and they
+`ItemArmour`, `ItemWeapon`, `ItemIconsResult` - so your editor shows each field's meaning on hover and they
 ship in the `.d.ts`. The rest of this section is the shape and the rules that the
 types alone don't tell you.
 
@@ -78,6 +78,9 @@ Each value is an `Item`. A normal base and a unique:
   "twoHanded": false,
   "req": { "str": 60, "dex": 0, "int": 0 },
   "armour": { "armour": 145, "evasion": 0, "energyShield": 0, "ward": 0, "block": 0 },
+  "weapon": null,
+  "spirit": 0,
+  "dropLevel": 37,
   "flavourText": null,
   "modDomain": "Item",
   "tags": ["armour", "body_armour", "default", "str_armour", "vaal_basetype"]
@@ -91,6 +94,9 @@ Each value is an `Item`. A normal base and a unique:
   "twoHanded": false,
   "req": { "str": 0, "dex": 0, "int": 0 },
   "armour": null,
+  "weapon": null,
+  "spirit": 0,
+  "dropLevel": 0,
   "flavourText": ["The warrior who fears will fall."],
   "modDomain": null,
   "tags": []
@@ -119,6 +125,20 @@ Every field is present on every entry, but which ones carry a value follows from
   merges both tables into one value; an ordinary armour has `block: 0`. A `null`
   object means "no defensive row", a `0` field means "has the stat, value 0". It
   is always `null` on a unique, the same not-populated caveat as `req`.
+- **`weapon` is the base's offensive stats** from `WeaponTypes`, in raw GGPK
+  units: `damageMin` / `damageMax` (physical - base weapons deal physical only,
+  elemental and chaos come from mods), `critical` (crit chance x 100, `500` is
+  5.00 %), `attackTime` (milliseconds, attacks per second is `1000 / attackTime`),
+  `rangeMax` (melee strike range) and `reloadTime` (milliseconds, non-zero only
+  on crossbows). `null` when the base has no weapon row - armour, jewellery,
+  flasks, off-hands *and* caster weapons (sceptres, wands, staves carry no base
+  attack stats). Always `null` on a unique, the same not-populated caveat as `req`.
+- **`spirit` is the base spirit granted** (`ItemSpirit.SpiritGranted`), non-zero
+  only on sceptre bases. `0` when the base has no spirit row, and always `0` on a
+  unique (not populated).
+- **`dropLevel` is the level the base starts dropping at**
+  (`BaseItemTypes.DropLevel`). Real bases start at 1; a unique's `0` is not
+  populated, like its `req`.
 - **`twoHanded` is derived**, from `itemClass` for bases and from the weapon
   `category` for uniques, so it is correct for uniques even without a base type.
 - **`flavourText` is the unique's lore**, as separate lines (GGG stores explicit
@@ -193,11 +213,12 @@ publish step left to you.
 
 > **Required tables.** `buildItems` reads these GGPK tables through the source:
 > `BaseItemTypes`, `ItemClasses`, `ItemVisualIdentity`, `AttributeRequirements`,
-> `ArmourTypes`, `ShieldTypes`, `Tags`, `UniqueStashLayout`, `Words`,
-> `UniqueStashTypes`, `FlavourText`. A `createCdnSource` reads each from
-> `tablesDir` on demand, so your dat extract must decode all of them - a missing
-> table throws when the build reaches it. `ArmourTypes` and `ShieldTypes` are new
-> in this line; add them to your extract config when upgrading.
+> `ArmourTypes`, `ShieldTypes`, `WeaponTypes`, `ItemSpirit`, `Tags`,
+> `UniqueStashLayout`, `Words`, `UniqueStashTypes`, `FlavourText`. A
+> `createCdnSource` reads each from `tablesDir` on demand, so your dat extract
+> must decode all of them - a missing table throws when the build reaches it.
+> `WeaponTypes` and `ItemSpirit` are new in 0.12; `ArmourTypes` and `ShieldTypes`
+> in 0.11 - add them to your extract config when upgrading.
 
 - **Normal bases** join `BaseItemTypes` to its `ItemClasses`, `ItemVisualIdentity`
   (icon), `AttributeRequirements` and `ArmourTypes` / `ShieldTypes` (defences).
@@ -208,6 +229,13 @@ publish step left to you.
   `AttributeRequirements`. A shield is in both tables and its values are merged; a
   base in neither carries `armour: null`, so "no defensive row" stays distinct from
   "row present, stat 0".
+- **Offensive stats** come from `WeaponTypes` (physical damage, crit, attack time,
+  range, reload time) and **spirit** from `ItemSpirit`, both keyed on the
+  `BaseItemTypes` row index like the defences. Values stay in raw GGPK units - crit
+  chance x 100, attack/reload time in milliseconds - normalisation is left to the
+  consumer. The schema ships two `WeaponTypes` variants (PoE1 and PoE2); the
+  columns here (`BaseItemType`, `CritChance`, ...) are the PoE2 ones your dat
+  extract must select.
 - **Uniques** come from `UniqueStashLayout` (the authoritative unique list),
   joined with `Words` for the name, `ItemVisualIdentity` for the icon and
   `UniqueStashTypes` for the category. .dat has no unique-to-base-type link (the

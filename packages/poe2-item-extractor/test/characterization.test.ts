@@ -20,7 +20,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { buildItems } from '../src/buildItems';
 import type { ItemData } from '../src/buildItems';
 
-/** Repo root — where scripts/golden-fixtures/setup.mjs writes its (gitignored) output. */
+/** Repo root - where scripts/golden-fixtures/setup.mjs writes its (gitignored) output. */
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 const EXTRACT = process.env.POE2_GGPK_EXTRACT ?? join(REPO_ROOT, '.ggpk-extract');

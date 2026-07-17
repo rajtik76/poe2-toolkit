@@ -17,7 +17,7 @@ const TABLES: Record<string, TableRow[]> = {
   BaseItemTypes: [
     // Base tags [0] union the class tags; the out-of-range index 99 is dropped.
     // ModDomain 1 -> the `Item` domain.
-    { Name: 'Greatsword', ItemClass: 0, ItemVisualIdentity: 0, ModDomain: 1, Tags: [0, 99] },
+    { Name: 'Greatsword', ItemClass: 0, ItemVisualIdentity: 0, ModDomain: 1, DropLevel: 12, Tags: [0, 99] },
     // No ModDomain -> modDomain is null.
     { Name: 'Rapier', ItemClass: 1, ItemVisualIdentity: 1 },
     { Name: 'Greatsword', ItemClass: 0, ItemVisualIdentity: 2 },
@@ -36,10 +36,15 @@ const TABLES: Record<string, TableRow[]> = {
     { Name: 'Crystal Focus', ItemClass: 5, ItemVisualIdentity: 11, ModDomain: 1, Tags: [] },
     { Name: 'Wooden Buckler', ItemClass: 6, ItemVisualIdentity: 12, ModDomain: 1, Tags: [] },
     { Name: 'Bronze Kite Shield', ItemClass: 4, ItemVisualIdentity: 13, ModDomain: 1, Tags: [] },
+    // Weapon bases: a bow (full WeaponTypes row), a crossbow (the one class with a
+    // ReloadTime) and a sceptre (an ItemSpirit row instead of damage).
+    { Name: 'Crude Bow', ItemClass: 7, ItemVisualIdentity: 15, ModDomain: 1, DropLevel: 1, Tags: [] },
+    { Name: 'Makeshift Crossbow', ItemClass: 8, ItemVisualIdentity: 16, ModDomain: 1, DropLevel: 3, Tags: [] },
+    { Name: 'Shrine Sceptre', ItemClass: 9, ItemVisualIdentity: 17, ModDomain: 1, DropLevel: 8, Tags: [] },
   ],
   ItemClasses: [
     { Id: 'Two Hand Sword' }, { Id: 'One Hand Sword' }, { Id: 'Jewel' }, { Id: 'Helmet' },
-    { Id: 'Shield' }, { Id: 'Focus' }, { Id: 'Buckler' },
+    { Id: 'Shield' }, { Id: 'Focus' }, { Id: 'Buckler' }, { Id: 'Bow' }, { Id: 'Crossbow' }, { Id: 'Sceptre' },
   ],
   Tags: [{ Id: 'ezomyte_basetype' }, { Id: 'abyss_jewel' }],
   ItemVisualIdentity: [
@@ -61,6 +66,9 @@ const TABLES: Record<string, TableRow[]> = {
     { Id: 'BronzeKiteShield', DDSFile: 'Art/2DItems/Armours/Shields/bronzekite.dds' },
     // A unique flask whose base model is neither Life nor Mana: the category stays Flask.
     { Id: 'UniqueFlaskUtility', DDSFile: 'Art/2DItems/Flasks/Uniques/util.dds', AOFile: 'Metadata/Items/Flasks/Basetypes/FlaskUtility3.ao' },
+    { Id: 'CrudeBow', DDSFile: 'Art/2DItems/Weapons/crudebow.dds' },
+    { Id: 'MakeshiftCrossbow', DDSFile: 'Art/2DItems/Weapons/makeshiftcrossbow.dds' },
+    { Id: 'ShrineSceptre', DDSFile: 'Art/2DItems/Weapons/shrinesceptre.dds' },
   ],
   AttributeRequirements: [{ BaseItemType: 0, ReqStr: 40, ReqDex: 10, ReqInt: 0 }],
   // Both tables key on a BaseItemTypes row index. Plate Shield (7) appears in both;
@@ -79,6 +87,21 @@ const TABLES: Record<string, TableRow[]> = {
     { BaseItemType: 9, Block: 30 }, // shield-only base, no ArmourTypes row
     { BaseItemType: 10 }, // in both tables, Block column omitted -> defaults to 0
     { Block: 7 }, // no BaseItemType -> skipped
+  ],
+  // Keyed on a BaseItemTypes row index like ArmourTypes. Greatsword (0) is melee
+  // (RangeMax, no ReloadTime); Crude Bow (11) omits some columns (default 0);
+  // Makeshift Crossbow (12) is the reload-time case. Rows with no BaseItemType
+  // are ignored; non-weapons appear in neither table.
+  WeaponTypes: [
+    { BaseItemType: 0, CritChance: 500, Speed: 1450, DamageMin: 12, DamageMax: 21, RangeMax: 13, ReloadTime: 0 },
+    { BaseItemType: 11, CritChance: 500, Speed: 850, DamageMin: 6, DamageMax: 10 }, // RangeMax/ReloadTime omitted -> 0
+    { BaseItemType: 12, CritChance: 500, Speed: 750, DamageMin: 9, DamageMax: 15, RangeMax: 0, ReloadTime: 800 },
+    { CritChance: 500 }, // no BaseItemType -> skipped
+  ],
+  // Spirit granted by sceptre bases; same BaseItemTypes row-index join.
+  ItemSpirit: [
+    { BaseItemType: 13, SpiritGranted: 100 },
+    { SpiritGranted: 50 }, // no BaseItemType -> skipped
   ],
   FlavourText: [
     { Id: 'UniqueSwordOro', Text: 'A blade of fire.\r\nForged in endless war.' },
@@ -126,6 +149,9 @@ describe('buildItems', () => {
       twoHanded: true,
       req: { str: 40, dex: 10, int: 0 },
       armour: null, // a weapon has no ArmourTypes/ShieldTypes row
+      weapon: { damageMin: 12, damageMax: 21, critical: 500, attackTime: 1450, rangeMax: 13, reloadTime: 0 },
+      spirit: 0,
+      dropLevel: 12,
       flavourText: null,
       modDomain: 'Item',
       tags: ['default', 'ezomyte_basetype', 'sword', 'two_hand_weapon', 'twohand', 'weapon'],
@@ -218,6 +244,62 @@ describe('buildItems', () => {
     expect(items.Greatsword?.armour).toBeNull(); // weapon
     expect(items['Cobalt Jewel']?.armour).toBeNull(); // jewel
   });
+
+  it('reads melee weapon stats from WeaponTypes', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items.Greatsword?.weapon).toEqual({
+      damageMin: 12, damageMax: 21, critical: 500, attackTime: 1450, rangeMax: 13, reloadTime: 0,
+    });
+  });
+
+  it('defaults the WeaponTypes columns a row omits to 0', async () => {
+    const items = await buildItems(fakeSource());
+
+    // Crude Bow's row carries no RangeMax/ReloadTime; both fall back to 0.
+    expect(items['Crude Bow']?.weapon).toEqual({
+      damageMin: 6, damageMax: 10, critical: 500, attackTime: 850, rangeMax: 0, reloadTime: 0,
+    });
+  });
+
+  it('carries a crossbow reload time through', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items['Makeshift Crossbow']?.weapon).toEqual({
+      damageMin: 9, damageMax: 15, critical: 500, attackTime: 750, rangeMax: 0, reloadTime: 800,
+    });
+  });
+
+  it('gives a base with no WeaponTypes row a null weapon, not zeros', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items['Viper Cap']?.weapon).toBeNull(); // armour
+    expect(items['Cobalt Jewel']?.weapon).toBeNull(); // jewel
+    expect(items['Shrine Sceptre']?.weapon).toBeNull(); // sceptre without a WeaponTypes fixture row
+  });
+
+  it('reads spirit from ItemSpirit and defaults it to 0 elsewhere', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items['Shrine Sceptre']?.spirit).toBe(100);
+    expect(items.Greatsword?.spirit).toBe(0); // no ItemSpirit row
+  });
+
+  it('ignores weapon/spirit rows that carry no BaseItemType', async () => {
+    // The `{ CritChance: 500 }` / `{ SpiritGranted: 50 }` rows have no BaseItemType,
+    // so they never bleed onto index-0 (Greatsword keeps its own row's stats).
+    const items = await buildItems(fakeSource());
+
+    expect(items.Greatsword?.weapon?.damageMin).toBe(12);
+    expect(items.Greatsword?.spirit).toBe(0);
+  });
+
+  it('passes DropLevel through and defaults a base without one to 0', async () => {
+    const items = await buildItems(fakeSource());
+
+    expect(items['Makeshift Crossbow']?.dropLevel).toBe(3);
+    expect(items.Rapier?.dropLevel).toBe(0); // no DropLevel column on the row
+  });
 });
 
 describe('buildItems - uniques', () => {
@@ -232,6 +314,9 @@ describe('buildItems - uniques', () => {
       twoHanded: false,
       req: { str: 0, dex: 0, int: 0 },
       armour: null, // uniques carry no base link, so no defensive stats
+      weapon: null, // ... no weapon stats either
+      spirit: 0,
+      dropLevel: 0,
       // Joined via the `_a`-stripped ItemVisualIdentity id, split into lines.
       flavourText: ['A blade of fire.', 'Forged in endless war.'],
       // Uniques carry no base link, so neither a mod domain nor tags.
@@ -287,8 +372,9 @@ describe('buildItemIcons', () => {
     expect(report.packed).toBe(1);
     // Every distinct icon but greatsword.dds is unserved here: rapier, jewel, the four
     // extra armour bases (vipercap, plateshield, crystalfocus, woodenbuckler, bronzekite),
-    // the uniques' oro / behemoth and the four unique flask icons.
-    expect(report.missing).toBe(13);
+    // the three weapon bases (crudebow, makeshiftcrossbow, shrinesceptre), the uniques'
+    // oro / behemoth and the four unique flask icons.
+    expect(report.missing).toBe(16);
   });
 
   it('composites a flask sheet: fill (frame 2) over the glass-and-cap container (frame 0)', async () => {
