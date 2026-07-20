@@ -4,6 +4,17 @@ All notable changes to `@poe2-toolkit/tree-react` are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [Semantic Versioning](https://semver.org/).
 
+## [0.8.3] - 2026-07-20
+
+### Fixed
+
+- Stopped the canvas from rendering every frame forever, even while the tree
+  view sits idle with nothing changing on screen. `Application` now runs on
+  render-on-demand: a frame is only painted after a real state change
+  (pan/zoom, hover, highlight, resize, focus), and the per-frame ticker only
+  runs while the highlight pulse animation is actually active. Fixes
+  unnecessary GPU/CPU/battery usage on any page with the tree mounted.
+
 ## [0.8.2] - 2026-07-17
 
 ### Changed
