@@ -206,6 +206,8 @@ export function TreeView({
   // inline literal (e.g. `highlightStyle={{ pulseMs: 0 }}`) with the same values
   // doesn't retrigger the sync/ticker-toggle effect below on every parent
   // re-render. The ref mirrors it for the ticker and sync (kept current there).
+  const [glowAlphaTrough, glowAlphaPeak] = highlightStyle?.glowAlpha ?? [];
+  const [coreAlphaTrough, coreAlphaPeak] = highlightStyle?.coreAlpha ?? [];
   const resolvedHighlightStyle = useMemo(
     () => resolveHighlightStyle(highlightStyle),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -217,10 +219,10 @@ export function TreeView({
       highlightStyle?.radius,
       highlightStyle?.pulseMs,
       highlightStyle?.pulseGrow,
-      highlightStyle?.glowAlpha?.[0],
-      highlightStyle?.glowAlpha?.[1],
-      highlightStyle?.coreAlpha?.[0],
-      highlightStyle?.coreAlpha?.[1],
+      glowAlphaTrough,
+      glowAlphaPeak,
+      coreAlphaTrough,
+      coreAlphaPeak,
     ],
   );
   const highlightStyleRef = useRef<ResolvedHighlightStyle>(DEFAULT_HIGHLIGHT);
@@ -655,7 +657,7 @@ export function TreeView({
         sync();
       }
     },
-    [scene, sync, onNodeHover, activeAscendancy, highlight, preview, edgeOverlays, zoomAt],
+    [scene, sync, onNodeHover, activeAscendancy, zoomAt],
   );
 
   // Leaving the canvas ends the hover: without this, a pointer that moves onto

@@ -71,7 +71,7 @@ class FakeGraphics extends FakeContainer {
   }
 }
 
-let latestApp: FakeApplication | null = null;
+const appInstances: FakeApplication[] = [];
 
 class FakeApplication {
   canvas = document.createElement('canvas');
@@ -85,12 +85,16 @@ class FakeApplication {
   initOptions: Record<string, unknown> | null = null;
 
   constructor() {
-    latestApp = this;
+    appInstances.push(this);
   }
 
   async init(options: Record<string, unknown>): Promise<void> {
     this.initOptions = options;
   }
+}
+
+function latestApp(): FakeApplication | undefined {
+  return appInstances.at(-1);
 }
 
 vi.mock('pixi.js', () => ({
@@ -119,18 +123,6 @@ vi.mock('pixi.js', () => ({
 }));
 
 const { TreeView } = await import('../src/TreeView.js');
-
-function node(over: Partial<PlacedNode> & Pick<PlacedNode, 'skill' | 'x' | 'y'>): PlacedNode {
-  return {
-    kind: 'notable',
-    icon: '',
-    iconSize: 40,
-    frameSize: 0,
-    radius: 20,
-    allocated: false,
-    ...over,
-  };
-}
 
 function makeScene(over: { nodes?: PlacedNode[] } = {}): Scene {
   const mainBounds = { minX: 0, minY: 0, maxX: 1000, maxY: 500 };
@@ -165,7 +157,7 @@ describe('TreeView render-on-demand', () => {
   let root: ReturnType<typeof createRoot>;
 
   beforeEach(() => {
-    latestApp = null;
+    appInstances.length = 0;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -182,7 +174,7 @@ describe('TreeView render-on-demand', () => {
     });
     await flush();
 
-    expect(latestApp?.initOptions).toMatchObject({ autoStart: false });
+    expect(latestApp()?.initOptions).toMatchObject({ autoStart: false });
   });
 
   it('renders one frame after the initial scene build, with the ticker left stopped', async () => {
@@ -191,8 +183,8 @@ describe('TreeView render-on-demand', () => {
     });
     await flush();
 
-    expect(latestApp?.render).toHaveBeenCalled();
-    expect(latestApp?.start).not.toHaveBeenCalled();
+    expect(latestApp()?.render).toHaveBeenCalled();
+    expect(latestApp()?.start).not.toHaveBeenCalled();
   });
 
   it('does not render additional frames while idle (no perpetual loop)', async () => {
@@ -211,7 +203,7 @@ describe('TreeView render-on-demand', () => {
     // this test can't pass vacuously if mount itself stopped rendering: with
     // the fix reverted (`render` never wired up) both counts would be equal
     // at 0 and this assertion would still catch it.
-    const callsAfterMount = latestApp?.render.mock.calls.length ?? 0;
+    const callsAfterMount = latestApp()?.render.mock.calls.length ?? 0;
     expect(callsAfterMount).toBeGreaterThan(0);
 
     // Re-rendering with wholly unchanged props must not paint extra frames —
@@ -221,7 +213,7 @@ describe('TreeView render-on-demand', () => {
     });
     await flush();
 
-    expect(latestApp?.render.mock.calls.length).toBe(callsAfterMount);
+    expect(latestApp()?.render.mock.calls.length).toBe(callsAfterMount);
   });
 
   it('starts the ticker for a pulsing highlight that is already active on the first render', async () => {
@@ -234,7 +226,7 @@ describe('TreeView render-on-demand', () => {
     });
     await flush();
 
-    expect(latestApp?.start).toHaveBeenCalledTimes(1);
+    expect(latestApp()?.start).toHaveBeenCalledTimes(1);
   });
 
   it('starts the ticker only while a pulsing highlight is active, and stops it once cleared', async () => {
@@ -243,21 +235,21 @@ describe('TreeView render-on-demand', () => {
     });
     await flush();
 
-    expect(latestApp?.start).not.toHaveBeenCalled();
+    expect(latestApp()?.start).not.toHaveBeenCalled();
 
     await act(async () => {
       root.render(<TreeView scene={makeScene()} highlight={new Set([1])} />);
     });
     await flush();
 
-    expect(latestApp?.start).toHaveBeenCalledTimes(1);
+    expect(latestApp()?.start).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       root.render(<TreeView scene={makeScene()} highlight={null} />);
     });
     await flush();
 
-    expect(latestApp?.stop).toHaveBeenCalled();
+    expect(latestApp()?.stop).toHaveBeenCalled();
   });
 
   it('renders a frame when a still (non-pulsing) highlight is set, without starting the ticker', async () => {
@@ -265,14 +257,14 @@ describe('TreeView render-on-demand', () => {
       root.render(<TreeView scene={makeScene()} />);
     });
     await flush();
-    const callsBefore = latestApp?.render.mock.calls.length ?? 0;
+    const callsBefore = latestApp()?.render.mock.calls.length ?? 0;
 
     await act(async () => {
       root.render(<TreeView scene={makeScene()} highlight={new Set([1])} highlightStyle={{ pulseMs: 0 }} />);
     });
     await flush();
 
-    expect(latestApp?.start).not.toHaveBeenCalled();
-    expect(latestApp?.render.mock.calls.length).toBeGreaterThan(callsBefore);
+    expect(latestApp()?.start).not.toHaveBeenCalled();
+    expect(latestApp()?.render.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 });
