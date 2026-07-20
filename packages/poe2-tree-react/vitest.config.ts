@@ -6,7 +6,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   root: __dirname,
   test: {
-    include: ['test/**/*.test.ts'],
+    include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
+    environment: 'jsdom',
     coverage: {
       provider: 'v8',
       // The visual decisions and pan/zoom arithmetic live in sceneStyle.ts and

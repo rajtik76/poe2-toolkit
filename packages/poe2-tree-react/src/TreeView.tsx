@@ -202,8 +202,27 @@ export function TreeView({
   // below (never assigned during render).
   const limitsRef = useRef<ResolvedZoom>(resolveZoomLimits(undefined));
 
-  // Resolved highlight look, in a ref so the ticker and sync read current values
-  // without re-subscribing. Kept current in the effect below (never during render).
+  // Resolved highlight look. Memoised on the fields, not the object, so a fresh
+  // inline literal (e.g. `highlightStyle={{ pulseMs: 0 }}`) with the same values
+  // doesn't retrigger the sync/ticker-toggle effect below on every parent
+  // re-render. The ref mirrors it for the ticker and sync (kept current there).
+  const resolvedHighlightStyle = useMemo(
+    () => resolveHighlightStyle(highlightStyle),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      highlightStyle?.glowColor,
+      highlightStyle?.coreColor,
+      highlightStyle?.glowWidth,
+      highlightStyle?.coreWidth,
+      highlightStyle?.radius,
+      highlightStyle?.pulseMs,
+      highlightStyle?.pulseGrow,
+      highlightStyle?.glowAlpha?.[0],
+      highlightStyle?.glowAlpha?.[1],
+      highlightStyle?.coreAlpha?.[0],
+      highlightStyle?.coreAlpha?.[1],
+    ],
+  );
   const highlightStyleRef = useRef<ResolvedHighlightStyle>(DEFAULT_HIGHLIGHT);
 
   // Resolved allocation palette. Memoised on the fields, not the object, so a
@@ -247,6 +266,11 @@ export function TreeView({
     if (labelLayerRef.current) {
       labelLayerRef.current.visible = viewport.scale > LABEL_MIN_SCALE;
     }
+
+    // The ticker is stopped while idle (render-on-demand, see the app-init
+    // effect below), so every state change that reaches here must paint its
+    // own frame — nothing else will.
+    appRef.current?.render();
   }, []);
 
   // ---- Pixi application lifecycle -----------------------------------------
@@ -277,6 +301,11 @@ export function TreeView({
         preference: 'webgl',
         width: container.clientWidth || 800,
         height: container.clientHeight || 600,
+        // Render-on-demand: PixiJS's default continuous per-frame render loop
+        // burns GPU/CPU forever even while the tree sits visually static. The
+        // ticker only runs while the highlight pulse is animating (toggled
+        // below); every other state change paints one frame via `sync()`.
+        autoStart: false,
       })
       .then(() => {
         // StrictMode runs this effect twice in dev (mount → cleanup → mount). If
@@ -336,6 +365,16 @@ export function TreeView({
         });
 
         rebuildRef.current?.();
+
+        // The state-sync effect below may have already run (and set
+        // `highlightActiveRef`) while this async init was still pending, in
+        // which case its `appRef.current?.start()` was a no-op against a
+        // still-null ref. Catch up now that the app exists, or an initial
+        // mount with an already-pulsing `highlight` would render one static
+        // frame and never animate.
+        if (highlightActiveRef.current) {
+          app.start();
+        }
       });
 
     return () => {
@@ -360,19 +399,27 @@ export function TreeView({
     highlightRef.current = highlight ?? null;
     previewRef.current = preview ?? null;
     edgeOverlaysRef.current = edgeOverlays ?? null;
-    const resolvedStyle = resolveHighlightStyle(highlightStyle);
-    highlightStyleRef.current = resolvedStyle;
+    highlightStyleRef.current = resolvedHighlightStyle;
     // Only run the per-frame pulse redraw when a set is present AND it animates;
     // a still ring (pulseMs 0) is drawn once by the sync() below, no ticker cost.
-    highlightActiveRef.current = Boolean(highlight && highlight.size > 0 && resolvedStyle.pulseMs > 0);
+    highlightActiveRef.current = Boolean(highlight && highlight.size > 0 && resolvedHighlightStyle.pulseMs > 0);
     activeAscendancyRef.current = activeAscendancy;
     colorsRef.current = resolvedColors;
     limitsRef.current = resolveZoomLimits(zoom);
+
+    // Only run the continuous render loop while the pulse animation needs a
+    // per-frame redraw; otherwise the ticker stays stopped (render-on-demand).
+    if (highlightActiveRef.current) {
+      appRef.current?.start();
+    } else {
+      appRef.current?.stop();
+    }
+
     sync();
     // Depend on zoom's fields, not the object: a fresh literal with the same
     // values must not re-run the effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, highlight, highlightStyle, preview, edgeOverlays, activeAscendancy, resolvedColors, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
+  }, [scene, highlight, resolvedHighlightStyle, preview, edgeOverlays, activeAscendancy, resolvedColors, zoom?.maxScale, zoom?.minFitFactor, zoom?.overscroll, sync]);
 
   // ---- Scene graph build ---------------------------------------------------
 
@@ -605,7 +652,7 @@ export function TreeView({
         hoverRef.current = hit;
         const node = hit !== null ? scene.nodes.find((candidate) => candidate.skill === hit) : undefined;
         onNodeHover?.(hit, node ? worldToScreen(viewport, node.x, node.y) : undefined);
-        drawOverlay(overlayRef.current, scene, viewport, hit, highlight ?? null, preview ?? null, activeAscendancy, highlightStyleRef.current, colorsRef.current, edgeOverlays ?? null);
+        sync();
       }
     },
     [scene, sync, onNodeHover, activeAscendancy, highlight, preview, edgeOverlays, zoomAt],
@@ -624,20 +671,9 @@ export function TreeView({
 
       hoverRef.current = null;
       onNodeHover?.(null);
-      drawOverlay(
-        overlayRef.current,
-        sceneRef.current,
-        viewportRef.current,
-        null,
-        highlightRef.current,
-        previewRef.current,
-        activeAscendancyRef.current,
-        highlightStyleRef.current,
-        colorsRef.current,
-        edgeOverlaysRef.current,
-      );
+      sync();
     },
-    [onNodeHover],
+    [onNodeHover, sync],
   );
 
   const onPointerUp = useCallback(
