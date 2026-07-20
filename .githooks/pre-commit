@@ -13,3 +13,8 @@ local_hook="$(git rev-parse --git-common-dir)/hooks/pre-commit.local"
 if [ -x "$local_hook" ]; then
   "$local_hook" "$@"
 fi
+
+# ── Full CI gate, run locally so a lint/typecheck/test failure never reaches
+# the actual CI workflow (see .github/workflows/ci.yml, which runs the same
+# `npm run ci`) ─────────────────────────────────────────────────────────────
+npm run ci
