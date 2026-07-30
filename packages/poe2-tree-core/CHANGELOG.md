@@ -4,6 +4,17 @@ All notable changes to `@poe2-toolkit/tree-core` are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-07-30
+
+### Changed
+
+- First stable release. The public API is unchanged from 0.4.3 - the 1.0.0
+  bump marks it as settled, so from here on breaking changes require a major
+  version.
+- Test-only: the tree fixture helper now defaults to the `data.json` that
+  `scripts/golden-fixtures/setup.mjs --bless` writes, instead of a path that
+  never exists. No runtime changes.
+
 ## [0.4.3] - 2026-07-17
 
 ### Changed

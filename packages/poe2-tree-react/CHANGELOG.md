@@ -4,6 +4,18 @@ All notable changes to `@poe2-toolkit/tree-react` are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-07-30
+
+### Changed
+
+- First stable release. The public API is unchanged from 0.8.3 - the 1.0.0
+  bump marks it as settled, so from here on breaking changes require a major
+  version.
+- Bumped the pinned `@poe2-toolkit/tree-core` range to `^1.0.0`.
+- Internal cleanup in `TreeView`: hoisted the highlight-style tuple reads out
+  of the memo dependency list and dropped dependencies the pointer-move handler
+  never read. No behaviour change.
+
 ## [0.8.3] - 2026-07-20
 
 ### Fixed

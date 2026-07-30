@@ -4,6 +4,14 @@ All notable changes to `@poe2-toolkit/ggpk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-07-30
+
+### Changed
+
+- First stable release. The public API is unchanged from 0.6.1 - the 1.0.0
+  bump marks it as settled, so from here on breaking changes require a major
+  version.
+
 ## [0.6.1] - 2026-07-17
 
 ### Fixed
