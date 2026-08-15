@@ -11,6 +11,10 @@
 //   node scripts/golden-fixtures/setup.mjs --bless      # + (re)generate golden fixtures
 //   node scripts/golden-fixtures/setup.mjs --patch 4.5.5.1 --bless
 //
+// The patch version defaults to whatever the patch server is serving right now
+// (config.json's "patch": "latest"), because the CDN only hosts the current one
+// because a hard-coded version stops resolving as soon as GGG ships an update.
+//
 // Point the test suites at the result with:
 //   export POE2_GGPK_EXTRACT=$PWD/.ggpk-extract
 //   export POE2_DATA_GOLDEN=$PWD/.golden-fixtures/data
@@ -23,6 +27,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { currentPatch } from './current-patch.mjs';
 
 const SCRIPT_DIR = fileURLToPath(new URL('./', import.meta.url));
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -38,10 +44,20 @@ const patchFlagIndex = args.indexOf('--patch');
 const patchOverride = patchFlagIndex >= 0 ? args[patchFlagIndex + 1] : undefined;
 
 const manifest = JSON.parse(readFileSync(join(SCRIPT_DIR, 'config.json'), 'utf8'));
-const patch = patchOverride ?? manifest.patch;
+const pinned = patchOverride ?? manifest.patch;
+
+// "latest" (the default) asks the patch server what it is serving right now. A
+// literal version stays honoured, but only while the CDN still has it: it hosts
+// the current patch alone, so any pin 404s the moment GGG ships an update. That
+// is why pinning is opt-in and resolving is the default.
+const patch = pinned && pinned !== 'latest' ? pinned : await currentPatch();
 
 if (!patch) {
-  throw new Error('no patch pinned — set "patch" in scripts/golden-fixtures/config.json or pass --patch <version>');
+  throw new Error('no patch resolved: set "patch" in scripts/golden-fixtures/config.json or pass --patch <version>');
+}
+
+if (pinned === 'latest' || !pinned) {
+  console.log(`Patch server is serving ${patch}.`);
 }
 
 /** Run a step, inheriting stdio, failing loud on error. */
