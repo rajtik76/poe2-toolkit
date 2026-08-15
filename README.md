@@ -223,6 +223,12 @@ only the current one, so there is nothing stable to pin to.
 to pin a specific patch anyway and how to point the tests at a fixture layout of
 your own instead.
 
+## Contributing and security
+
+[CONTRIBUTING.md](./CONTRIBUTING.md) covers the setup, the CI gate and the one
+hard rule (no game data in the repository, ever). Security issues go through
+GitHub's private advisories, not a public issue: see [SECURITY.md](./SECURITY.md).
+
 ## Release
 
 Before tagging a release for a package, fill in `packages/<pkg>/CHANGELOG.md`
