@@ -44,7 +44,43 @@ This toolkit fills that gap as **libraries, not an app**:
 
 ## Quick start
 
-Render a clickable passive tree - core works out the geometry, React draws it:
+Two steps: pull the tree data out of the patch server once, then render it.
+
+Every package is **ESM only** and needs **Node 18+**; TypeScript types ship with them.
+
+### 1. Extract the data
+
+```sh
+npm install @poe2-toolkit/tree-extractor @poe2-toolkit/ggpk
+```
+
+```ts
+import { writeFile } from 'node:fs/promises';
+import { createCdnSource } from '@poe2-toolkit/ggpk';
+import { extractTree } from '@poe2-toolkit/tree-extractor';
+
+const source = await createCdnSource({
+  // The CDN serves only the patch it is currently on, so a stale version 404s -
+  // pass the one live right now, not the one from this README. The patch webhook
+  // below tells you when that changes.
+  patch: '4.5.4.10',
+  // pathofexile-dat's decoded <Name>.json output; producing it is a one-time
+  // step, see @poe2-toolkit/ggpk for the how.
+  tablesDir: './tables/English',
+  cacheDir: './.cache',
+});
+
+// `data` is the tree `data.json` payload - the input tree-core normalizes below.
+const { data } = await extractTree(source);
+await writeFile('./data.json', JSON.stringify(data));
+```
+
+Run this once per game patch and serve the result like any other static asset.
+Nothing is bundled with the packages; the bytes come from GGG at run time.
+
+### 2. Render it
+
+Core works out the geometry, React draws it:
 
 ```sh
 npm install @poe2-toolkit/tree-react @poe2-toolkit/tree-core
@@ -56,8 +92,12 @@ import { buildScene } from '@poe2-toolkit/tree-core';
 import { normalizeGggTree } from '@poe2-toolkit/tree-core/ggg';
 import { TreeView } from '@poe2-toolkit/tree-react';
 
-// A tree `data.json` (from @poe2-toolkit/tree-extractor, or the one the live demo
-// publishes) -> the engine's TreeData. Once per tree version.
+import rawTreeJson from './data.json';   // the file step 1 wrote
+
+// GGG's shape -> the engine's TreeData. Once per tree version. The second
+// argument is Path of Building's `treeVersion` tag for this tree - GGG does not
+// store it in the file, and the engine only carries it through onto
+// `TreeData.version` so you can stamp saved builds with it.
 const data = normalizeGggTree(rawTreeJson, '0_5');
 
 export function Tree() {
@@ -171,13 +211,17 @@ tests need a local GGPK extract and golden fixtures (both generated locally,
 gitignored, never committed or run in CI):
 
 ```sh
-npm run fixtures:extract   # fetch/decode GGPK tables for the pinned patch
+npm run build              # bless shells out to the packages' CLIs, so build first
+npm run fixtures:extract   # fetch/decode GGPK tables for the live patch
 npm run fixtures:bless     # regenerate golden fixtures from the extract
 npm test
 ```
 
-[docs/GOLDEN_FIXTURES.md](docs/GOLDEN_FIXTURES.md) has the details, including
-how to point the tests at a fixture layout of your own instead.
+The extract follows whatever version the patch server is serving - the CDN keeps
+only the current one, so there is nothing stable to pin to.
+[docs/GOLDEN_FIXTURES.md](docs/GOLDEN_FIXTURES.md) has the details, including how
+to pin a specific patch anyway and how to point the tests at a fixture layout of
+your own instead.
 
 ## Release
 
