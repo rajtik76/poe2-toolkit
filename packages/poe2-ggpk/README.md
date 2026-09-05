@@ -104,6 +104,7 @@ one place rather than being reimplemented per extractor:
 | `buildStatIndex(csd)` | Parse a `stat_descriptions.csd` (UTF-16 text) into a per-stat index. |
 | `renderBlock(index, statIds, vals)` | Render numeric `(stat, value)` pairs into human-readable lines. |
 | `decodeDdsIcons(source, ddsPaths, transform?, concurrency?)` | Decode a set of distinct DDS paths to PNG, skipping and reporting what the source can't serve. |
+| `decodeSpriteIcons(source, spriteNames, concurrency?)` | Decode a set of distinct UIImages sprite names to PNG, cropped to each name's rect. |
 | `mapConcurrent(items, concurrency, fn)` | Run `fn` over `items` with at most `concurrency` calls in flight, preserving output order. |
 
 `buildStatIndex` returns a `StatIndex`; pass it to `renderBlock` along with
@@ -123,7 +124,17 @@ encoding, for extractor-specific post-processing (e.g. item-extractor's
 flask-sheet compositing). Up to `concurrency` distinct paths (default 16)
 decode in flight at once - each decode is dominated by an awaited network
 fetch, not CPU work, so overlapping them cuts wall-clock time without
-changing the result. `mapConcurrent` is the general-purpose version of that
+changing the result.
+
+`decodeSpriteIcons` is the same loop for the other way the data references art:
+a UIImages name (`Art/2DArt/UIImages/InGame/...`, no extension) instead of a DDS
+path. Each name resolves through the sprite index and is keyed as `<name>.png`,
+carrying the rect the client draws rather than the whole backing sheet, and keyed
+by name rather than by sheet since several names can share one. A column can move
+between the two forms across patches (`SkillGems.UI_Image` did, in 4.5.5), so an
+extractor that ships art usually wants both loops.
+
+`mapConcurrent` is the general-purpose version of that
 same worker-pool loop, for any other independent-awaits-in-a-loop case (e.g.
 the tree extractor's sprite atlas build); it guarantees results land at their
 original index, so callers that depend on input order (like atlas packing)
