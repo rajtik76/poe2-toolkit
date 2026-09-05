@@ -4,6 +4,25 @@ All notable changes to `@poe2-toolkit/ggpk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-09-05
+
+### Added
+
+- `decodeSpriteIcons(source, spriteNames, concurrency?)`, the sprite-name
+  counterpart to `decodeDdsIcons`, for the UIImages names GGG's data uses
+  alongside DDS paths. Each name resolves through the sprite index and is keyed
+  as `<name>.png` - by name, not by backing sheet, since several names can share
+  one sheet at different rects.
+
+### Fixed
+
+- `resolveSprite` and `uiSprite` no longer report a miss while the sprite index
+  is still downloading. The index was assigned before it was filled, so every
+  lookup that raced the first one read an empty map. Sequential callers never
+  saw it; decoding 16 icons at once lost 94 of 98 gem hover images, and a miss
+  is indistinguishable from art GGG has removed. The in-flight build is
+  memoized now, not the map.
+
 ## [1.0.0] - 2026-07-30
 
 ### Changed

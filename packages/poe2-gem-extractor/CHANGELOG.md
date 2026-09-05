@@ -4,6 +4,23 @@ All notable changes to `@poe2-toolkit/gem-extractor` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-09-05
+
+### Changed
+
+- **Breaking:** hover art now decodes from both forms `SkillGems.UI_Image`
+  takes: a DDS path, or the UIImages sprite name it switched to in patch 4.5.5.
+  The PNG is keyed by the reference plus `.png` either way, so appending `.png`
+  to `hoverImage` stays the rule if GGG switches form again. Until now a
+  sprite-name reference decoded to nothing and the art was silently absent.
+- **Breaking:** `buildGemIcons` takes a `GemIconSource` (`DdsSource` plus
+  `uiSprite`) instead of a bare `DdsSource`. Any `@poe2-toolkit/ggpk` source
+  satisfies it, and `extractGems` was already typed that way.
+- `hoverImage` is documented as the raw `UI_Image` reference in whichever form
+  the patch holds, rather than specifically a DDS path.
+- Pinned `@poe2-toolkit/ggpk` to `^1.1.0` for `decodeSpriteIcons` and the
+  sprite-index race fix that makes concurrent sprite decoding usable.
+
 ## [1.0.0] - 2026-07-30
 
 ### Changed
