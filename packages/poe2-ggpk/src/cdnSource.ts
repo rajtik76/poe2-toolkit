@@ -182,7 +182,10 @@ export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSou
   const loader = await FileLoader.create(new CdnCachingLoader(cdnHost, patch, bundleCacheDir));
 
   const ddsCache = new Map<string, RgbaImage | null>();
-  let spriteIndex: Map<string, SpriteImage> | null = null;
+  // Memoize the in-flight build, not the map: a map assigned before its await is
+  // handed to concurrent callers while still empty, and an empty index answers
+  // "no such sprite" instead of waiting for the download to finish.
+  let spriteIndex: Promise<Map<string, SpriteImage>> | null = null;
 
   async function file(path: string): Promise<Uint8Array | null> {
     return loader.tryGetFileContents(path.toLowerCase());
@@ -223,14 +226,16 @@ export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSou
     return image;
   }
 
-  async function ensureSpriteIndex(): Promise<Map<string, SpriteImage>> {
-    if (!spriteIndex) {
-      spriteIndex = new Map();
+  function ensureSpriteIndex(): Promise<Map<string, SpriteImage>> {
+    spriteIndex ??= (async () => {
+      const index = new Map<string, SpriteImage>();
 
       for (const entry of parseSpriteIndex(await loader.getFileContents('art/uiimages1.txt'))) {
-        spriteIndex.set(entry.name, entry);
+        index.set(entry.name, entry);
       }
-    }
+
+      return index;
+    })();
 
     return spriteIndex;
   }

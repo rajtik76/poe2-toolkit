@@ -86,6 +86,31 @@ describe.skipIf(!extractAvailable())('createCdnSource', () => {
     expect(compared).toBeGreaterThan(0);
   });
 
+  /**
+   * The sprite index is fetched once and shared, so lookups that arrive during
+   * that fetch have to wait for it. An earlier version published the map before
+   * filling it, and every racing lookup then read an empty index - which looks
+   * exactly like art GGG has removed.
+   */
+  it('answers concurrent sprite lookups from a single index build', async () => {
+    const name = 'Art/2DArt/UIImages/InGame/SmartHover/GemHoverTitle';
+    const known = await (await source()).resolveSprite(name);
+
+    expect(known).not.toBeNull();
+
+    // A second source starts with a cold index, so these three race that build.
+    const cold = await source();
+    const [first, second, image] = await Promise.all([
+      cold.resolveSprite(name),
+      cold.resolveSprite(name),
+      cold.uiSprite(name),
+    ]);
+
+    expect(first).toEqual(known);
+    expect(second).toEqual(known);
+    expect(image).not.toBeNull();
+  });
+
   it('decodes BC7 class portraits identically to the legacy decoder', async () => {
     // Portraits exercise the BC7 path specifically — icons alone would miss it.
     const src = await source();
