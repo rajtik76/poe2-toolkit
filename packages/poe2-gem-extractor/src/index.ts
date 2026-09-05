@@ -22,7 +22,7 @@ export type {
 } from './buildGems.js';
 
 export { buildGemIcons } from './buildIcons.js';
-export type { GemIconsResult } from './buildIcons.js';
+export type { GemIconsResult, GemIconSource } from './buildIcons.js';
 
 /** Everything the extractor produces for one game version. */
 export interface GemBundle {

@@ -120,7 +120,13 @@ The rules the shape alone doesn't tell you:
   icon from the active skill; supports take theirs from `SupportGems.Icon`.
 - **`description` is `null` when the source text is empty**, otherwise the
   skill / support text with bbcode stripped.
-- **`hoverImage` is `SkillGems.UI_Image`, raw GGPK path, `null` when absent.**
+- **`hoverImage` is `SkillGems.UI_Image`, raw as the table holds it, `null` when
+  absent.** The reference form follows the patch: a DDS path
+  (`Art/Textures/.../GemHoverImageIceNova.dds`) up to 4.5.4, a UIImages sprite
+  name (`Art/2DArt/UIImages/InGame/SmartHover/GemHoverImage/GemHoverImageIceNova`,
+  no extension) from 4.5.5 on. `buildGemIcons` decodes both and keys the PNG by
+  this value plus `.png` either way, so appending `.png` keeps working if GGG
+  switches form again.
   Only active/spirit (skill) gems carry one - **no support gem has hover art in
   the game**, confirmed, so `null` there is the correct, permanent state, not a
   gap. Among active/spirit gems, coverage is genuinely sparse: **531 `SkillGems`
@@ -198,12 +204,14 @@ comes from is unresolved - flagged here rather than guessed at.
 ### `icons`: the decoded PNGs (`GemIconsResult`)
 
 `icons.icons` is PNG bytes keyed by output path - each gem's `icon` and
-`hoverImage` DDS paths with their extension swapped to `.png`, which the CLI
-writes as files under `icons/`. Paths are deduplicated, so it's one PNG per
-distinct path across all gems. `icons.report` counts what happened: `packed`
-decoded successfully, `missing` could not be served or decoded (skipped, never
-substituted from a vendored asset - expect a large `missing` count here purely
-from the sparse `hoverImage` coverage noted above).
+`hoverImage` reference plus `.png` (a DDS path has its extension swapped, a
+sprite name simply gains one), which the CLI writes as files under `icons/`.
+References are deduplicated, so it's one PNG per distinct reference across all
+gems. A sprite name is decoded through the UIImages index, so the PNG carries
+the sub-rect the client draws rather than the whole backing sheet.
+`icons.report` counts what happened: `packed` decoded successfully, `missing`
+could not be served, resolved or decoded (skipped, never substituted from a
+vendored asset).
 
 ## CLI: write the bundle to disk
 

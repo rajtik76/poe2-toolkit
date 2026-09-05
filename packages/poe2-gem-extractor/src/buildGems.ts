@@ -72,10 +72,16 @@ export interface Gem {
   /** Raw GGPK DDS path of the gem's icon, or `null` when none is referenced. */
   icon: string | null;
   /**
-   * Raw GGPK DDS path of the gem's tooltip background art (`SkillGems.UI_Image`),
-   * or `null` when none is referenced. Coverage is sparse in the source data: no
-   * support gem has one, and only a fraction of active/spirit gems do (verified
-   * against a live extract - not a bug in this extractor).
+   * Raw `SkillGems.UI_Image` reference to the gem's tooltip background art, or
+   * `null` when none is referenced. Kept as the table holds it, so its form
+   * follows the patch: a DDS path (`Art/Textures/.../X.dds`) up to 4.5.4, a
+   * UIImages sprite name (`Art/2DArt/UIImages/InGame/...`, no extension) from
+   * 4.5.5 on. `buildGemIcons` decodes both and keys the PNG by this value plus
+   * `.png` either way.
+   *
+   * Coverage is sparse in the source data: no support gem has one, and only a
+   * fraction of active/spirit gems do (verified against a live extract - not a
+   * bug in this extractor).
    */
   hoverImage: string | null;
 }

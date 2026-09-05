@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { buildGems, gemStatRequirement, stripBbcode } from '../src/buildGems';
 import { buildGemIcons } from '../src/buildIcons';
+import type { GemIconSource } from '../src/buildIcons';
 import { extractGems } from '../src/index';
 
 /** A hand-written `.csd` sample covering the stat shapes {@link buildGems} renders. */
@@ -42,6 +43,9 @@ const GENERAL_STAT_DESCRIPTIONS = [
   '\t1',
   '\t\t# "General Only Stat +{0}"',
 ].join('\n');
+
+/** A UIImages sprite name: the form `SkillGems.UI_Image` holds from patch 4.5.5 on. */
+const ICE_BOLT_HOVER_SPRITE = 'Art/2DArt/UIImages/InGame/SmartHover/GemHoverImage/GemHoverImageIceBolt';
 
 /** Minimal in-memory tables modelling one active gem, one support, one [DNT], plus IceBolt for scaling edge cases. */
 const TABLES: Record<string, TableRow[]> = {
@@ -78,7 +82,8 @@ const TABLES: Record<string, TableRow[]> = {
     },
     { BaseItemType: 1, GemType: 1, GemColour: 1, GemEffects: [1], StrengthRequirementPercent: 100 },
     { BaseItemType: 2, GemType: 0, GemEffects: [] },
-    { BaseItemType: 3, GemType: 0, GemColour: 3, MinLevelReq: 1, GemEffects: [2] },
+    // 4.5.5+ reference form: a UIImages sprite name, no extension (Fireball above keeps the older DDS-path form).
+    { BaseItemType: 3, GemType: 0, GemColour: 3, MinLevelReq: 1, GemEffects: [2], UI_Image: ICE_BOLT_HOVER_SPRITE },
     { BaseItemType: 4, GemType: 0, GemColour: 1, MinLevelReq: 1, GemEffects: [3] },
     // BaseItemType doesn't resolve to a row: skipped before any join is attempted.
     { BaseItemType: 999, GemType: 0, GemEffects: [] },
@@ -132,14 +137,19 @@ const TABLES: Record<string, TableRow[]> = {
   ],
 };
 
-/** A fake source: tables from the fixture above, icons resolved per `images`. */
-function fakeSource(images: Record<string, RgbaImage | null> = {}): GgpkSource & { dds(path: string): Promise<RgbaImage | null> } {
+/**
+ * A fake source: tables from the fixture above, DDS paths and sprite names both
+ * resolved per `images` (the sprite index is the source's concern, so a fake can
+ * serve a name straight from the same map).
+ */
+function fakeSource(images: Record<string, RgbaImage | null> = {}): GgpkSource & GemIconSource {
   return {
     table: (name: string) => Promise.resolve(TABLES[name] ?? []),
     file: (path: string) => Promise.resolve(
       new Uint8Array(Buffer.from(path.includes('skill_stat_descriptions') ? STAT_DESCRIPTIONS : GENERAL_STAT_DESCRIPTIONS, 'utf16le')),
     ),
     dds: (path: string) => Promise.resolve(images[path] ?? null),
+    uiSprite: (name: string) => Promise.resolve(images[name] ?? null),
   };
 }
 
@@ -338,7 +348,7 @@ describe('buildGems scaling', () => {
 });
 
 describe('buildGemIcons', () => {
-  it('decodes distinct DDS icons and hover art to PNG paths, and reports misses', async () => {
+  it('decodes distinct DDS icons and DDS-path hover art to PNG paths, and reports misses', async () => {
     const source = fakeSource({
       'Art/2DArt/SkillIcons/fireball.dds': px(),
       'Art/2DArt/SkillIcons/fireball_hover.dds': px(),
@@ -349,19 +359,49 @@ describe('buildGemIcons', () => {
     expect(Object.keys(icons)).toContain('Art/2DArt/SkillIcons/fireball.png');
     expect(Object.keys(icons)).toContain('Art/2DArt/SkillIcons/fireball_hover.png');
     expect(report.packed).toBe(2);
-    // The support icon, IceBolt's icon and FrostBolt's icon have no decoded image in this source, so they count missing.
-    expect(report.missing).toBe(3);
+    // The support icon, IceBolt's icon, IceBolt's hover sprite and FrostBolt's icon
+    // have no decoded image in this source, so they count missing.
+    expect(report.missing).toBe(4);
+  });
+
+  it('decodes sprite-name hover art through the sprite index, keyed by the name plus .png', async () => {
+    const source = fakeSource({ [ICE_BOLT_HOVER_SPRITE]: px() });
+    const data = await buildGems(source);
+    const { icons, report } = await buildGemIcons(source, data);
+
+    expect(Object.keys(icons)).toEqual([`${ICE_BOLT_HOVER_SPRITE}.png`]);
+    expect(report.packed).toBe(1);
+  });
+
+  it('never asks the DDS decoder for a sprite name, nor the sprite index for a DDS path', async () => {
+    const source = fakeSource({
+      'Art/2DArt/SkillIcons/fireball_hover.dds': px(),
+      [ICE_BOLT_HOVER_SPRITE]: px(),
+    });
+    const dds = vi.fn(source.dds);
+    const uiSprite = vi.fn(source.uiSprite);
+    const data = await buildGems(source);
+
+    await buildGemIcons({ ...source, dds, uiSprite }, data);
+
+    expect(dds.mock.calls.flat()).not.toContain(ICE_BOLT_HOVER_SPRITE);
+    expect(uiSprite.mock.calls.flat()).toEqual([ICE_BOLT_HOVER_SPRITE]);
+  });
+
+  it('counts a sprite name the index cannot resolve as missing, never substituted', async () => {
+    const source = fakeSource({ 'Art/2DArt/SkillIcons/fireball.dds': px() });
+    const data = await buildGems(source);
+    const { icons, report } = await buildGemIcons(source, data);
+
+    expect(Object.keys(icons)).toEqual(['Art/2DArt/SkillIcons/fireball.png']);
+    expect(report.missing).toBe(5); // fireball_hover, the support icon, both remaining gem icons, IceBolt's hover sprite.
   });
 });
 
 describe('extractGems', () => {
   it('returns data and icons in one pass', async () => {
     const source = fakeSource({ 'Art/2DArt/SkillIcons/fireball.dds': px() });
-    const bundle = await extractGems({
-      ...source,
-      resolveSprite: () => Promise.resolve(null),
-      uiSprite: () => Promise.resolve(null),
-    });
+    const bundle = await extractGems({ ...source, resolveSprite: () => Promise.resolve(null) });
 
     expect(Object.keys(bundle.data.gems)).toContain('Fireball');
     expect(bundle.icons.report.packed).toBe(1);
