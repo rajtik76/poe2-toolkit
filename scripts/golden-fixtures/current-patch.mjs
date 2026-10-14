@@ -34,9 +34,15 @@ export function currentPatch({ host = HOST, port = PORT, timeout = TIMEOUT_MS } 
 
     const finish = (error, value) => {
       if (settled) return;
+
       settled = true;
       socket.destroy();
-      error ? reject(error) : resolve(value);
+
+      if (error) {
+        reject(error);
+      } else {
+        resolve(value);
+      }
     };
 
     socket.setTimeout(timeout);
@@ -60,9 +66,11 @@ export function currentPatch({ host = HOST, port = PORT, timeout = TIMEOUT_MS } 
       const url = buffer.subarray(start, start + length).toString('utf16le');
       const match = /\/(\d[\d.]*\d)\/?$/.exec(url);
 
-      match
-        ? finish(null, match[1])
-        : finish(new Error(`could not parse version from "${url}"`));
+      if (match) {
+        finish(null, match[1]);
+      } else {
+        finish(new Error(`could not parse version from "${url}"`));
+      }
     });
 
     socket.on('close', () => finish(new Error('patch server returned no version')));

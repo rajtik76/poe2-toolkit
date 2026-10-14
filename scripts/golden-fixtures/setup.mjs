@@ -22,8 +22,8 @@
 //   export POE2_TREE_DATA=$PWD/.golden-fixtures/tree/data.json
 // (the test suites already default to these paths — see docs/GOLDEN_FIXTURES.md)
 
-import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -129,6 +129,7 @@ function blessData(label, bin) {
       renameSync(join(scratch, file), join(DATA_GOLDEN_DIR, file));
     }
   }
+
   rmSync(scratch, { recursive: true, force: true });
 }
 

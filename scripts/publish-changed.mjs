@@ -120,6 +120,7 @@ for (const dir of ORDER) {
   }
 
   console.error(`If npm reports an OIDC authentication error, verify the saved Trusted Publisher at https://www.npmjs.com/package/${name}/access: owner rajtik76, repository poe2-toolkit, workflow release.yml, empty environment, Allow npm publish enabled.`);
+
   throw new Error(`npm publish failed for ${name}@${version}.`, { cause: result.error });
 }
 

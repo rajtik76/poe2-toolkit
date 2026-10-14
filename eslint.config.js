@@ -79,6 +79,15 @@ export default [
         },
     },
     {
+        // Repo tooling runs on Node, not in the browser.
+        files: ['scripts/**/*.{js,mjs}'],
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+        },
+    },
+    {
         ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**'],
     },
     prettier,

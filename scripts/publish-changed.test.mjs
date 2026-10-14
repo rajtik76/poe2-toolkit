@@ -59,6 +59,7 @@ if (args[0] === 'view') {
     },
   });
   const calls = readFileSync(callsFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+
   return { ...result, calls, publishes: calls.filter(call => call[0] === 'publish') };
 }
 

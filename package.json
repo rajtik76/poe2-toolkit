@@ -13,7 +13,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "node --test scripts/publish-changed.test.mjs && npm run test --workspaces --if-present",
     "test:coverage": "node --test scripts/publish-changed.test.mjs && npm run test --workspaces --if-present -- --coverage",
-    "lint": "eslint packages",
+    "lint": "eslint packages scripts",
     "check:readme": "node scripts/check-readme-packages.mjs",
     "ci": "npm run build && npm run typecheck && npm run lint && npm run check:readme && npm run test:coverage",
     "fixtures:extract": "node scripts/golden-fixtures/setup.mjs",
