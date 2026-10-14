@@ -102,11 +102,16 @@ coordinates and stat text vary per extract. The rules the types don't spell out:
   (the PassiveSkillGraphId); `group`, `out`/`in`, `edges` and `jewelSlots` all
   reference those same ids. `classStartIndex` instead indexes into `classes`.
 - **Kind flags are present-only `true` literals.** `isNotable`, `isKeystone`,
-  `isJewelSocket`, `isMastery`, `isGenericAttribute` and `isAscendancyStart`
-  appear only when true - a plain node carries none of them, they are never
-  serialized as `false`.
+  `isJewelSocket`, `containJewelSocket`, `sinister`, `noRadius`, `isMastery`,
+  `isGenericAttribute`, `isAscendancyStart`, `isMultipleChoice`,
+  `isMultipleChoiceOption`, `isFreeAllocate` and `applyToArmour` appear only when
+  true - a plain node carries none of them, they are never serialized as `false`.
+- **Released content only.** Unnamed and `[DNT ...]` nodes and every node of a
+  disabled or `[DNT ...]` ascendancy are left out, together with their edges and
+  any group they leave empty.
 - **Geometry is optional.** Graph nodes carry `group`/`orbit`/`orbitIndex`/`x`/`y`
-  and `out`; data-only class-override nodes (swapped in per class) carry only
+  and `out`; data-only override nodes (swapped in per class, or per ascendancy
+  that replaces another, like Abyssal Lich for Lich) carry only
   `skill`/`name`/`icon`/`stats`, no coordinates or edges.
 - **The passive-point budget is split.** `maxWeaponSetPoints` is every campaign
   weapon-set passive point; `maxBasicPoints` is the level-based budget **plus**
@@ -157,12 +162,14 @@ publish step left to you.
 ## How it works
 
 - **Data** comes from GGPK tables (`PassiveSkills`, `PassiveSkillMasteryGroups`,
-  `Characters`, `Ascendancy`, `SkillGems`, `BaseItemTypes`, ...) joined to the
-  `.psg` passive-graph geometry, with stat lines rendered through
-  `@poe2-toolkit/ggpk`'s stat-description engine. Nodes that describe themselves
-  through a granted skill or passive points instead of a stat line (resolved
-  `SkillGems` -> `BaseItemTypes` for the name) read as "Grants Skill: ..." or
-  "Grants N Passive Skill Point", matching Path of Building's export. Each node
+  `Characters`, `Ascendancy`, `AscendancyPassiveSkillOverrides`, the
+  `BlightCrafting*` anointment tables, `SkillGems`, `BaseItemTypes`, ...) joined
+  to the `.psg` passive-graph geometry, with stat lines rendered through
+  `@poe2-toolkit/ggpk`'s stat-description engine and listed in description-file
+  order. Nodes that describe themselves through a granted skill or passive points
+  instead of a stat line (resolved `SkillGems` -> `BaseItemTypes` for the name)
+  read as "Grants Skill: ...", "Grants N Passive Skill Point" or "N Passive Skill
+  Points become Weapon Set Skill Points", matching Path of Building's export. Each node
   also carries an `unlockConstraint` when GGG gates it behind another allocated
   passive, and each directed `.psg` edge becomes an arc with its world centre
   resolved up front so the renderer just sweeps it.

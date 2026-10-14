@@ -111,6 +111,8 @@ const PASSIVE_STATS_PATH = 'data/statdescriptions/passive_skill_stat_description
 // --- raw GGPK row shapes (only the columns this build reads) -----------------
 
 interface PassiveSkillRow {
+  /** PassiveSkills.Id, the node's string id (e.g. `life_recoup15`). */
+  Id?: string;
   PassiveSkillGraphId?: number | null;
   Name?: string;
   Icon_DDSFile?: string;
@@ -120,6 +122,8 @@ interface PassiveSkillRow {
   Stat3Value?: number;
   Stat4Value?: number;
   Stat5Value?: number;
+  Stat6Value?: number;
+  Stat7Value?: number;
   IsNotable?: boolean;
   IsKeystone?: boolean;
   IsJewelSocket?: boolean;
@@ -131,10 +135,24 @@ interface PassiveSkillRow {
   FlavourText?: unknown;
   /** Row indices of the passives that must be allocated for this node to appear. */
   UnlockedBy?: number[];
+  /** Ascendancy row that reveals this node, for a node gated by {@link PassiveSkillRow.UnlockedBy}. */
+  VisibleForAscendancy?: number | null;
   /** SkillGems row index of a skill this node grants (no `Stats` line of its own). */
   GrantedSkill?: number | null;
   /** Passive skill points this node grants. */
   SkillPointsGranted?: number;
+  /** Passive skill points this node turns into weapon-set points. */
+  WeaponPointsGranted?: number;
+  /** A node that offers a choice between several option nodes. */
+  IsMultipleChoice?: boolean;
+  /** One of the options of a multiple-choice node. */
+  IsMultipleChoiceOption?: boolean;
+  /** Only allocated through an anointment (the Sinister jewel sockets). */
+  IsAnointmentOnly?: boolean;
+  /** Allocated without spending a passive point. */
+  IsFree?: boolean;
+  /** Stats apply to the equipped body armour (Smith of Kitava). */
+  ApplyToArmour?: boolean;
 }
 
 interface SkillGemRow { BaseItemType?: number | null }
@@ -142,10 +160,12 @@ interface BaseItemTypeRow { Name?: string }
 
 /**
  * Lines for effects a node describes outside `Stats`: a granted skill (resolved
- * `GrantedSkill` -> SkillGems -> BaseItemTypes name) or granted passive points.
- * Matches PoB's passivetree export, so e.g. "Converging Paths" reads
- * "Grants Skill: Moment of Vulnerability" and a point node "Grants 1 Passive
- * Skill Point". Empty when the node has neither.
+ * `GrantedSkill` -> SkillGems -> BaseItemTypes name), granted passive points or
+ * passive points turned into weapon-set points. Matches PoB's passivetree
+ * export, so e.g. "Converging Paths" reads "Grants Skill: Moment of
+ * Vulnerability", a point node "Grants 1 Passive Skill Point" and "Weapon
+ * Master" "100 Passive Skill Points become Weapon Set Skill Points". Empty when
+ * the node has none of these.
  */
 export function grantedStats(row: PassiveSkillRow, skillGems: SkillGemRow[], baseItemTypes: BaseItemTypeRow[]): string[] {
   const lines: string[] = [];
@@ -163,14 +183,41 @@ export function grantedStats(row: PassiveSkillRow, skillGems: SkillGemRow[], bas
     lines.push(`Grants ${row.SkillPointsGranted} Passive Skill Point`);
   }
 
+  if (row.WeaponPointsGranted && row.WeaponPointsGranted > 0) {
+    lines.push(`${row.WeaponPointsGranted} Passive Skill Points become Weapon Set Skill Points`);
+  }
+
   return lines;
+}
+
+/**
+ * Strip GGG's markup from a display name the way PoB's `escapeGGGString` does:
+ * `<tag>{text}` -> "text", `[ref]` -> "ref", `[ref|display]` -> "display", so
+ * "[SinisterJewelSockets|Sinister] [Jewel] Socket" reads "Sinister Jewel Socket".
+ */
+export function plainName(text: string): string {
+  return text
+    .replace(/<[^>]+>\{([^}]+)\}/g, '$1')
+    .replace(/\[([^|\]]+)\]/g, '$1')
+    .replace(/\[[^|\]]+\|([^\]]+)\]/g, '$1');
 }
 
 interface StatRow { Id?: string }
 interface MasteryGroupRow { Art?: number | null }
 interface MasteryArtRow { ActiveEffectImage?: string }
 interface CharacterRow { Name: string; BaseStrength: number; BaseDexterity: number; BaseIntelligence: number }
-interface AscendancyRow { Id: string; Name?: string; Character?: number | null; Disabled?: boolean }
+interface AscendancyRow {
+  Id: string;
+  Name?: string;
+  Character?: number | null;
+  Disabled?: boolean;
+  /** The ascendancy this one replaces (Abyssal Lich -> Lich), sharing its nodes. */
+  BaseAscendancy?: number | null;
+}
+interface AscendancyOverrideRow { AscendancyToOverrideFor: number; SkillToOverride: number; Override: number }
+interface BlightResultRow { PassiveSkill?: number | null }
+interface BlightRecipeRow { BlightCraftingResult?: number | null; BlightCraftingItems?: number[] }
+interface BlightItemRow { NameShort?: string }
 interface JewelSlotRow { Slot?: number | null }
 interface ClassOverrideRow { SkillToOverride: number; Override: number; CharacterToOverrideFor: number }
 interface QuestStaticRewardRow { QuestFlag?: number | null; WeaponPassives?: number | null }
@@ -212,15 +259,44 @@ export interface ExportNode {
   isNotable?: true;
   /** Present (`true`) when the node is a keystone. */
   isKeystone?: true;
-  /** Present (`true`) when the node is a jewel socket. */
+  /** `PassiveSkills.Id`, the node's string id (e.g. `life_recoup15`). */
+  stringId?: string;
+  /**
+   * Present (`true`) when the node is a plain jewel socket. A notable or keystone
+   * that also holds a socket is flagged {@link ExportNode.containJewelSocket} instead.
+   */
   isJewelSocket?: true;
+  /** Present (`true`) on an ascendancy node that holds a jewel socket. */
+  containJewelSocket?: true;
+  /**
+   * Present (`true`) on a socket allocated only through an anointment (the
+   * Sinister jewel sockets); such a socket has no radius.
+   */
+  sinister?: true;
+  /** Present (`true`) when the socket has no radius (see {@link ExportNode.sinister}). */
+  noRadius?: true;
+  /** `PassiveSkills.Id` of an anointment-only socket, the id anointments refer to. */
+  aliasPassiveSocket?: string;
+  /** Present (`true`) on a node that offers a choice between option nodes. */
+  isMultipleChoice?: true;
+  /** Present (`true`) on one option of a multiple-choice node. */
+  isMultipleChoiceOption?: true;
+  /** Present (`true`) when the node is allocated without spending a point. */
+  isFreeAllocate?: true;
+  /** Present (`true`) when the node's stats apply to the equipped body armour. */
+  applyToArmour?: true;
+  /** Short names of the distilled emotions that anoint this node, in recipe order. */
+  recipe?: string[];
   /** Present (`true`) when the node is a mastery (its own stats are empty). */
   isMastery?: true;
   /** Present (`true`) for a generic "+N to any Attribute" node. */
   isGenericAttribute?: true;
   /** Present (`true`) when the node is an ascendancy's starting node. */
   isAscendancyStart?: true;
-  /** Mastery background pattern image (extensionless), for mastery nodes only. */
+  /**
+   * Mastery background pattern image (extensionless), on every node of a mastery
+   * cluster: the mastery itself and the notables that light it.
+   */
   activeEffectImage?: string;
   /** `Ascendancy.Id` when the node belongs to an ascendancy; absent otherwise. */
   ascendancyId?: string;
@@ -247,6 +323,14 @@ export interface ExportAscendancy {
   offsetX: number;
   /** Y offset of the ascendancy disc from the tree hub centre. */
   offsetY: number;
+  /**
+   * `Ascendancy.Id` of the ascendancy this one replaces (Abyssal Lich replaces
+   * Lich): it uses that ascendancy's nodes, swapping some per
+   * {@link ExportAscendancy.overridePairs}.
+   */
+  replaces?: string;
+  /** Base node skill id -> this ascendancy's override node skill id. */
+  overridePairs?: Record<number, number>;
 }
 
 /** A playable class: its base attributes, ascendancies and per-class overrides. */
@@ -383,12 +467,23 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   // than `Stats`; resolve the skill's display name through SkillGems -> BaseItemTypes.
   const SkillGems = (await source.table('SkillGems')) as SkillGemRow[];
   const BaseItemTypes = (await source.table('BaseItemTypes')) as BaseItemTypeRow[];
+  const AscendancyOverrides = assertRequiredRows<AscendancyOverrideRow>(
+    await source.table('AscendancyPassiveSkillOverrides'), 'AscendancyPassiveSkillOverrides',
+    ['AscendancyToOverrideFor', 'SkillToOverride', 'Override'],
+  );
+  // Anointment recipes: BlightCraftingResults ties a passive to a result, a recipe
+  // lists the distilled emotions that craft that result.
+  const BlightResults = (await source.table('BlightCraftingResults')) as BlightResultRow[];
+  const BlightRecipes = (await source.table('BlightCraftingRecipes')) as BlightRecipeRow[];
+  const BlightItems = (await source.table('BlightCraftingItems')) as BlightItemRow[];
 
-  // Combined stat index: the passive file `include`s the base one, but the
-  // parser doesn't follow includes — merge both, passive entries win on conflict.
-  const baseIdx = buildStatIndex(await readCsd(source, BASE_STATS_PATH));
-  const passiveIdx = buildStatIndex(await readCsd(source, PASSIVE_STATS_PATH));
-  const statIdx: StatIndex = { byStat: new Map([...baseIdx.byStat, ...passiveIdx.byStat]) };
+  // The passive file `include`s the base one at its top, but the parser doesn't
+  // follow includes: index the base text followed by the passive text, which is
+  // what the include expands to. Passive blocks then supersede base ones and
+  // every block keeps its position, which orders a node's stat lines.
+  const statIdx: StatIndex = buildStatIndex(
+    `${await readCsd(source, BASE_STATS_PATH)}\n${await readCsd(source, PASSIVE_STATS_PATH)}`,
+  );
 
   const psgBytes = await source.file(PSG_PATH);
 
@@ -408,19 +503,53 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     }
   }
 
-  /** Render a passive's stat lines from its Stats foreign rows + Stat1..5Value. */
+  /** Render a passive's stat lines from its Stats foreign rows + Stat1..7Value. */
   function renderStats(row: PassiveSkillRow): string[] {
-    const statIds = (row.Stats ?? []).map((i) => Stats[i]?.Id).filter((id): id is string => Boolean(id));
+    const values = [
+      row.Stat1Value, row.Stat2Value, row.Stat3Value, row.Stat4Value, row.Stat5Value, row.Stat6Value, row.Stat7Value,
+    ];
+    // Pair each stat with its value before dropping unresolvable stat rows, so a
+    // gap never shifts the values onto the wrong stats.
+    const pairs = (row.Stats ?? [])
+      .map((index, slot) => ({ id: Stats[index]?.Id, value: values[slot] ?? 0 }))
+      .filter((pair): pair is { id: string; value: number } => Boolean(pair.id));
 
-    if (!statIds.length) {
+    if (!pairs.length) {
       return [];
     }
 
-    const vals = [row.Stat1Value, row.Stat2Value, row.Stat3Value, row.Stat4Value, row.Stat5Value];
-
     // GGG templates carry literal "\n" for multi-line stats; make it a real newline.
-    return renderBlock(statIdx, statIds, vals as number[]).lines.map((line) => line.replace(/\\n/g, '\n'));
+    return renderBlock(statIdx, pairs.map((pair) => pair.id), pairs.map((pair) => pair.value), { descriptionOrder: true })
+      .lines.map((line) => line.replace(/\\n/g, '\n'));
   }
+
+  // Released content only, as PoB's passivetree export keeps it: nodes with a name
+  // that isn't a [DNT ...] placeholder, outside disabled or [DNT ...] ascendancies.
+  const DNT = (s: unknown): boolean => typeof s === 'string' && s.startsWith('[DNT');
+  const isReleasedAscendancy = (a: AscendancyRow): boolean => Boolean(a.Name) && !DNT(a.Name) && !a.Disabled;
+  const isReleasedNode = (row: PassiveSkillRow | undefined): row is PassiveSkillRow => {
+    if (!row?.Name || DNT(row.Name)) {
+      return false;
+    }
+
+    const ascendancy = row.Ascendancy != null ? Ascendancy[row.Ascendancy] : undefined;
+
+    return !ascendancy || isReleasedAscendancy(ascendancy);
+  };
+  const released = new Set(psg.nodes.filter((node) => isReleasedNode(byGraphId.get(node.skillId))).map((node) => node.skillId));
+
+  // PassiveSkills row index -> its anointment recipe (distilled emotion short names).
+  const recipes = new Map<number, string[]>();
+
+  for (const recipe of BlightRecipes) {
+    const passive = recipe.BlightCraftingResult != null ? BlightResults[recipe.BlightCraftingResult]?.PassiveSkill : undefined;
+
+    if (passive != null) {
+      recipes.set(passive, (recipe.BlightCraftingItems ?? []).map((item) => BlightItems[item]?.NameShort ?? ''));
+    }
+  }
+
+  const rowIndex = new Map(PassiveSkills.map((row, index) => [row, index]));
 
   // A mastery's cluster all carry MasteryGroup; the mastery node itself grants
   // nothing (no stats) and isn't a notable/keystone.
@@ -428,7 +557,7 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     return row.MasteryGroup != null && (!row.Stats || row.Stats.length === 0) && !row.IsNotable && !row.IsKeystone;
   }
 
-  /** Mastery node's background pattern image (extensionless, like GGG ships it). */
+  /** A mastery cluster node's background pattern image (extensionless, like GGG ships it). */
   function activeEffectImage(row: PassiveSkillRow): string | undefined {
     if (row.MasteryGroup == null) {
       return undefined;
@@ -467,7 +596,15 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   const edges: ExportEdge[] = [];
 
   for (const node of psg.nodes) {
+    if (!released.has(node.skillId)) {
+      continue;
+    }
+
     for (const target of node.connections) {
+      if (!released.has(target.id)) {
+        continue;
+      }
+
       addEdge(node.skillId, target.id);
       addEdge(target.id, node.skillId);
 
@@ -506,8 +643,6 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   // Real PoE2 classes only: GGPK still carries 4 PoE1 placeholder classes whose
   // ascendancies are all [DNT-UNUSED]. Keep classes with a released ascendancy;
   // remap the class-start indices a node lists onto the filtered class array.
-  const DNT = (s: unknown): boolean => typeof s === 'string' && s.includes('[DNT');
-  const isReleasedAscendancy = (a: AscendancyRow): boolean => Boolean(a.Name) && !DNT(a.Name) && !a.Disabled;
   const realClassIndices = [...Characters.keys()].filter((index) =>
     Ascendancy.some((a) => a.Character === index && isReleasedAscendancy(a)),
   );
@@ -518,24 +653,29 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   for (const pnode of psg.nodes) {
     const row = byGraphId.get(pnode.skillId);
 
-    if (!row) {
+    if (!row || !released.has(pnode.skillId)) {
       continue;
     }
 
     const { x, y } = position(pnode);
-    const ascId = row.Ascendancy != null ? Ascendancy[row.Ascendancy]?.Id : undefined;
+    const ascendancy = row.Ascendancy != null ? Ascendancy[row.Ascendancy] : undefined;
     const characters = Array.isArray(row.Characters) ? row.Characters : [];
     const classStart = characters.filter((i) => classRemap.has(i)).map((i) => classRemap.get(i)!);
     const mastery = isMasteryNode(row);
-    const effect = mastery ? activeEffectImage(row) : undefined;
+    const effect = activeEffectImage(row);
+    const recipe = recipes.get(rowIndex.get(row)!);
+    // PoB's flag order: a keystone or notable that holds a socket is not itself a
+    // jewel socket; on an ascendancy it is marked as containing one instead.
+    const plainSocket = row.IsJewelSocket && !row.IsKeystone && !row.IsNotable && !mastery;
+    // An anointment-only socket (Sinister) has no radius; anointments refer to it by its string id.
+    const sinister = row.IsJewelSocket && row.IsAnointmentOnly;
     // Nodes GGG hides until an unlocking passive is allocated (e.g. Oracle's "The
-    // Unseen Path" clusters). `UnlockedBy` holds the unlocking rows by index; map
-    // them to skill ids and pick the ascendancy that owns them.
-    const unlockRows = (row.UnlockedBy ?? []).map((i) => PassiveSkills[i]).filter((r): r is PassiveSkillRow => r != null);
-    const unlockNodes = unlockRows.map((r) => r.PassiveSkillGraphId).filter((id): id is number => id != null);
-    const unlockAscendancy = unlockRows
-      .map((r) => (r.Ascendancy != null ? Ascendancy[r.Ascendancy]?.Name : undefined))
-      .find((name): name is string => Boolean(name));
+    // Unseen Path" clusters). `UnlockedBy` holds the unlocking rows by index, mapped
+    // to skill ids; `VisibleForAscendancy` names the ascendancy that reveals them.
+    const unlockNodes = (row.UnlockedBy ?? [])
+      .map((i) => PassiveSkills[i]?.PassiveSkillGraphId)
+      .filter((id): id is number => id != null);
+    const unlockAscendancy = row.VisibleForAscendancy != null ? Ascendancy[row.VisibleForAscendancy]?.Name : undefined;
     const unlockConstraint = unlockNodes.length
       ? { ...(unlockAscendancy ? { ascendancy: unlockAscendancy } : {}), nodes: unlockNodes }
       : undefined;
@@ -548,7 +688,8 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
 
     nodes[pnode.skillId] = {
       skill: pnode.skillId,
-      name: row.Name ?? '',
+      // An ascendancy's start node carries an internal name; it shows as the ascendancy.
+      name: row.IsAscendancyStartingNode && ascendancy?.Name ? ascendancy.Name : plainName(row.Name ?? ''),
       icon: row.Icon_DDSFile ?? '',
       stats: [...renderStats(row), ...grantedStats(row, SkillGems, BaseItemTypes)],
       group: pnode.group,
@@ -558,39 +699,48 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
       y: Number(y.toFixed(3)),
       out: connections,
       in: [],
+      ...(row.Id ? { stringId: row.Id } : {}),
       ...(row.IsNotable ? { isNotable: true } : {}),
       ...(row.IsKeystone ? { isKeystone: true } : {}),
-      ...(row.IsJewelSocket ? { isJewelSocket: true } : {}),
+      ...(plainSocket ? { isJewelSocket: true } : {}),
+      ...(row.IsJewelSocket && ascendancy ? { containJewelSocket: true } : {}),
+      ...(sinister ? { sinister: true, noRadius: true, aliasPassiveSocket: row.Id ?? '' } : {}),
       ...(mastery ? { isMastery: true } : {}),
       ...(row.IsAttribute ? { isGenericAttribute: true } : {}),
       ...(row.IsAscendancyStartingNode ? { isAscendancyStart: true } : {}),
+      ...(row.IsMultipleChoice ? { isMultipleChoice: true } : {}),
+      ...(row.IsMultipleChoiceOption ? { isMultipleChoiceOption: true } : {}),
+      ...(row.IsFree ? { isFreeAllocate: true } : {}),
+      ...(row.ApplyToArmour ? { applyToArmour: true } : {}),
       ...(effect ? { activeEffectImage: effect } : {}),
-      ...(ascId ? { ascendancyId: ascId } : {}),
+      ...(ascendancy ? { ascendancyId: ascendancy.Id } : {}),
       ...(unlockConstraint ? { unlockConstraint } : {}),
       ...(classStart.length ? { classStartIndex: classStart } : {}),
-      ...(row.FlavourText ? { flavourText: row.FlavourText } : {}),
+      // GGG writes line breaks as CRLF; keep plain newlines like PoB does.
+      ...(typeof row.FlavourText === 'string' && row.FlavourText ? { flavourText: row.FlavourText.replace(/\r/g, '') } : {}),
+      ...(recipe ? { recipe } : {}),
     };
   }
 
   // --- groups ----------------------------------------------------------------
 
+  // A group lists only its exported nodes; one left with none (an unreleased
+  // ascendancy's cluster) is dropped, so every group key is backed by a node.
   const groups: Record<number, ExportGroup> = {};
   psg.groups.forEach((group, index) => {
-    const orbits = new Set<number>();
+    const members = group.nodes.filter((id) => nodes[id]);
 
-    for (const id of group.nodes) {
-      const node = nodes[id];
-
-      if (node && node.orbit !== undefined) {
-        orbits.add(node.orbit);
-      }
+    if (!members.length) {
+      return;
     }
+
+    const orbits = new Set<number>(members.map((id) => nodes[id]!.orbit!));
 
     groups[index] = {
       x: Number(group.x.toFixed(3)),
       y: Number(group.y.toFixed(3)),
       orbits: [...orbits].sort((a, b) => a - b),
-      nodes: group.nodes,
+      nodes: members,
       flag: group.flag,
       unknown1: group.unknown1,
     };
@@ -648,12 +798,43 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     overrideByClass.get(row.CharacterToOverrideFor)![base] = target;
   }
 
+  // Per-ascendancy node overrides: an ascendancy that replaces another (Abyssal
+  // Lich -> Lich) reuses its nodes but swaps some for its own variant.
+  const overrideByAscendancy = new Map<number, Record<number, number>>();
+
+  for (const row of AscendancyOverrides) {
+    const base = PassiveSkills[row.SkillToOverride]?.PassiveSkillGraphId;
+    const target = PassiveSkills[row.Override]?.PassiveSkillGraphId;
+
+    if (base == null || target == null) {
+      continue;
+    }
+
+    if (!overrideByAscendancy.has(row.AscendancyToOverrideFor)) {
+      overrideByAscendancy.set(row.AscendancyToOverrideFor, {});
+    }
+
+    overrideByAscendancy.get(row.AscendancyToOverrideFor)![base] = target;
+  }
+
   const classes = realClassIndices.map((oldIndex, newIndex) => {
     const character = Characters[oldIndex]!;
     const offset = ascendancyOffset(newIndex);
-    const ascendancies = Ascendancy
-      .filter((a) => a.Character === oldIndex && isReleasedAscendancy(a))
-      .map((a) => ({ id: a.Id, name: a.Name!, offsetX: offset.x, offsetY: offset.y }));
+    const ascendancies = [...Ascendancy.entries()]
+      .filter(([, a]) => a.Character === oldIndex && isReleasedAscendancy(a))
+      .map(([index, a]): ExportAscendancy => {
+        const replaced = a.BaseAscendancy != null ? Ascendancy[a.BaseAscendancy] : undefined;
+        const overridePairs = overrideByAscendancy.get(index);
+
+        return {
+          id: a.Id,
+          name: a.Name!,
+          offsetX: offset.x,
+          offsetY: offset.y,
+          ...(replaced ? { replaces: replaced.Id } : {}),
+          ...(overridePairs ? { overridePairs } : {}),
+        };
+      });
 
     return {
       name: character.Name,
@@ -666,9 +847,10 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
   });
 
   // Override target nodes aren't in the graph — they only supply display data
-  // when a class override swaps them in at the base node's position. Add them as
-  // data-only entries (no geometry) so the renderer can resolve their fields.
-  for (const pairs of overrideByClass.values()) {
+  // when a class or ascendancy override swaps them in at the base node's
+  // position. Add them as data-only entries (no geometry) so the renderer can
+  // resolve their fields.
+  for (const pairs of [...overrideByClass.values(), ...overrideByAscendancy.values()]) {
     for (const target of Object.values(pairs)) {
       if (nodes[target]) {
         continue;
@@ -680,7 +862,7 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
         continue;
       }
 
-      nodes[target] = { skill: target, name: row.Name ?? '', icon: row.Icon_DDSFile ?? '', stats: renderStats(row) };
+      nodes[target] = { skill: target, name: plainName(row.Name ?? ''), icon: row.Icon_DDSFile ?? '', stats: renderStats(row) };
     }
   }
 

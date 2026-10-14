@@ -76,13 +76,13 @@ describe.skipIf(!goldenDataAvailable())('data.json golden contract', () => {
 
   it('pins the population counts of the last extraction', () => {
     expect(data().tree).toBe('Default');
-    expect(Object.keys(data().nodes)).toHaveLength(5213);
-    expect(Object.keys(data().groups)).toHaveLength(1623);
+    expect(Object.keys(data().nodes)).toHaveLength(4988);
+    expect(Object.keys(data().groups)).toHaveLength(1609);
     expect(data().classes).toHaveLength(8);
     expect(data().jewelSlots).toHaveLength(31);
     expect(Object.keys(data().skillOverrides)).toHaveLength(3);
     expect(data().classes.reduce((sum, cls) => sum + cls.ascendancies.length, 0)).toBe(23);
-    expect(data().edges).toHaveLength(2932);
+    expect(data().edges).toHaveLength(2791);
     expect(data().roots.length).toBeGreaterThan(0);
   });
 

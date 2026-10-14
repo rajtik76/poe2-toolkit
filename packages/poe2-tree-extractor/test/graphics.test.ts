@@ -22,9 +22,9 @@ interface AtlasJson {
 
 /** The three atlas frame-maps and the sprite count each pinned to. */
 const ATLASES: { name: string; frames: number }[] = [
-  { name: 'skills', frames: 674 },
+  { name: 'skills', frames: 673 },
   { name: 'frame', frames: 17 },
-  { name: 'mastery-effect-active', frames: 56 },
+  { name: 'mastery-effect-active', frames: 60 },
 ];
 
 describe.skipIf(!goldenArtAvailable())('graphics golden contract', () => {
