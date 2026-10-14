@@ -1,18 +1,10 @@
-/**
- * The TypeScript `buildGraphics` must reproduce the golden atlases exactly: the
- * frame-maps structurally, and every atlas PNG byte for byte (pinned by SHA-256
- * in `golden/png.sha256`). This gates the sprite-packing and image-decode port.
- *
- * Built through the real CDN source against the local extract, compared to the
- * local golden fixtures; skipped when either is absent.
- */
+/** The TypeScript `buildGraphics` must reproduce the golden atlases exactly: the frame-maps structurally, and every atlas PNG byte for byte (pinned by SHA-256 in `golden/png.sha256`). */
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createCdnSource } from '@poe2-toolkit/ggpk';
 import { beforeAll, describe, expect, it } from 'vitest';
-
 
 import { buildGraphics  } from '../../src/buildGraphics';
 import type {TreeAtlases} from '../../src/buildGraphics';

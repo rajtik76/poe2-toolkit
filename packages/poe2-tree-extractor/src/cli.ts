@@ -1,13 +1,8 @@
 #!/usr/bin/env node
 /**
- * Command-line entry: extract the passive tree from the patch CDN and write the
- * bundle (data.json + sprite atlases + centre art) to an output directory.
+ * Extracts the passive tree from the patch CDN into PNG + JSON (data.json, sprite atlases, centre art). Converting to WebP is left to the consumer.
  *
- * Output is PNG + JSON, mirroring the renderer's atlas layout. Converting the
- * PNGs to WebP for the web is a separate publish step, left to the consumer.
- *
- *   poe2-tree-extract --patch 4.5.4.1 --tables ./tables/English \
- *                     --cache ./.cache --out ./out/tree
+ *   poe2-tree-extract --patch 4.5.4.1 --tables ./tables/English --cache ./.cache --out ./out/tree
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';

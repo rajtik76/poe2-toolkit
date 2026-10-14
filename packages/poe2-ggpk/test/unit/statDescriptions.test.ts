@@ -1,12 +1,4 @@
-/**
- * Port verification for the StatDescriptions engine. The TypeScript index and
- * renderer must match the legacy `.mjs` exactly, on the real passive
- * `stat_descriptions.csd` from the local GGPK extract.
- *
- * The passive file is used (the smaller of the two `.csd` inputs): it exercises
- * every code path while keeping the double parse fast. The base file shares the
- * same format and parser, so parity on one proves the port.
- */
+/** Port verification for the StatDescriptions engine. */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -24,9 +16,7 @@ interface LegacyStatsModule {
   renderBlock(index: StatIndex, statIds: string[], vals: number[]): { lines: string[]; unresolved: string[] };
 }
 
-// Skips without the extract, and also once the legacy engine is gone: the .mjs
-// reference scripts were retired after the port, so this parity check only runs
-// against a checkout that still carries them.
+// Skips without the extract, and also once the legacy engine is gone: the .mjs reference scripts were retired after the port, so this parity check only runs against a checkout that still carries them.
 describe.skipIf(!existsSync(CSD) || !existsSync(LEGACY))('StatDescriptions matches the legacy engine', () => {
   it('builds an identical stat index', async () => {
     const legacyMod = (await import(pathToFileURL(LEGACY).href)) as LegacyStatsModule;

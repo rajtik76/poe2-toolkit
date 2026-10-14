@@ -1,11 +1,4 @@
-/**
- * Port verification for the PSG parser: the TypeScript {@link parsePsg} must
- * reproduce the legacy `.mjs` parser exactly, on the real `metadata/
- * passiveskillgraph.psg` from the local GGPK extract.
- *
- * The legacy script is committed and always present; the `.psg` input is
- * git-ignored, so the comparison is skipped on a checkout without the extract.
- */
+/** Port verification for the PSG parser: the TypeScript {@link parsePsg} must reproduce the legacy `.mjs` parser exactly, on the real `metadata/ passiveskillgraph.psg` from the local GGPK extract. */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

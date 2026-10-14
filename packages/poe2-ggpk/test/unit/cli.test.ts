@@ -1,10 +1,4 @@
-/**
- * Unit coverage for the shared extractor-CLI building blocks. This logic used
- * to live duplicated (and untested - `cli.ts` is excluded from every
- * extractor's coverage floor as "a thin main()") inside each extractor
- * package; now that it's shared code in `@poe2-toolkit/ggpk/cli`, it's real
- * logic that deserves real tests.
- */
+/** Unit coverage for the shared extractor-CLI building blocks. */
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -1,13 +1,7 @@
 /**
- * Builds the passive-tree sprite atlases from GGPK art, in the shape the
- * renderer reads: skill icons (`skills`), node frames (`frame`), and mastery
- * effect patterns (`mastery-effect-active`). One colour icon per node; the
- * unallocated/dimmed look is a render-time tint (matching the game), so no
- * separate disabled atlas is baked. Atlas keys mirror the engine's
- * `spriteKeys`. Source: GGPK only.
- *
- * Unlike the legacy script this has no GGG-export fallback: a sprite the source
- * cannot serve is skipped and reported, never pulled from a vendored asset.
+ * Builds the passive-tree sprite atlases from GGPK art: skill icons (`skills`), node frames (`frame`), mastery effect
+ * patterns (`mastery-effect-active`). Keys mirror the engine's `spriteKeys`. The dimmed look is a render-time tint, so no
+ * disabled atlas is baked. A sprite the source can't serve is skipped and reported, with no vendored fallback.
  */
 
 import type { GgpkImageSource, GgpkSource } from '@poe2-toolkit/ggpk';
@@ -17,39 +11,21 @@ import { packAtlas } from './atlas.js';
 import type {AtlasSprite, PackedAtlas} from './atlas.js';
 import type { ExportNode, TreeExport } from './buildTree.js';
 
-/** The three atlases this build produces, keyed by atlas name. */
 export interface TreeAtlases {
-  /** Skill-icon atlas: one colour sprite per node icon. */
   skills: PackedAtlas;
-  /** Node-frame atlas: the frame states for each node kind. */
   frame: PackedAtlas;
-  /** Mastery effect-pattern atlas (packed on a wider sheet). */
   'mastery-effect-active': PackedAtlas;
 }
 
-/**
- * Per-atlas counts of sprites packed and sources missing, for reporting.
- *
- * `skills` and `masteryEffects` carry a `missing` count because their sprites
- * come from per-node icon/effect DDS paths that the source may fail to serve.
- * `frames` has no `missing`: the frame set is a fixed, known list built from
- * dedicated UIArt rows, so there is nothing to "miss" — a frame either exists
- * or the row simply isn't there. The asymmetry is intentional, not a gap.
- */
+/** Sprites packed and sources missing. `frames` has no `missing` on purpose: its set is a fixed list of UIArt rows. */
 export interface GraphicsReport {
-  /** Skill icons: sprites packed and DDS sources that could not be served. */
   skills: { packed: number; missing: number };
-  /** Node frames packed. No `missing`: the frame set is fixed (see above). */
   frames: { packed: number };
-  /** Mastery effects: sprites packed and effect images that could not be served. */
   masteryEffects: { packed: number; missing: number };
 }
 
-/** The build's atlases plus a report of what was packed or skipped. */
 export interface GraphicsResult {
-  /** The three packed sprite atlases. */
   atlases: TreeAtlases;
-  /** What packed vs. what the source could not serve. */
   report: GraphicsReport;
 }
 
@@ -68,10 +44,8 @@ const CONCURRENCY = 16;
 type FrameState = 'Normal' | 'CanAllocate' | 'Active';
 type NodeFrameArtRow = Partial<Record<FrameState, string>> & { Id?: string };
 
-/** A source able to both read tables and fetch images. */
 export type GraphicsSource = GgpkSource & GgpkImageSource;
 
-/** Engine variant prefix for a node's skill icon (mirrors `iconKeyFor`). */
 function variantOf(node: ExportNode): string | null {
   if (node.isMastery || node.isAscendancyStart) {
     return null; // masteries render as their effect pattern, starts as a frame only
@@ -88,11 +62,7 @@ function variantOf(node: ExportNode): string | null {
   return 'normal';
 }
 
-/**
- * Every skill icon the renderer can ask for, each with the frame variant it is
- * keyed under (`<variant>Active:<icon>`): every node's own icon, the +attribute
- * choice icons, and the icons a class or ascendancy shows in a base node's place.
- */
+/** Every skill icon the renderer can ask for with its frame variant key (`<variant>Active:<icon>`): node icons, +attribute choices and class/ascendancy override icons. */
 export function wantedSkillIcons(tree: TreeExport): { variant: string; icon: string }[] {
   // variant + icon -> entry; the same icon in the same variant is packed once.
   const wanted = new Map<string, { variant: string; icon: string }>();
@@ -102,9 +72,7 @@ export function wantedSkillIcons(tree: TreeExport): { variant: string; icon: str
     }
   };
 
-  // Override nodes sit off the tree with no kind flags of their own: the renderer
-  // draws one in a base node's place, framed as that base node, so its icon is
-  // packed in the base node's variant (an ascendancy notable swapped for another).
+  // Override nodes have no kind flags: the renderer draws one in a base node's place, so pack its icon in the base node's variant.
   // Older exports may lack a class's pairs or ascendancies.
   const overrides = tree.classes.flatMap((cls) => [
     cls.overridePairs ?? {},
@@ -119,8 +87,7 @@ export function wantedSkillIcons(tree: TreeExport): { variant: string; icon: str
     }
   }
 
-  // +attribute choice icons (Str/Dex/Int) — shown on the node once an attribute
-  // is picked; not a node's own icon, so add them explicitly.
+  // +attribute choice icons (Str/Dex/Int) are not a node's own icon, so add them explicitly.
   for (const override of Object.values(tree.skillOverrides)) {
     if (typeof override.icon === 'string') {
       want('normal', override.icon);
@@ -141,9 +108,7 @@ export function wantedSkillIcons(tree: TreeExport): { variant: string; icon: str
 }
 
 export async function buildGraphics(source: GraphicsSource, tree: TreeExport): Promise<GraphicsResult> {
-  // --- skill icons: one colour atlas (`skills`) -----------------------------
-  // The unallocated dimming is a render-time tint, not a baked desaturation, so
-  // this packs a single colour sprite per node icon.
+  // skill icons: one colour atlas (`skills`)
   const wantedList = wantedSkillIcons(tree);
   const activeSlots = await mapConcurrent(wantedList, CONCURRENCY, async ({ variant, icon }) => {
     const img = await source.dds(icon);
@@ -154,8 +119,7 @@ export async function buildGraphics(source: GraphicsSource, tree: TreeExport): P
   const active = activeSlots.filter((s): s is AtlasSprite => s !== null);
   const iconsMissing = activeSlots.length - active.length;
 
-  // --- node frames: frame atlas ----------------------------------------------
-  // The UIArt "Character" row drives the main tree, "Ascendancy" the disc frames.
+  // node frames: the UIArt "Character" row drives the main tree, "Ascendancy" the disc frames.
   // NodeFrameArt Normal/CanAllocate/Active map to the renderer's states.
 
   const UIArt = (await source.table('PassiveSkillTreeUIArt')) as UIArtRow[];
@@ -194,8 +158,7 @@ export async function buildGraphics(source: GraphicsSource, tree: TreeExport): P
   await addFrame('AscendancyFrameNotableAllocated', ascUi?.NotableFrame, 'Active');
   await addFrame('AscendancyStartNode', ascUi?.AscendancyStart, 'Active');
 
-  // --- mastery effect patterns: mastery-effect-active atlas ------------------
-  // Renderer keys them `masteryEffectActive:<ActiveEffectImage>.png`.
+  // mastery effect patterns, keyed `masteryEffectActive:<ActiveEffectImage>.png`.
 
   const effectImages = new Set<string>();
 

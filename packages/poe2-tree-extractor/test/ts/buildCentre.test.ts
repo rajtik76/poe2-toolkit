@@ -1,16 +1,10 @@
-/**
- * The TypeScript `buildCentre` must reproduce the golden centre art exactly:
- * every class/ascendancy portrait and hub ring, byte for byte (pinned by SHA-256
- * in the PNG hash manifest). Built through the real CDN source against the local
- * extract, compared to the local golden fixtures; skipped when either is absent.
- */
+/** The TypeScript `buildCentre` must reproduce the golden centre art exactly: every class/ascendancy portrait and hub ring, byte for byte (pinned by SHA-256 in the PNG hash manifest). */
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createCdnSource } from '@poe2-toolkit/ggpk';
 import { beforeAll, describe, expect, it } from 'vitest';
-
 
 import { buildCentre } from '../../src/buildCentre';
 import { parseShaManifest  } from '../helpers';

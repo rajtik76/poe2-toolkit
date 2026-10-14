@@ -1,10 +1,4 @@
-/**
- * A DDS the source lists but cannot serve (the classic half-propagated patch
- * CDN case) must fail the whole build loudly, never be skipped in silence -
- * a silent skip is exactly what shipped 4.5.4.4 with 28 of 33 centre images
- * missing. These tests use a hand-rolled fake source so they run without any
- * network access or golden fixtures.
- */
+/** A DDS the source lists but cannot serve (the classic half-propagated patch CDN case) must fail the whole build loudly, never be skipped in silence - a silent skip is exactly what shipped 4.5.4.4 with 28 of 33 centre images missing. */
 
 import { describe, expect, it } from 'vitest';
 import type { CentreSource } from '../../src/buildCentre';
@@ -13,7 +7,6 @@ import { buildCentre } from '../../src/buildCentre';
 const CHARACTERS = [{ Name: 'Warrior', PassiveTreeImage: 'Art/Warrior.dds' }];
 const ASCENDANCY = [{ Name: 'Titan', Character: 0, PassiveTreeImage: 'Art/Titan.dds' }];
 
-/** A source whose `dds()` fails for exactly the given paths, succeeds for the rest. */
 function fakeSource(failingPaths: Set<string>, resolvedSprites = true): CentreSource {
   return {
     table: async (name: string) => (name === 'Characters' ? CHARACTERS : ASCENDANCY) as never,

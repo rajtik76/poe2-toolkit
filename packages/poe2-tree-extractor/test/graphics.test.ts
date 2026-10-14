@@ -1,12 +1,4 @@
-/**
- * Golden-contract tests for the rendered half of the extract: the three sprite
- * atlases (`assets/`) and the centre art (`centre/`).
- *
- * The golden fixtures derive from GGG art (atlas frame-maps keyed by asset
- * paths, the art PNG hash manifest), so they are kept out of the repo. These
- * checks therefore run locally — where the fixtures are present — and skip in
- * CI. The 1:1 regeneration gate lives in `test/ts/`.
- */
+/** Golden-contract tests for the rendered half of the extract: the three sprite atlases (`assets/`) and the centre art (`centre/`). */
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,7 +12,6 @@ interface AtlasJson {
   frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }>;
 }
 
-/** The three atlas frame-maps and the sprite count each pinned to. */
 const ATLASES: { name: string; frames: number }[] = [
   { name: 'skills', frames: 668 },
   { name: 'frame', frames: 17 },

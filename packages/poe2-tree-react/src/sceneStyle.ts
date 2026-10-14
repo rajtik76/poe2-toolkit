@@ -1,15 +1,10 @@
-/**
- * Every visual decision the renderer makes, as pure data: which sprite keys and
- * tints a node draws with, how connection rails layer, what colour and width an
- * overlay stroke gets. `TreeView.tsx` only executes these decisions against
- * PixiJS; nothing in here touches a canvas, so all of it is unit-testable.
- */
+/** Every visual decision of the renderer as pure data (sprite keys, tints, rail layering, stroke looks). `TreeView.tsx` only executes them against PixiJS, so all of it is unit-testable. */
 
 import type { Scene } from '@poe2-toolkit/tree-core';
 import { frameKeyFor, iconKeyFor } from './spriteKeys.js';
 import type { AllocationPreview, HighlightStyle, ResolvedHighlightStyle, ResolvedTreeColors, TreeColors } from './types.js';
 
-/** Defaults for {@link HighlightStyle} — the standing teal search pulse. */
+/** Defaults for {@link HighlightStyle}: the teal search pulse. */
 export const DEFAULT_HIGHLIGHT: ResolvedHighlightStyle = {
   glowColor: 0x3fae9f,
   coreColor: 0x7df9e0,
@@ -25,20 +20,13 @@ export const DEFAULT_HIGHLIGHT: ResolvedHighlightStyle = {
 /** Below this zoom the debug id labels are hidden (a tiny, costly, unreadable mess). */
 export const LABEL_MIN_SCALE = 0.35;
 
-/** Connection rail look (world units). Two parallel rails with a gap between. */
 export const RAIL_WIDTH = 3.6;
 export const RAIL_GAP = 4.8;
 const RAIL_COLOR = 0x7d6836;
 const RAIL_GAP_ACTIVE = 0xfcde86;
 const RAIL_GAP_INACTIVE = 0x000000;
 
-/**
- * Defaults for {@link TreeColors}. Weapon sets mirror the in-game colours (set I
- * red, set II green), keeping the basic tree on its gold rail; the tint is
- * applied to set nodes' frames and their active rails so each weapon set reads
- * apart in the single combined view. The removal preview is magenta: still a
- * warning hue, but distinct from the red of set I and the gold chrome.
- */
+/** Defaults for {@link TreeColors}: weapon sets mirror the in-game colours, tinting set nodes' frames and active rails. The removal preview is magenta, distinct from set I red and the gold chrome. */
 export const DEFAULT_TREE_COLORS: ResolvedTreeColors = {
   weaponSet: {
     1: 0xe05252,
@@ -47,7 +35,6 @@ export const DEFAULT_TREE_COLORS: ResolvedTreeColors = {
   removePreview: 0xff4fa8,
 };
 
-/** Resolve a caller-supplied palette against the in-game-colour defaults. */
 export function resolveTreeColors(colors: TreeColors | undefined): ResolvedTreeColors {
   return {
     weaponSet: {
@@ -61,7 +48,6 @@ export function resolveTreeColors(colors: TreeColors | undefined): ResolvedTreeC
 /** Multiply tint for unallocated node icons: 50% grey = half brightness, hue kept. */
 const ICON_DIM = 0x808080;
 
-/** Vector palette by node kind, used when no atlas art is supplied. */
 const KIND_COLOR: Record<string, number> = {
   normal: 0x3a5b54,
   notable: 0x6fe0d0,
@@ -75,7 +61,6 @@ const KIND_COLOR: Record<string, number> = {
   ascendancyNotable: 0x7fd0c0,
 };
 
-/** Item-rarity colours for the gem drawn inside a socketed jewel. */
 const RARITY_COLOR: Record<string, number> = {
   NORMAL: 0xd6d6d6,
   MAGIC: 0x8888ff,
@@ -83,7 +68,6 @@ const RARITY_COLOR: Record<string, number> = {
   UNIQUE: 0xcf7a3a,
 };
 
-/** Resolve a caller-supplied highlight style against the teal-pulse defaults. */
 export function resolveHighlightStyle(style: HighlightStyle | undefined): ResolvedHighlightStyle {
   return {
     glowColor: style?.glowColor ?? DEFAULT_HIGHLIGHT.glowColor,
@@ -98,7 +82,6 @@ export function resolveHighlightStyle(style: HighlightStyle | undefined): Resolv
   };
 }
 
-/** One stroke pass over a set of connections: the paths, then one stroke call. */
 export interface RailPass {
   connections: Scene['connections'];
   width: number;
@@ -106,14 +89,10 @@ export interface RailPass {
 }
 
 /**
- * The layered stroke passes that render a set of connections as twin rails.
- * Inactive rails first (under): bronze for the main tree, solid black for
- * ascendancy edges. Active rails on top, per weapon set so each reads in its
- * own colour: basic gold first, then the two sets over it (the set II overlay
- * stays visible even where it shares geometry with the basic tree).
+ * Layered passes that render connections as twin rails: inactive first (bronze main tree, black for ascendancy), then
+ * active per weapon set (basic gold, then the sets over it).
  *
- * @param ascendancyOnly - `false` renders the main map (ascendancy edges are
- *   skipped); `true` renders a relocated ascendancy disc's own edges.
+ * @param ascendancyOnly - `false` renders the main map, `true` a relocated ascendancy disc's own edges.
  */
 export function railPasses(connections: Scene['connections'], ascendancyOnly: boolean | null, colors: ResolvedTreeColors = DEFAULT_TREE_COLORS): RailPass[] {
   const visible = (conn: Scene['connections'][number]): boolean =>
@@ -147,22 +126,14 @@ export function railPasses(connections: Scene['connections'], ascendancyOnly: bo
   return passes;
 }
 
-/** How one node draws: atlas sprites with tints, plus the vector fall-backs. */
 export interface NodeVisual {
-  /** Atlas icon to draw, or null when the kind has no icon key. */
   icon: { key: string; tint: number | null } | null;
-  /** Atlas frame to draw over the icon, or null when the kind has no frame. */
   frame: { key: string; tint: number | null } | null;
-  /** Vector disc drawn when no atlas sprite could be placed. */
   fallback: { radius: number; color: number; alpha: number };
-  /** Socketed-jewel adornment (item icon, or a rarity-coloured gem). */
   jewel: { iconUrl: string | null; spriteSize: number; gemRadius: number; gemColor: number } | null;
 }
 
-/**
- * Every visual decision for one node: sprite keys, tints and fall-backs.
- * Returns null for mastery nodes — they are drawn as their effect pattern.
- */
+/** Null for mastery nodes: they are drawn as their effect pattern. */
 export function nodeVisual(node: Scene['nodes'][number], colors: ResolvedTreeColors = DEFAULT_TREE_COLORS): NodeVisual | null {
   if (node.kind === 'mastery') {
     return null;
@@ -170,10 +141,7 @@ export function nodeVisual(node: Scene['nodes'][number], colors: ResolvedTreeCol
 
   const iconKey = iconKeyFor(node.kind, node.icon);
   const frameKey = frameKeyFor(node.kind, node.allocated);
-  // Unallocated nodes draw the same colour icon dimmed, as the game does: a
-  // 50% grey multiply (no desaturation — hue is kept, brightness halved).
-  // A weapon-set node's frame is tinted so it reads apart from the gold basic
-  // tree; basic nodes keep the untinted frame.
+  // Unallocated nodes draw the icon dimmed as the game does (50% grey multiply keeps hue). A weapon-set node's frame is tinted.
   const visual: NodeVisual = {
     icon: iconKey ? { key: iconKey, tint: node.allocated ? null : ICON_DIM } : null,
     frame: frameKey ? { key: frameKey, tint: node.allocated && node.weaponSet ? colors.weaponSet[node.weaponSet] : null } : null,
@@ -198,11 +166,7 @@ export function nodeVisual(node: Scene['nodes'][number], colors: ResolvedTreeCol
   return visual;
 }
 
-/**
- * The ascendancy whose nodes the active disc shows, as tagged on scene nodes and
- * edges: the one it replaces (the Abyssal Lich plays on the Lich's nodes), or
- * itself. Undefined when no ascendancy is active.
- */
+/** The ascendancy whose nodes the active disc shows, as tagged on scene nodes: the replaced one (Abyssal Lich -> Lich) or itself. */
 export function ascendancyDiscOwner(scene: Scene, activeAscendancy: string | undefined): string | undefined {
   if (!activeAscendancy) {
     return undefined;
@@ -211,11 +175,7 @@ export function ascendancyDiscOwner(scene: Scene, activeAscendancy: string | und
   return scene.centre.ascendancies.find((a) => a.id === activeAscendancy)?.replaces ?? activeAscendancy;
 }
 
-/**
- * World offset that relocates the active ascendancy disc into the hub, or null
- * when no disc is active (or the id is unknown). The disc's nodes and edges are
- * drawn shifted by this; overlays over them must carry the same shift.
- */
+/** World offset that relocates the active disc into the hub, or null. Overlays over its nodes must carry the same shift. */
 export function ascendancyOffset(scene: Scene, activeAscendancy: string | undefined): { x: number; y: number } | null {
   if (!activeAscendancy) {
     return null;
@@ -233,11 +193,9 @@ export function ascendancyOffset(scene: Scene, activeAscendancy: string | undefi
   };
 }
 
-/** Stroke widths for caller-defined edge overlays, matching the lit rail. */
 export const EDGE_OVERLAY_GLOW_WIDTH = RAIL_GAP + RAIL_WIDTH * 2.5;
 export const EDGE_OVERLAY_CORE_WIDTH = RAIL_GAP + RAIL_WIDTH * 1.5;
 
-/** Colour, alpha and stroke widths of an allocation preview at a zoom level. */
 export interface PreviewStroke {
   remove: boolean;
   color: number;
@@ -247,14 +205,7 @@ export interface PreviewStroke {
   coreWidth: number;
 }
 
-/**
- * The allocation preview's stroke: add takes the paint mode's tint (gold basic,
- * set colours for I/II), removal always the palette's removal colour. The
- * removal line matches the active rail's full width (gap + rail*2) so it reads
- * as thick as the gold connector it would cut; the add preview stays a slimmer
- * zoom-tracking guide, clamped to a small on-screen minimum (matching the
- * Canvas2D `max(3, 9 * scale)` / `max(1.5, 4 * scale)`).
- */
+/** Add takes the paint mode's tint, removal the palette's colour at the active rail's full width; add stays a slimmer zoom-tracking guide with an on-screen minimum. */
 export function previewStroke(preview: AllocationPreview, scale: number, colors: ResolvedTreeColors = DEFAULT_TREE_COLORS): PreviewStroke {
   const remove = preview.kind === 'remove';
 
@@ -268,17 +219,13 @@ export function previewStroke(preview: AllocationPreview, scale: number, colors:
   };
 }
 
-/** The highlight rings' pulse state at a moment: alphas and radius growth. */
 export interface HighlightPulse {
   glowAlpha: number;
   coreAlpha: number;
   grow: number;
 }
 
-/**
- * Where the pulse sits at time `now` (ms): alphas lerped over their ranges and
- * the extra ring radius. `pulseMs` 0 freezes it at the peak.
- */
+/** Pulse state at time `now` (ms). `pulseMs` 0 freezes it at the peak. */
 export function highlightPulse(style: ResolvedHighlightStyle, now: number): HighlightPulse {
   const pulse = style.pulseMs > 0 ? (Math.sin(now / style.pulseMs) + 1) / 2 : 1;
   const lerp = (range: [number, number]): number => range[0] + pulse * (range[1] - range[0]);
@@ -290,7 +237,6 @@ export function highlightPulse(style: ResolvedHighlightStyle, now: number): High
   };
 }
 
-/** A node's ring outline base radius: half its frame (or icon, if frameless). */
 export function outlineBase(node: Scene['nodes'][number]): number {
   return (node.frameSize > 0 ? node.frameSize : node.iconSize) / 2;
 }

@@ -1,15 +1,8 @@
-/**
- * Shared building blocks for extractor CLIs (`@poe2-toolkit/ggpk/cli`), kept out
- * of the main entry point since they're a CLI-authoring concern, not part of the
- * GGPK access layer itself. Every extractor's CLI parsed the same
- * `--patch/--tables/--cache/--out` flags, wrote icon PNGs the same way, and
- * wrapped `main()` with the same top-level error handler.
- */
+/** Shared building blocks for extractor CLIs (`@poe2-toolkit/ggpk/cli`): flag parsing, icon writing, top-level error handler. Kept out of the main entry as a CLI-authoring concern. */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-/** The four flags every extractor CLI requires. */
 export interface ExtractorCliOptions {
   patch: string;
   tablesDir: string;
@@ -17,10 +10,7 @@ export interface ExtractorCliOptions {
   outDir: string;
 }
 
-/**
- * Parse `--flag value` pairs into an {@link ExtractorCliOptions}; throws with
- * `usage` on a missing required flag.
- */
+/** Throws with `usage` on a missing required flag. */
 export function parseExtractorArgs(argv: string[], usage: string): ExtractorCliOptions {
   const flags = new Map<string, string>();
 
@@ -51,7 +41,6 @@ export function parseExtractorArgs(argv: string[], usage: string): ExtractorCliO
   };
 }
 
-/** Write a `{ path: png }` icon map under `iconsDir`, creating subdirectories as needed. */
 export function writeIconTree(iconsDir: string, icons: Record<string, Uint8Array>): void {
   for (const [path, png] of Object.entries(icons)) {
     const outPath = join(iconsDir, path);
@@ -60,7 +49,6 @@ export function writeIconTree(iconsDir: string, icons: Record<string, Uint8Array
   }
 }
 
-/** Run a CLI `main`, printing its error to stderr and setting exit code 1 on failure. */
 export function runCli(main: () => Promise<void>): void {
   main().catch((error: unknown) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

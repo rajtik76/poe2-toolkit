@@ -1,11 +1,4 @@
-/**
- * Extracts the tree's centre art from GGPK: per-class portraits (real PoE2
- * classes only — those with a released ascendancy), per-ascendancy portraits
- * (released only), and the two hub-ring sprites. All decoded to PNG.
- *
- * Like the rest of the rewrite this is GGPK-only: art the source cannot serve is
- * skipped, never pulled from a vendored GGG sheet.
- */
+/** Extracts the tree's centre art from GGPK as PNGs: class and ascendancy portraits (released only) and the two hub-ring sprites. Art the source can't serve is never pulled from a vendored sheet. */
 
 import { encodePng   } from '@poe2-toolkit/ggpk';
 import type {GgpkImageSource, GgpkSource} from '@poe2-toolkit/ggpk';
@@ -15,10 +8,8 @@ import { assertRequiredRows } from './assertRequiredRows.js';
 interface CharacterRow { Name: string; PassiveTreeImage?: string }
 interface AscendancyRow { Name?: string; Character?: number | null; Disabled?: boolean; PassiveTreeImage?: string }
 
-/** A source able to both read tables and fetch images. */
 export type CentreSource = GgpkSource & GgpkImageSource;
 
-/** The hub-ring sprites, by output name and UIImages logical name. */
 const RING: { out: string; name: string }[] = [
   { out: 'ring-static', name: 'Art/2DArt/UIImages/InGame/PassiveTree/PassiveTreeMainCircle' },
   { out: 'ring-active', name: 'Art/2DArt/UIImages/InGame/PassiveTree/PassiveTreeMainCircleActive2' },
@@ -29,13 +20,8 @@ function isReleased(asc: AscendancyRow): boolean {
 }
 
 /**
- * Decode a DDS path to a PNG buffer, or `null` when the row simply has no art
- * (no path, or not a `.dds` reference). A row that DOES name a `.dds` file but
- * whose bytes cannot be fetched or decoded (e.g. the patch CDN has not finished
- * propagating a freshly released version) throws rather than being skipped -
- * silently omitting it would stage an incomplete release that promotes as if
- * it were whole. See the Contract suite's centre-art completeness test, which
- * is the last-resort gate if this ever regresses.
+ * Decodes a DDS path to PNG, or `null` when the row has no art. A row that names a `.dds` whose bytes can't be fetched or
+ * decoded (e.g. the CDN hasn't finished propagating a new version) throws: skipping it would stage an incomplete release.
  */
 async function emit(source: CentreSource, ddsPath: string | undefined): Promise<Buffer | null> {
   if (!ddsPath?.toLowerCase().endsWith('.dds')) {
@@ -51,18 +37,13 @@ async function emit(source: CentreSource, ddsPath: string | undefined): Promise<
   return encodePng(img.width, img.height, img.rgba);
 }
 
-/**
- * Build the centre art. Returns a map of output name (without extension, e.g.
- * `portrait-ranger`, `ascendancy-deadeye`, `ring-static`) to its PNG bytes.
- */
 export async function buildCentre(source: CentreSource): Promise<Record<string, Buffer>> {
   const Characters = assertRequiredRows<CharacterRow>(await source.table('Characters'), 'Characters', ['Name']);
   const Ascendancy = (await source.table('Ascendancy')) as AscendancyRow[];
 
   const out: Record<string, Buffer> = {};
 
-  // Real PoE2 classes only: the ones with a released ascendancy. GGPK still
-  // carries 4 PoE1 placeholder classes whose ascendancies are all [DNT-UNUSED].
+  // Real PoE2 classes only: GGPK still carries 4 PoE1 placeholder classes whose ascendancies are all [DNT-UNUSED].
   const realClassIndex = new Set<number>();
 
   for (const asc of Ascendancy) {
@@ -96,9 +77,7 @@ export async function buildCentre(source: CentreSource): Promise<Record<string, 
     }
   }
 
-  // Hub ring: static ornate circle + active-class edge marker. Unlike class/
-  // ascendancy art these are never conditionally absent, so an unresolved
-  // sprite is a hard failure too, not a skip.
+  // Hub ring sprites are never conditionally absent, so an unresolved one is a hard failure too.
   for (const { out: name, name: logical } of RING) {
     const ref = await source.resolveSprite(logical);
 

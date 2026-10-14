@@ -1,12 +1,4 @@
-/**
- * @poe2-toolkit/tree-extractor — builds the Path of Exile 2 passive-tree data and sprite
- * atlases from a {@link GgpkSource}, in the shape `@poe2-toolkit/tree-core` consumes.
- *
- * The package is source-agnostic: it never downloads anything itself. Pass any
- * `@poe2-toolkit/ggpk` source (the CDN-backed `createCdnSource`, or your own) and it
- * returns the `data.json` payload, the three sprite atlases, and the centre art —
- * all as plain data, ready to write wherever you publish them.
- */
+/** Builds passive-tree data and sprite atlases from a {@link GgpkSource}, in the shape `@poe2-toolkit/tree-core` consumes. Source-agnostic: it downloads nothing itself. */
 
 import type { GgpkSource } from '@poe2-toolkit/ggpk';
 
@@ -40,24 +32,15 @@ export type { TreeAtlases, GraphicsResult, GraphicsReport, GraphicsSource } from
 export { buildCentre } from './buildCentre.js';
 export type { CentreSource } from './buildCentre.js';
 
-/** Everything the extractor produces for one tree version. */
 export interface TreeBundle {
-  /** The `data.json` payload (`@poe2-toolkit/tree-core`'s normalize input). */
   data: TreeExport;
-  /** The three sprite atlases plus a report of what packed or was skipped. */
   graphics: GraphicsResult;
-  /** Centre art keyed by output name (e.g. `portrait-ranger`), PNG bytes. */
   centre: Record<string, Buffer>;
 }
 
-/** A source that can serve both tables/files and images (tree + graphics). */
 export type TreeSource = GgpkSource & GraphicsSource & CentreSource;
 
-/**
- * Run the full passive-tree extraction against a source: tree data, atlases and
- * centre art in one pass. The source is queried for everything; no other I/O is
- * performed (writing the result is the caller's concern).
- */
+/** The source is queried for everything; writing the result is the caller's concern. */
 export async function extractTree(source: TreeSource): Promise<TreeBundle> {
   const data = await buildTree(source);
   const graphics = await buildGraphics(source, data);

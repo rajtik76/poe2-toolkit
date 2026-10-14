@@ -13,18 +13,11 @@ class StubResizeObserver {
 }
 (globalThis as { ResizeObserver?: unknown }).ResizeObserver = StubResizeObserver;
 
-// jsdom never runs layout, so clientWidth/clientHeight are always 0 — TreeView
-// treats that as "not laid out yet" and skips centring the viewport (and, with
-// it, the first render). Stub a fixed size so the mount path behaves like a
-// real, sized container.
+// jsdom never runs layout, so clientWidth/clientHeight are always 0 - TreeView treats that as "not laid out yet" and skips centring the viewport (and, with it, the first render).
 Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 800 });
 Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, value: 600 });
 
-// pixi.js needs a real WebGL context, which jsdom doesn't provide. Mock it with
-// a minimal fake that records the calls the render-on-demand fix depends on:
-// `init({ autoStart })`, `render()`, `start()`/`stop()`. Scene-graph classes
-// (`Container`/`Graphics`/...) just need to support the chained calls
-// `buildScene`/`drawOverlay` make against them.
+// pixi.js needs a real WebGL context, which jsdom doesn't provide.
 class FakeContainer {
   children: FakeContainer[] = [];
   visible = true;
@@ -188,10 +181,6 @@ describe('TreeView render-on-demand', () => {
   });
 
   it('does not render additional frames while idle (no perpetual loop)', async () => {
-    // A stable scene reference: TreeView legitimately rebuilds (and repaints)
-    // whenever `scene` changes identity, so re-rendering with a *fresh* scene
-    // object each time wouldn't test idleness — it'd just retrigger the
-    // rebuild path, same as a real prop change.
     const scene = makeScene();
 
     await act(async () => {
@@ -206,7 +195,7 @@ describe('TreeView render-on-demand', () => {
     const callsAfterMount = latestApp()?.render.mock.calls.length ?? 0;
     expect(callsAfterMount).toBeGreaterThan(0);
 
-    // Re-rendering with wholly unchanged props must not paint extra frames —
+    // Re-rendering with wholly unchanged props must not paint extra frames -
     // otherwise the fix regresses back into a per-frame loop.
     await act(async () => {
       root.render(<TreeView scene={scene} />);
@@ -219,7 +208,7 @@ describe('TreeView render-on-demand', () => {
   it('starts the ticker for a pulsing highlight that is already active on the first render', async () => {
     // Regression test: mounting directly with an active highlight raced the
     // async `app.init()` against the state-sync effect that toggles
-    // start()/stop() — the toggle used to run while `appRef.current` was
+    // start()/stop() - the toggle used to run while `appRef.current` was
     // still null, silently no-op'ing and leaving the pulse un-started.
     await act(async () => {
       root.render(<TreeView scene={makeScene()} highlight={new Set([1])} />);

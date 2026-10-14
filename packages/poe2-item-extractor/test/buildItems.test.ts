@@ -1,8 +1,4 @@
-/**
- * Self-contained unit tests: the item build is exercised against a small
- * in-memory {@link GgpkSource}, so the suite needs no network or local GGPK
- * extract.
- */
+/** Self-contained unit tests: the item build is exercised against a small in-memory {@link GgpkSource}, so the suite needs no network or local GGPK extract. */
 
 import type { GgpkSource, RgbaImage, TableRow } from '@poe2-toolkit/ggpk';
 import { decodePng } from '@poe2-toolkit/ggpk';
@@ -12,7 +8,6 @@ import { buildItemIcons } from '../src/buildIcons';
 import { buildItems } from '../src/buildItems';
 import { extractItems } from '../src/index';
 
-/** Minimal tables: a two-hander, a one-hander, a name dupe, an art-less base, a [DNT]. */
 const TABLES: Record<string, TableRow[]> = {
   BaseItemTypes: [
     // Base tags [0] union the class tags; the out-of-range index 99 is dropped.
@@ -30,9 +25,6 @@ const TABLES: Record<string, TableRow[]> = {
     // armour + ShieldTypes block merged into one value).
     { Name: 'Viper Cap', ItemClass: 3, ItemVisualIdentity: 9, ModDomain: 1, Tags: [] },
     { Name: 'Plate Shield', ItemClass: 4, ItemVisualIdentity: 10, ModDomain: 1, Tags: [] },
-    // An energy-shield base whose ArmourTypes row omits the other stat columns
-    // (they default to 0); a shield present only in ShieldTypes (no ArmourTypes
-    // row); a base in both tables whose ShieldTypes row omits Block.
     { Name: 'Crystal Focus', ItemClass: 5, ItemVisualIdentity: 11, ModDomain: 1, Tags: [] },
     { Name: 'Wooden Buckler', ItemClass: 6, ItemVisualIdentity: 12, ModDomain: 1, Tags: [] },
     { Name: 'Bronze Kite Shield', ItemClass: 4, ItemVisualIdentity: 13, ModDomain: 1, Tags: [] },
@@ -71,10 +63,7 @@ const TABLES: Record<string, TableRow[]> = {
     { Id: 'ShrineSceptre', DDSFile: 'Art/2DItems/Weapons/shrinesceptre.dds' },
   ],
   AttributeRequirements: [{ BaseItemType: 0, ReqStr: 40, ReqDex: 10, ReqInt: 0 }],
-  // Both tables key on a BaseItemTypes row index. Plate Shield (7) appears in both;
-  // Viper Cap (6) and Crystal Focus (8) only in ArmourTypes; Wooden Buckler (9) only
-  // in ShieldTypes; Bronze Kite Shield (10) in both but with no Block column. Rows
-  // with no BaseItemType are ignored; weapons/jewels appear in neither table.
+  // Both tables key on a BaseItemTypes row index.
   ArmourTypes: [
     { BaseItemType: 6, Armour: 0, Evasion: 179, EnergyShield: 0, Ward: 0 },
     { BaseItemType: 7, Armour: 50, Evasion: 0, EnergyShield: 0, Ward: 0 },
@@ -88,10 +77,7 @@ const TABLES: Record<string, TableRow[]> = {
     { BaseItemType: 10 }, // in both tables, Block column omitted -> defaults to 0
     { Block: 7 }, // no BaseItemType -> skipped
   ],
-  // Keyed on a BaseItemTypes row index like ArmourTypes. Greatsword (0) is melee
-  // (RangeMax, no ReloadTime); Crude Bow (11) omits some columns (default 0);
-  // Makeshift Crossbow (12) is the reload-time case. Rows with no BaseItemType
-  // are ignored; non-weapons appear in neither table.
+  // Keyed on a BaseItemTypes row index like ArmourTypes.
   WeaponTypes: [
     { BaseItemType: 0, CritChance: 500, Speed: 1450, DamageMin: 12, DamageMax: 21, RangeMax: 13, ReloadTime: 0 },
     { BaseItemType: 11, CritChance: 500, Speed: 850, DamageMin: 6, DamageMax: 10 }, // RangeMax/ReloadTime omitted -> 0
@@ -370,18 +356,11 @@ describe('buildItemIcons', () => {
 
     expect(Object.keys(icons)).toContain('Art/2DItems/Weapons/greatsword.png');
     expect(report.packed).toBe(1);
-    // Every distinct icon but greatsword.dds is unserved here: rapier, jewel, the four
-    // extra armour bases (vipercap, plateshield, crystalfocus, woodenbuckler, bronzekite),
-    // the three weapon bases (crudebow, makeshiftcrossbow, shrinesceptre), the uniques'
-    // oro / behemoth and the four unique flask icons.
     expect(report.missing).toBe(16);
   });
 
   it('composites a flask sheet: fill (frame 2) over the glass-and-cap container (frame 0)', async () => {
-    // A 3x2 "sheet" of three 1px-wide layer frames. Frame 0 (col 0) is the
-    // container: an opaque cap on the top row, an empty (transparent) body below.
-    // Frame 2 (col 2) is the fill: no cap, an opaque coloured body. Column 1 is
-    // the ignored middle frame.
+    // A 3x2 "sheet" of three 1px-wide layer frames.
     const width = 3;
     const height = 2;
     const rgba = new Uint8Array(width * height * 4);

@@ -1,13 +1,4 @@
-/**
- * Pure-geometry regressions for the passive-tree connection arcs and the
- * granted-skill / passive-point descriptions. These guard four bugs that must
- * never recur:
- *  - arc rotation: the centre was offset along the negated perpendicular,
- *    mirroring every arc to the wrong side;
- *  - missing arcs: cross-group edges were skipped and drawn as straight lines;
- *  - granted descriptions: nodes that grant a skill / passive point showed no text.
- * No GGPK data needed — everything runs on synthetic inputs.
- */
+/** Pure-geometry regressions for the passive-tree connection arcs and the granted-skill / passive-point descriptions. */
 
 import { describe, expect, it } from 'vitest';
 
@@ -16,7 +7,7 @@ import type { Psg, PsgNode } from '../../src/psg';
 
 const LINE_SENTINEL = 2147483647;
 
-describe('arcCentre — GGG/PoB BuildConnector handedness', () => {
+describe('arcCentre - GGG/PoB BuildConnector handedness', () => {
   it('bows to the -perp side for sign +1 and mirrors for -1', () => {
     // a -> b along +x; the centre sits below (-y) for +1, above (+y) for -1.
     expect(arcCentre({ x: 0, y: 0 }, { x: 100, y: 0 }, 100, 1)).toEqual({ x: 50, y: -86.60254037844386 });
@@ -53,7 +44,7 @@ function psgWith(nodes: PsgNode[], groups: Array<{ x: number; y: number }>): Psg
   };
 }
 
-describe('edgeArcCentre — when an edge is an arc vs a line', () => {
+describe('edgeArcCentre - when an edge is an arc vs a line', () => {
   it('arcs a cross-group connector (orbit != 0) instead of dropping it to a line', () => {
     const a = node({ skillId: 1, group: 0, orbit: 4, orbitIndex: 0 });
     const b = node({ skillId: 2, group: 1, orbit: 2, orbitIndex: 0 });
@@ -89,7 +80,7 @@ describe('edgeArcCentre — when an edge is an arc vs a line', () => {
   });
 });
 
-describe('grantedStats — descriptions for granted-skill / passive-point nodes', () => {
+describe('grantedStats - descriptions for granted-skill / passive-point nodes', () => {
   const skillGems = [{ BaseItemType: 0 }, { BaseItemType: 5 }];
   const baseItemTypes = [{ Name: 'Unused' }, {}, {}, {}, {}, { Name: 'Moment of Vulnerability' }];
 

@@ -1,12 +1,8 @@
 /**
- * StatDescriptions engine — renders GGG's numeric `(stat_id, value)` pairs into
- * human-readable text, using GGG's own `stat_descriptions.csd` straight from the
- * GGPK. Despite the `.csd` extension the file is plain UTF-16 text, not compiled
- * binary. Shared across domains: passive nodes, item mods and gem stats all
- * render through it.
+ * Renders GGG's numeric `(stat_id, value)` pairs into text using `stat_descriptions.csd` (plain UTF-16 text despite
+ * the extension), shared by passive nodes, item mods and gem stats.
  *
- * File format (one block per description):
- *
+ * File format, one block per description:
  * ```
  *   description
  *   \t<N> <stat_id_1> ... <stat_id_N>
@@ -14,82 +10,47 @@
  *   \t\t<cond_1> ... <cond_N> "text with {0} {1}" [handler index]...
  *   \tlang "French"          <- other languages follow; English is read here
  * ```
- *
- * Every stat id is indexed to the block that renders it (a multi-stat block is
- * indexed under each of its stats, and a stat described twice keeps the later
- * block); rendering picks the line whose per-stat conditions all accept the
- * supplied values.
+ * Every stat id is indexed to the block that renders it; rendering picks the line whose conditions all accept the values.
  */
 
-/** An inclusive numeric range a stat value must fall in for a line to apply. */
 interface Condition {
   min: number;
   max: number;
-  /** `!n`: any value except this one. */
   except?: number;
 }
 
-/** One renderable line of a description block. */
 interface Variant {
   conditions: Condition[];
   text: string;
-  /** Flat `name index name index …` handler tokens applied to the values. */
   handlers: string[];
-  /** A `gem_quality` line: describes a gem's quality bonus, used only when rendering one. */
   gemQuality: boolean;
-  /** A `table_only` line: a `label@value` row of the in-game skill table, never a tooltip line. */
   tableOnly: boolean;
 }
 
-/** A description block: the stats it renders together and its candidate lines. */
 interface StatRecord {
   statIds: string[];
   variants: Variant[];
-  /** Position of the block in the description file; the game lists lines in this order. */
   order: number;
 }
 
-/**
- * A parsed `stat_descriptions.csd`: an opaque handle produced by
- * {@link buildStatIndex} and consumed by {@link renderBlock}. Treat it as
- * read-only; its internals are an implementation detail.
- */
+/** Opaque handle from {@link buildStatIndex}, consumed by {@link renderBlock}. */
 export interface StatIndex {
-  /** Each stat id mapped to the description block that renders it. */
   byStat: Map<string, StatRecord>;
 }
 
-/** Optional inputs to {@link renderBlock}. */
 export interface RenderOptions {
-  /**
-   * Values, parallel to `statIds`, that pick each block's line and decide
-   * whether it shows at all, in place of the rendered values. A range renderer
-   * uses it to give a zero end of a range (`0-10`) the line of its other end.
-   */
+  /** Values (parallel to `statIds`) that pick each block's line and whether it shows, instead of the rendered values. Lets a range renderer give a zero end the line of its other end. */
   selectBy?: number[];
-  /** Render a gem's quality bonus: lets `gem_quality` lines take part. */
   quality?: boolean;
-  /**
-   * List the lines the way the game does: by their block's position in the
-   * description file, instead of in the order of `statIds`.
-   */
   descriptionOrder?: boolean;
 }
 
-/** The rendered lines of a stat block, plus any stat ids that had no block. */
 export interface RenderedBlock {
-  /** Rendered, human-readable text lines for the resolved stats. */
   lines: string[];
-  /**
-   * The supplied stat ids each line renders, parallel to {@link RenderedBlock.lines}
-   * (a block renders several stats together, e.g. min/max added damage).
-   */
   lineStatIds: string[][];
-  /** Stat ids that matched no description block, in input order. */
   unresolved: string[];
 }
 
-/** Parse a condition token: `#` = any, `a|b` = range, `!n` = anything but n, `n` = exactly n. */
 function parseCondition(token: string): Condition {
   if (token === '#') {
     return { min: -Infinity, max: Infinity };
@@ -113,10 +74,8 @@ function parseCondition(token: string): Condition {
   return { min: exact, max: exact };
 }
 
-/** A word between a line's conditions and its text, e.g. `gem_quality`, rather than a condition. */
 const LINE_FLAG = /^[a-z_]+$/;
 
-/** Split one description line into its conditions, flags, text and handler tokens. */
 function parseDescriptionLine(line: string): Variant {
   const trimmed = line.trim();
   const firstQuote = trimmed.indexOf('"');
@@ -138,19 +97,10 @@ function parseDescriptionLine(line: string): Variant {
 }
 
 /**
- * Build a per-stat lookup from the raw text of a GGG `stat_descriptions.csd`
- * file (decoded from UTF-16). The first language block (English) is kept; later
- * `lang "..."` blocks are skipped by the outer loop, which only resumes on the
- * next `description` marker.
- *
- * A stat described by more than one block keeps the last one, as Path of
- * Building resolves it. Note that `skill_stat_descriptions.csd` ends with
- * skill-table blocks that supersede the tooltip blocks of some stats that way
- * (e.g. `projectile_speed_+%`); gem tooltips read through each skill's own
- * statset description file, which describes those stats again.
- *
- * @param csd - The decoded UTF-16 text of a `stat_descriptions.csd` file.
- * @returns A {@link StatIndex} to pass to {@link renderBlock}.
+ * Per-stat lookup from the decoded text of a `stat_descriptions.csd`. Only the first (English) language block is kept.
+ * A stat described by several blocks keeps the last, as PoB resolves it: `skill_stat_descriptions.csd` ends with
+ * skill-table blocks that supersede some tooltip blocks (e.g. `projectile_speed_+%`), so gem tooltips read through
+ * each skill's own statset file, which describes those stats again.
  */
 export function buildStatIndex(csd: string): StatIndex {
   // Drop a leading UTF-16 byte-order mark if the decoder left one in.
@@ -163,8 +113,7 @@ export function buildStatIndex(csd: string): StatIndex {
 
   while (i < lines.length) {
     const marker = lines[i]!.trim();
-    // `no_description <stat>` hides a stat: an empty block that supersedes any
-    // earlier one (e.g. a skill's own file hiding a flag its included files describe).
+    // `no_description <stat>` hides a stat: an empty block that supersedes any earlier one.
     const hidden = marker.match(/^no_description\s+(\S+)$/)?.[1];
 
     if (hidden) {
@@ -185,7 +134,6 @@ export function buildStatIndex(csd: string): StatIndex {
       throw new Error(`malformed stat_descriptions.csd: "description" at line ${i - 1} has no header line`);
     }
 
-    // "\t<N> <id1> ... <idN>"
     const header = lines[i]!.trim().split(/\s+/);
     const statCount = Number(header[0]);
 
@@ -200,7 +148,6 @@ export function buildStatIndex(csd: string): StatIndex {
       throw new Error(`malformed stat_descriptions.csd: header at line ${i - 1} has no line-count line`);
     }
 
-    // English line count (first language block, before any `lang`).
     const lineCount = Number(lines[i]!.trim());
 
     if (!Number.isInteger(lineCount) || lineCount < 0) {
@@ -215,7 +162,6 @@ export function buildStatIndex(csd: string): StatIndex {
       variants.push(parseDescriptionLine(lines[i]!));
     }
 
-    // A stat described twice takes its later block, which supersedes the earlier one.
     for (const id of statIds) {
       byStat.set(id, { statIds, variants, order });
     }
@@ -226,32 +172,25 @@ export function buildStatIndex(csd: string): StatIndex {
   return { byStat };
 }
 
-/**
- * How a display value is printed, in printf terms: `d` as an integer, `g` as the
- * shortest decimal (trailing zeros dropped), `.2f` with exactly two decimals.
- */
+/** printf terms: `d` integer, `g` shortest decimal, `.2f` exactly two decimals. */
 type ValueFormat = 'd' | 'g' | '.2f';
 
-/** A stat value after its handlers ran: the display number and how to print it. */
 interface DisplayValue {
   value: number;
   format: ValueFormat;
 }
 
-/** A numeric value handler. A missing `format` keeps the value's current one. */
 interface ValueHandler {
   apply: (value: number) => number;
   format?: ValueFormat;
 }
 
-/** Round half up to `decimals` places. */
 function roundTo(value: number, decimals = 0): number {
   const factor = 10 ** decimals;
 
   return Math.floor(value * factor + 0.5) / factor;
 }
 
-/** Round down to `decimals` places. The epsilon keeps exact quotients (30 / 60 = 0.5) from flooring a step under. */
 function floorTo(value: number, decimals: number): number {
   const factor = 10 ** decimals;
 
@@ -266,12 +205,8 @@ const divideRounded = (divisor: number, decimals: number): ValueHandler => ({
 const divideToInteger = (divisor: number): ValueHandler => ({ apply: (v) => roundTo(v / divisor) });
 
 /**
- * GGG's numeric value handlers, keyed by the name a description line carries.
- * The `_Ndp` suffix rounds to N decimals; without one a division keeps its full
- * fraction. Handlers that don't set `format` keep the current one, so a negate
- * after a divide still prints the decimals. Non-numeric handlers (item classes,
- * passive hashes, skill indexes, reminder text) are not listed and leave the
- * value untouched, as do names this table does not know.
+ * GGG's numeric value handlers by name. `_Ndp` rounds to N decimals, otherwise a division keeps its full fraction.
+ * A handler that doesn't set `format` keeps the current one. Non-numeric and unknown handlers leave the value untouched.
  */
 const VALUE_HANDLERS: Record<string, ValueHandler> = {
   negate: { apply: (v) => -v },
@@ -326,11 +261,7 @@ const VALUE_HANDLERS: Record<string, ValueHandler> = {
   deciseconds_to_seconds: { apply: (v) => v / 10, format: '.2f' },
 };
 
-/**
- * Run a line's value handlers over its raw stat values, in the order the line
- * lists them. Handlers come as `name argument` pairs, except `canonical_line`,
- * a bare marker that takes no argument.
- */
+/** Runs a line's handlers in order. They come as `name argument` pairs, except the bare marker `canonical_line`. */
 function applyHandlers(values: number[], handlers: string[]): DisplayValue[] {
   const out = values.map((value): DisplayValue => ({ value, format: 'd' }));
 
@@ -361,22 +292,17 @@ function applyHandlers(values: number[], handlers: string[]): DisplayValue[] {
   return out;
 }
 
-/** Print a display value in its format. */
 function formatValue({ value, format }: DisplayValue): string {
   if (format === '.2f') {
     return value.toFixed(2);
   }
 
-  // `g`: six significant digits, then the shortest form, so 0.50 prints as "0.5".
   return String(format === 'g' ? Number(value.toPrecision(6)) : Math.round(value));
 }
 
 /**
- * Pick the variant whose per-stat conditions all accept the raw values, or
- * `null` when none does: a value the block has no line for is not displayed
- * (`1|#` and `#|-1` lines leave 0 out on purpose). `gem_quality` lines take
- * part only when rendering a gem's quality bonus; `table_only` lines never do,
- * as Path of Building drops them.
+ * Variant whose per-stat conditions all accept the values, or `null`: a value with no line is not displayed (`1|#`
+ * and `#|-1` leave 0 out on purpose). `gem_quality` lines count only for a gem's quality bonus, `table_only` never (PoB drops them).
  */
 function selectVariant(variants: Variant[], rawValues: number[], options: RenderOptions): Variant | null {
   const accepts = (variant: Variant): boolean =>
@@ -391,10 +317,7 @@ function selectVariant(variants: Variant[], rawValues: number[], options: Render
   return variants.find(accepts) ?? null;
 }
 
-/**
- * Fill `{0}`, `{0:+d}`, `{0:d}` placeholders, and GGG's bare `{}` (implicit next
- * index), each value printed in the format its handlers left it in.
- */
+/** Fills `{0}`, `{0:+d}`, `{0:d}` and the bare `{}` (implicit next index). */
 function fillTemplate(text: string, values: DisplayValue[]): string {
   let implicitIndex = 0;
 
@@ -411,7 +334,6 @@ function fillTemplate(text: string, values: DisplayValue[]): string {
   });
 }
 
-/** Strip PoE bbcode: `[Cold]` -> "Cold", `[AoESkill|AoE]` -> "AoE". */
 function stripBbcode(text: string): string {
   return text.replace(/\[([^\]]+)\]/g, (_, inner: string) => {
     const pipe = inner.lastIndexOf('|');
@@ -420,43 +342,27 @@ function stripBbcode(text: string): string {
   });
 }
 
-/**
- * The `include "..."` path a `.csd` file names on its first line (the description
- * file it falls back to), or `null` when it includes none. Description files form
- * a chain this way: a skill's own file, then `skill_stat_descriptions.csd`, then
- * the gem files, then `stat_descriptions.csd`.
- *
- * @param csd - The decoded UTF-16 text of a `.csd` file.
- */
 export function csdInclude(csd: string): string | null {
   return csd.match(/^\uFEFF?\s*include "([^"]+)"/m)?.[1] ?? null;
 }
 
-/** Find the block for a stat in one index, also under its "base_" prefixed id. */
 function findRecord(index: StatIndex, statId: string): StatRecord | undefined {
-  // Some stats are keyed with a "base_" prefix in the description file
-  // (e.g. curse_duration_+% -> base_curse_duration_+%).
+  // Some stats are keyed with a "base_" prefix in the description file (curse_duration_+% -> base_curse_duration_+%).
   return index.byStat.get(statId) ?? index.byStat.get(`base_${statId}`);
 }
 
 /**
- * Render a full stat block. Each stat resolves to its block; a block may render
- * several stats together (e.g. min/max added damage), so its placeholders are
- * filled from whichever of those stats it provides (others default to 0) and all
- * are marked consumed so the line is not repeated. A block renders no line when
- * all its values are zero or when none of its variants accepts the values.
+ * Renders a full stat block. A block may render several stats together (e.g. min/max added damage): its placeholders
+ * come from whichever of them it provides (others 0) and all are marked consumed. No line when all values are zero or
+ * no variant accepts them.
  *
- * Given a chain of indexes (a description file followed by the files it
- * includes, see {@link csdInclude}), each stat resolves in the first index that
- * describes it, the way Path of Building resolves a stat-description scope. With
- * `descriptionOrder`, lines from included files then come first, each file's in
- * its own order.
+ * Given a chain of indexes (a file followed by its includes, see {@link csdInclude}), each stat resolves in the first
+ * index describing it, as in PoB. With `descriptionOrder`, lines from included files come first.
  *
- * @param index - The {@link StatIndex} from {@link buildStatIndex}, or a chain of them, most specific first.
+ * @param index - A {@link StatIndex} from {@link buildStatIndex}, or a chain of them, most specific first.
  * @param statIds - Stat ids to render.
  * @param vals - Raw stat values, parallel to `statIds`.
  * @param options - See {@link RenderOptions}.
- * @returns A {@link RenderedBlock} of rendered lines and any unresolved stat ids.
  */
 export function renderBlock(
   index: StatIndex | StatIndex[],
@@ -490,13 +396,11 @@ export function renderBlock(
       return valueByStat.has(id) ? [id] : valueByStat.has(stripped) ? [stripped] : [];
     });
 
-    // The block's stat ids may carry a "base_" prefix the source stat lacks, so
-    // fall back to the prefix-stripped id when reading the value.
+    // The block's stat ids may carry a "base_" prefix the source stat lacks: fall back to the stripped id.
     const lookup = (values: Map<string, number>, id: string): number =>
       values.get(id) ?? values.get(id.replace(/^base_/, '')) ?? 0;
     const rawValues = record.statIds.map((id) => lookup(valueByStat, id));
     const selectValues = record.statIds.map((id) => lookup(selectByStat, id));
-    // A block whose stats are all zero grants nothing and is not displayed.
     const variant = selectValues.some((value) => value !== 0) ? selectVariant(record.variants, selectValues, options) : null;
 
     if (variant?.text) {

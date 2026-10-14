@@ -61,9 +61,7 @@ describe('frameKeyFor', () => {
 
 describe('effectKeyFor', () => {
   it('keys a GGG-sourced pattern path (already carrying .png) without doubling the extension', () => {
-    // Regression: GGG `activeEffectImage` values include the `.png` extension,
-    // whereas PoB-era values did not. Appending `.png` unconditionally produced
-    // `...Pattern.png.png`, which no atlas frame matched - masteries went blank.
+    // Regression: GGG `activeEffectImage` values include the `.png` extension, whereas PoB-era values did not.
     expect(effectKeyFor('Art/2DArt/UIImages/InGame/PassiveMastery/MasteryLightningPattern.png')).toBe(
       'masteryEffectActive:Art/2DArt/UIImages/InGame/PassiveMastery/MasteryLightningPattern.png',
     );

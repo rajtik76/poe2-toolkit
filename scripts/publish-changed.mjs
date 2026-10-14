@@ -1,9 +1,6 @@
 #!/usr/bin/env node
-// Publish on npm every package whose current version is not yet on the registry,
-// in dependency order. Already-published versions are skipped, so a release that
-// only bumped some packages publishes only those. Run by the Release workflow;
-// assumes `npm run build` already ran and npm trusted publishing (OIDC) is saved
-// for each package with Allow npm publish enabled.
+// Publishes every package whose current version is not yet on npm, in dependency order. Run by the Release workflow after
+// `npm run build`; assumes npm trusted publishing (OIDC) is set up for each package.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,15 +32,13 @@ if (selected && !ORDER.includes(selected)) {
   throw new Error(`Unknown release package: ${values.package}`);
 }
 
-/** The version of `name` already on npm, or null if that exact version is absent. */
 function publishedVersion(name, version) {
   try {
     const out = execFileSync('npm', ['view', `${name}@${version}`, 'version', '--json', '--registry', REGISTRY], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    // npm 12 returns a JSON array even for an exact version; older CLIs may
-    // return a scalar. Normalize both before deciding whether to publish.
+    // npm 12 returns a JSON array even for an exact version, older CLIs a scalar.
     const result = JSON.parse(out.toString());
     const versions = Array.isArray(result) ? result : [result];
 
@@ -53,14 +48,13 @@ function publishedVersion(name, version) {
 
     return versions.includes(version) ? version : null;
   } catch (error) {
-    // Only an absent package/version means it needs publishing. Authentication
-    // or registry outages must fail instead of being treated as new versions.
+    // Only an absent package/version means publish. Auth or registry outages must fail.
     let code;
 
     try {
       code = JSON.parse(error.stdout?.toString() || '{}').error?.code;
     } catch {
-      // A response that is not npm's JSON error remains a real lookup failure.
+      // not npm's JSON error: a real lookup failure
     }
 
     if (code === 'E404') {
@@ -107,13 +101,8 @@ for (const dir of ORDER) {
     continue;
   }
 
-  // The check above is best-effort: a sibling release run (or a manual re-run)
-  // can publish this exact version between the check and this publish, and npm
-  // answers that with a fatal E403 "cannot publish over the previously published
-  // versions". That answer alone proves the version is there; the registry's
-  // read side can lag minutes behind a fresh publish, so a re-query may still
-  // say 404. Either way the publish is effectively done, so skip it rather than
-  // failing the whole release. Anything else is a real error.
+  // The check above is best-effort: a sibling run can publish this version in between, and npm answers with a fatal E403.
+  // That proves the version exists (a re-query may still 404, the read side lags), so skip rather than fail the release.
   if (/cannot publish over the previously published version/i.test(stderr) || publishedVersion(name, version) === version) {
     console.log(`skip   ${name}@${version} (published concurrently)`);
     continue;

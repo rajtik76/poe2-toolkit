@@ -1,25 +1,13 @@
-/**
- * Node classification and world sizes.
- *
- * GGG's export ships no per-node sizes, so they are derived here from a fixed
- * size per node *type* (icon, overlay frame, and the effect pattern behind
- * notables/keystones/masteries). The constants and the cascade order match Path
- * of Building's `GetNodeTargetSize` (the reference renderer); order matters, the
- * first match wins. In PoE2 these are world units directly.
- */
+/** Node classification and world sizes. GGG ships none, so they follow PoB's `GetNodeTargetSize` cascade (first match wins); in PoE2 they are world units directly. */
 
 import type { NodeKind, TreeNode } from '../types.js';
 
 export interface NodeSize {
-  /** World diameter of the skill icon (0 when the node has no icon). */
   icon: number;
-  /** World diameter of the overlay frame (0 when none). */
   overlay: number;
-  /** World diameter of the effect pattern behind the node (0 when none). */
   effect: number;
 }
 
-/** Classify a node into a render kind (drives colour/frame, not just size). */
 export function classifyNode(node: TreeNode): NodeKind {
   if (node.isAscendancyStart) {
     return 'ascendancyStart';
@@ -56,10 +44,6 @@ export function classifyNode(node: TreeNode): NodeKind {
   return 'normal';
 }
 
-/**
- * World sizes for a node, following Path of Building's `GetNodeTargetSize`
- * cascade.
- */
 export function nodeTargetSize(node: TreeNode): NodeSize {
   if (node.isAscendancyStart) {
     return { icon: 0, overlay: 50, effect: 0 };

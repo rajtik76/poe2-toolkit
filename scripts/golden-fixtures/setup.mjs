@@ -1,26 +1,12 @@
-// Bootstraps the local fixtures the characterization/golden-contract suites
-// need: a decoded GGPK extract, and — with --bless — the golden output derived
-// from it. Everything this script writes lives outside git (.ggpk-extract/ and
-// .golden-fixtures/ are gitignored): this repo ships code only, no data derived
-// from the game, not even hashes of it. Every contributor runs this locally
-// against their own legally-obtained extract; nothing it produces is ever
-// committed or run in CI.
+// Bootstraps the fixtures the characterization/golden suites need: a decoded GGPK extract and, with --bless, golden
+// output derived from it. Everything lives outside git (.ggpk-extract/, .golden-fixtures/): the repo ships no game data.
 //
-// Usage:
 //   node scripts/golden-fixtures/setup.mjs             # fetch/reuse the extract
 //   node scripts/golden-fixtures/setup.mjs --bless      # + (re)generate golden fixtures
 //   node scripts/golden-fixtures/setup.mjs --patch 4.5.5.1 --bless
 //
-// The patch version defaults to whatever the patch server is serving right now
-// (config.json's "patch": "latest"), because the CDN only hosts the current one
-// because a hard-coded version stops resolving as soon as GGG ships an update.
-//
-// Point the test suites at the result with:
-//   export POE2_GGPK_EXTRACT=$PWD/.ggpk-extract
-//   export POE2_DATA_GOLDEN=$PWD/.golden-fixtures/data
-//   export POE2_TREE_GOLDEN=$PWD/.golden-fixtures/tree
-//   export POE2_TREE_DATA=$PWD/.golden-fixtures/tree/data.json
-// (the test suites already default to these paths — see docs/GOLDEN_FIXTURES.md)
+// Env paths the suites read (defaults already match, see docs/GOLDEN_FIXTURES.md):
+//   POE2_GGPK_EXTRACT, POE2_DATA_GOLDEN, POE2_TREE_GOLDEN, POE2_TREE_DATA
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -46,10 +32,7 @@ const patchOverride = patchFlagIndex >= 0 ? args[patchFlagIndex + 1] : undefined
 const manifest = JSON.parse(readFileSync(join(SCRIPT_DIR, 'config.json'), 'utf8'));
 const pinned = patchOverride ?? manifest.patch;
 
-// "latest" (the default) asks the patch server what it is serving right now. A
-// literal version stays honoured, but only while the CDN still has it: it hosts
-// the current patch alone, so any pin 404s the moment GGG ships an update. That
-// is why pinning is opt-in and resolving is the default.
+// "latest" (default) asks the patch server what it serves now. A literal pin 404s as soon as GGG ships an update, so it is opt-in.
 const patch = pinned && pinned !== 'latest' ? pinned : await currentPatch();
 
 if (!patch) {
@@ -60,7 +43,6 @@ if (pinned === 'latest' || !pinned) {
   console.log(`Patch server is serving ${patch}.`);
 }
 
-/** Run a step, inheriting stdio, failing loud on error. */
 function step(label, command, cmdArgs, options = {}) {
   console.log(`\n▶ ${label}`);
   execFileSync(command, cmdArgs, { stdio: 'inherit', ...options });
@@ -73,8 +55,6 @@ function tablesReady() {
 
   return extractPatch === patch && existsSync(join(EXTRACT_DIR, 'tables/English/PassiveSkills.json'));
 }
-
-// --- 1. GGPK extract: decoded tables, fetched once per patch -----------------
 
 if (tablesReady()) {
   console.log(`Extract already present for patch ${patch}, skipping table export.`);
@@ -94,13 +74,11 @@ if (!bless) {
   process.exit(0);
 }
 
-// --- 2. Bless: regenerate golden fixtures from the extract --------------------
-
 function requireBuilt(bin) {
   const path = join(BIN_DIR, bin);
 
   if (!existsSync(path)) {
-    throw new Error(`${bin} not found — run "npm run build" first`);
+    throw new Error(`${bin} not found - run "npm run build" first`);
   }
 
   return path;
@@ -111,7 +89,6 @@ const cacheDir = join(EXTRACT_DIR, '.cache');
 
 mkdirSync(DATA_GOLDEN_DIR, { recursive: true });
 
-/** Run a data extractor's CLI into a scratch dir, then keep only its JSON output. */
 function blessData(label, bin) {
   const scratch = join(GOLDEN_DIR, `.scratch-${label}`);
   rmSync(scratch, { recursive: true, force: true });
@@ -138,8 +115,6 @@ blessData('gems', 'poe2-gem-extract');
 blessData('runes', 'poe2-rune-extract');
 blessData('mods', 'poe2-mod-extract');
 
-// Tree: CLI output (data.json, assets/*.png+*.json, centre/*.png) matches the
-// golden layout directly, no scratch/copy needed.
 rmSync(TREE_GOLDEN_DIR, { recursive: true, force: true });
 step('bless tree data + art', 'node', [
   requireBuilt('poe2-tree-extract'),
@@ -149,7 +124,6 @@ step('bless tree data + art', 'node', [
   '--out', TREE_GOLDEN_DIR,
 ]);
 
-/** Hex SHA-256 of a file's raw bytes. */
 function sha256File(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
@@ -165,5 +139,5 @@ console.log(
   `\n✓ Golden fixtures blessed for patch ${patch}\n` +
     `  data: ${DATA_GOLDEN_DIR}\n` +
     `  tree: ${TREE_GOLDEN_DIR} (${pngs.length} PNGs hashed)\n` +
-    '\nNothing here is committed — .ggpk-extract/ and .golden-fixtures/ stay gitignored.',
+    '\nNothing here is committed - .ggpk-extract/ and .golden-fixtures/ stay gitignored.',
 );

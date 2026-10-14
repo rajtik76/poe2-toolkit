@@ -16,7 +16,7 @@ function scene(): Scene {
   return {
     nodes: [
       { skill: 1, x: 0, y: 0, kind: 'normal', icon: 'a', iconSize: 37, frameSize: 54, radius: 27, allocated: true },
-      // far off-screen — should be culled
+      // far off-screen - should be culled
       { skill: 2, x: 100000, y: 100000, kind: 'normal', icon: 'b', iconSize: 37, frameSize: 54, radius: 27, allocated: false },
     ],
     connections: [{ from: 1, to: 2, kind: 'line', a: { x: 0, y: 0 }, b: { x: 100000, y: 100000 }, active: false }],
@@ -64,7 +64,7 @@ describe('nodeAt', () => {
       ...s,
       nodes: [{ skill: 9, x: 0, y: 0, kind: 'mastery', icon: 'm', iconSize: 760, frameSize: 0, radius: 380, allocated: false }],
     };
-    // Directly over the mastery's centre — still no hit.
+    // Directly over the mastery's centre - still no hit.
     expect(nodeAt(withMastery, viewport, 100, 50)).toBeNull();
   });
 });

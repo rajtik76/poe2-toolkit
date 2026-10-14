@@ -1,9 +1,4 @@
-/**
- * The skill atlas keys every icon by the frame variant it is drawn in. An
- * override node sits off the tree with no kind flags of its own, yet the renderer
- * draws it in a base node's place, framed as that node - so its icon must be packed
- * in the base node's variant, or a swapped notable renders as an empty frame.
- */
+/** The skill atlas keys every icon by the frame variant it is drawn in. */
 
 import { describe, expect, it } from 'vitest';
 

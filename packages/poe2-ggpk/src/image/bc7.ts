@@ -1,10 +1,5 @@
-/**
- * BC7 (BPTC) block decoder to RGBA8. PoE2 UI art — node frames and mastery
- * patterns — ships as DX10/BC7. Implements all eight modes per the D3D11 BC7
- * specification.
- */
+/** BC7 (BPTC) block decoder to RGBA8, all eight modes per the D3D11 spec. PoE2 UI art (node frames, mastery patterns) ships as DX10/BC7. */
 
- 
 const PARTITIONS2: readonly (readonly number[])[] = [
   [0,0,1,1,0,0,1,1,0,0,1,1,0,0,1,1],[0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1],[0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,1],[0,0,0,1,0,0,1,1,0,0,1,1,0,1,1,1],
   [0,0,0,0,0,0,0,1,0,0,0,1,0,0,1,1],[0,0,1,1,0,1,1,1,0,1,1,1,1,1,1,1],[0,0,0,1,0,0,1,1,0,1,1,1,1,1,1,1],[0,0,0,0,0,0,0,1,0,0,1,1,0,1,1,1],
@@ -66,7 +61,6 @@ const MODES: readonly Bc7Mode[] = [
   { ns:2, pb:6, rb:0, isb:0, cb:5, ab:5, epb:1, spb:0, ib:2, ib2:0 },
 ];
  
-
 class BitReader {
   private bit: number;
 
@@ -87,7 +81,6 @@ class BitReader {
   }
 }
 
-/** Expand an n-bit value to 8 bits by bit-replication (n >= 4 for BC7). */
 function expand(value: number, nbits: number): number {
   return ((value << (8 - nbits)) | (value >> (2 * nbits - 8))) & 0xff;
 }
@@ -112,7 +105,6 @@ function readIndices(br: BitReader, bits: number, partTable: readonly number[] |
   return out;
 }
 
-/** Decode one 16-byte BC7 block at `offset` into `rgba` at block (bx, by). */
 export function decodeBc7Block(
   bytes: Uint8Array,
   offset: number,
@@ -163,7 +155,6 @@ export function decodeBc7Block(
     }
   }
 
-  // p-bits per (subset, endpoint) or shared per subset.
   const pbit: number[][] = [];
 
   for (let s = 0; s < ns; s++) {
@@ -184,7 +175,6 @@ export function decodeBc7Block(
     }
   }
 
-  // Finalize endpoints to 8-bit.
   const ep: number[][][] = [];
 
   for (let s = 0; s < ns; s++) {
@@ -217,7 +207,6 @@ export function decodeBc7Block(
   const idx = readIndices(br, m.ib, partTable, anchors);
   const idx2 = m.ib2 ? readIndices(br, m.ib2, null, [0]) : null;
 
-  // For modes 4/5 the index-selection bit can swap colour/alpha index roles.
   const colorBits = idxSel ? m.ib2 : m.ib;
   const alphaBits = idxSel ? m.ib : m.ib2;
   const colorIdx = idxSel ? idx2! : idx;

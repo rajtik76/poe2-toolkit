@@ -1,8 +1,4 @@
-/**
- * Coverage for the shelf bin-packer on synthetic sprites: placement geometry
- * (padding, shelf wrap, tallest-first order) and the composited sheet itself,
- * decoded back from the emitted PNG.
- */
+/** Coverage for the shelf bin-packer on synthetic sprites: placement geometry (padding, shelf wrap, tallest-first order) and the composited sheet itself, decoded back from the emitted PNG. */
 
 import { decodePng } from '@poe2-toolkit/ggpk';
 import { describe, expect, it } from 'vitest';
@@ -10,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 import type { AtlasSprite } from '../../src/atlas';
 import { packAtlas } from '../../src/atlas';
 
-/** A solid-colour sprite; the colour doubles as its identity in pixel checks. */
 function sprite(key: string, width: number, height: number, rgba: [number, number, number, number]): AtlasSprite {
   const px = new Uint8Array(width * height * 4);
 

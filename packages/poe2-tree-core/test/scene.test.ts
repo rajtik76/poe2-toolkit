@@ -48,10 +48,7 @@ describe('classifyNode + nodeTargetSize', () => {
   });
 });
 
-/**
- * group at origin, orbit 1 (12 even slots, r≈82): slot 0 baked straight up at
- * (0,-82), slot 3 to the right at (82,0). A far group holds an off-orbit node.
- */
+/** group at origin, orbit 1 (12 even slots, r≈82): slot 0 baked straight up at (0,-82), slot 3 to the right at (82,0). */
 function arcData(): TreeData {
   return {
     version: '0_5',
@@ -158,7 +155,7 @@ describe('buildScene', () => {
     expect(chosen?.icon).toBe('Art/plusintelligence.png');
   });
 
-  it('hides conditional (unlockConstraint) nodes — the web tree never renders them', () => {
+  it('hides conditional (unlockConstraint) nodes - the web tree never renders them', () => {
     const withConditional: TreeData = {
       ...data,
       nodes: {

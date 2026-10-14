@@ -1,7 +1,4 @@
-/**
- * Coverage for the pure pan/zoom arithmetic: cursor-anchored zoom, scale
- * clamping, wheel factors, pinch spread and the drag threshold.
- */
+/** Coverage for the pure pan/zoom arithmetic: cursor-anchored zoom, scale clamping, wheel factors, pinch spread and the drag threshold. */
 
 import { describe, expect, it } from 'vitest';
 

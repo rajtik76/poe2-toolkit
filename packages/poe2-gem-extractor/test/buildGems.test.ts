@@ -1,8 +1,4 @@
-/**
- * Self-contained unit tests: the gem build and its ported helpers are exercised
- * against a small in-memory {@link GgpkSource}, so the suite needs no network or
- * local GGPK extract.
- */
+/** Self-contained unit tests: the gem build and its ported helpers are exercised against a small in-memory {@link GgpkSource}, so the suite needs no network or local GGPK extract. */
 
 import type { GgpkSource, RgbaImage, TableRow } from '@poe2-toolkit/ggpk';
 import { describe, expect, it, vi } from 'vitest';
@@ -12,7 +8,6 @@ import { buildGemIcons } from '../src/buildIcons';
 import type { GemIconSource } from '../src/buildIcons';
 import { extractGems } from '../src/index';
 
-/** One `.csd` file: an optional `include` line followed by description blocks. */
 const csd = (include: string | null, ...blocks: string[][]): string =>
   [...(include ? [`include "${include}"`] : []), ...blocks.flat()].join('\n');
 const block = (stat: string, text: string): string[] => ['description', `\t1 ${stat}`, '\t1', `\t\t# "${text}"`];
@@ -23,11 +18,7 @@ const GEM = 'Data/StatDescriptions/gem_stat_descriptions.csd';
 const FIREBALL = 'Data/StatDescriptions/specific_skill_stat_descriptions/fireball/statset_0.csd';
 const FIREBALL_SET_2 = 'Data/StatDescriptions/specific_skill_stat_descriptions/fireball/statset_2.csd';
 
-/**
- * The description files: Fireball's own files fall back to the skill file, which
- * falls back to the general one; supports read the gem file. Keys are lowercase,
- * as the build asks the source for them.
- */
+/** The description files: Fireball's own files fall back to the skill file, which falls back to the general one; supports read the gem file. */
 const FILES: Record<string, string> = {
   [GENERAL.toLowerCase()]: csd(null, block('general_only_stat', 'General Only Stat +{0}')),
   [SKILL.toLowerCase()]: csd(
@@ -46,14 +37,9 @@ const FILES: Record<string, string> = {
   [GEM.toLowerCase()]: csd(GENERAL, block('support_stat_test', 'Support Stat +{0}%')),
 };
 
-/** A UIImages sprite name: the form `SkillGems.UI_Image` holds from patch 4.5.5 on. */
 const ICE_BOLT_HOVER_SPRITE = 'Art/2DArt/UIImages/InGame/SmartHover/GemHoverImage/GemHoverImageIceBolt';
 
-/**
- * Minimal in-memory tables: one active gem with a hidden and an inheriting extra
- * stat set, one support without and one with a stat set, two placeholders, plus
- * IceBolt and FrostBolt for scaling edge cases.
- */
+/** Minimal in-memory tables: one active gem with a hidden and an inheriting extra stat set, one support without and one with a stat set, two placeholders, plus IceBolt and FrostBolt for scaling edge cases. */
 const TABLES: Record<string, TableRow[]> = {
   BaseItemTypes: [
     { Id: 'Metadata/Items/Gems/Fireball', Name: 'Fireball' },
@@ -172,12 +158,6 @@ const TABLES: Record<string, TableRow[]> = {
   ],
 };
 
-/**
- * A fake source: tables from the fixture above, the description files by path
- * (`null` for a file it doesn't hold), DDS paths and sprite names both resolved
- * per `images` (the sprite index is the source's concern, so a fake can serve a
- * name straight from the same map).
- */
 function fakeSource(images: Record<string, RgbaImage | null> = {}): GgpkSource & GemIconSource {
   return {
     table: (name: string) => Promise.resolve(TABLES[name] ?? []),
@@ -385,9 +365,6 @@ describe('buildGems scaling', () => {
   it('drops a FloatStats id no description file describes, and reads a constant from the general file the skill file includes', async () => {
     const { scaling } = await buildGems(fakeSource());
 
-    // ConstantStats' `general_only_stat` resolves only in the included general file,
-    // so its line comes first; FloatStats' trailing `unresolved_stat_test` (value 7)
-    // resolves nowhere and is dropped rather than fabricated.
     expect(scaling.IceBolt!.levels[0]!.stats).toEqual([
       { text: 'General Only Stat +42', min: 42, max: 42 },
       { text: 'Deals 5 to 15 Test Damage', min: 5, max: 15 },

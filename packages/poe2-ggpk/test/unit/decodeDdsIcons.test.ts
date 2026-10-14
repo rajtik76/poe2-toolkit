@@ -1,7 +1,4 @@
-/**
- * Unit coverage for the shared icon-decode loop every icon-shipping extractor
- * (item, gem, rune) now delegates to instead of running its own copy.
- */
+/** Unit coverage for the shared icon-decode loop every icon-shipping extractor (item, gem, rune) now delegates to instead of running its own copy. */
 
 import { describe, expect, it } from 'vitest';
 
@@ -9,7 +6,6 @@ import { decodeDdsIcons } from '../../src/decodeDdsIcons';
 import type { DdsSource } from '../../src/decodeDdsIcons';
 import type { RgbaImage } from '../../src/image/types';
 
-/** A fake source serving `images[path]`, or `null` for anything else (a "miss"). */
 function fakeSource(images: Record<string, RgbaImage>): DdsSource {
   return {
     dds: async (path: string) => images[path] ?? null,

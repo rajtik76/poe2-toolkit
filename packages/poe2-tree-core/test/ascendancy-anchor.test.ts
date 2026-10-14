@@ -3,21 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { buildScene } from '../src/index.js';
 import { tree, treeDataAvailable } from './treeData.js';
 
-// Regression: the ascendancy disc must relocate onto its own class's quatrefoil,
-// not the opposite side of the hub. The renderer drops each disc node by
-// `centre - worldAnchor`, so the start diamond (at the ascendancy start node)
-// lands at `centre - offset`, where `offset = worldAnchor - diamondPos`. That
-// landing point must sit toward the class's start node, the same direction the
-// hub ring points. A flipped offset sign (the GGPK extractor bug) put every
-// class on the antipodal quatrefoil — Mercenary on Witch's, and so on.
-//
-// Needs a local tree data.json (see treeData.ts); skipped without one.
+// Regression: the ascendancy disc must relocate onto its own class's quatrefoil, not the opposite side of the hub.
 if (treeDataAvailable()) {
   const { raw, data } = tree();
   const scene = buildScene(data, { allocation: { allocated: [] } });
   const centre = scene.centre.centre;
 
-  /** The ascendancy start node (the diamond) for an ascendancy id. */
   const diamond = (ascId: string): { x: number; y: number } => {
     const node = Object.values(raw.nodes).find((n) => n.ascendancyId === ascId && n.isAscendancyStart);
 

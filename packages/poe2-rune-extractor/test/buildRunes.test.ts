@@ -1,8 +1,4 @@
-/**
- * Self-contained unit tests: the rune build is exercised against a small
- * in-memory {@link GgpkSource} - tables plus a minimal UTF-16 `.csd` - so the
- * suite needs no network or local GGPK extract.
- */
+/** Self-contained unit tests: the rune build is exercised against a small in-memory {@link GgpkSource} - tables plus a minimal UTF-16 `.csd` - so the suite needs no network or local GGPK extract. */
 
 import type { GgpkSource, RgbaImage, TableRow } from '@poe2-toolkit/ggpk';
 import { describe, expect, it } from 'vitest';
@@ -12,17 +8,13 @@ import { buildRunes } from '../src/buildRunes';
 import { buildSocketIcons } from '../src/buildSockets';
 import { extractRunes } from '../src/index';
 
-/** GGPK DDS paths of the three socket textures, keyed by their logical output path. */
 const SOCKET_DDS = {
   'ui/rune-socket.png': 'art/textures/interface/2d/2dart/uiimages/ingame/runesocketfilled.dds',
   'ui/soul-core-socket.png': 'art/textures/interface/2d/2dart/uiimages/ingame/soulcoressocketfilled.dds',
   'ui/socket-empty.png': 'art/textures/interface/2d/2dart/uiimages/ingame/soulcoressocketempty.dds',
 };
 
-/**
- * Minimal tables: a levelled core, a level-0 core, a [DNT] placeholder, an art-less
- * core, a helmet rune with a bonded effect, and an unused [DNT-Unused] rune.
- */
+/** Minimal tables: a levelled core, a level-0 core, a [DNT] placeholder, an art-less core, a helmet rune with a bonded effect, and an unused [DNT-Unused] rune. */
 const TABLES: Record<string, TableRow[]> = {
   BaseItemTypes: [
     { Name: 'Iron Soul Core', ItemVisualIdentity: 0 },
@@ -83,7 +75,6 @@ const CSD = [
   '',
 ].join('\n');
 
-/** A fake source: tables + the `.csd` served as UTF-16 bytes, and decoded DDS images. */
 function fakeSource(
   csd: string | null = CSD,
   images: Record<string, RgbaImage | null> = {},

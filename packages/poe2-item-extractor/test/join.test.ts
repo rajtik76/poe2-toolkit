@@ -1,28 +1,16 @@
-/**
- * Cross-extractor join: the mods that can roll on an item. Items come from the
- * real {@link buildItems} (so `modDomain` and `tags` are produced exactly as
- * shipped), mods are hand-built fixtures in the `@poe2-toolkit/mod-extractor`
- * `Mod` shape. This locks the documented `compatibleMods` filter - domain first,
- * then the spawn-tag gate - so flasks draw only flask mods, gear draws only gear
- * mods, and a foreign-domain mod with a positive `default` weight never leaks.
- */
+/** Cross-extractor join: the mods that can roll on an item. */
 
 import type { GgpkSource, TableRow } from '@poe2-toolkit/ggpk';
 import { describe, expect, it } from 'vitest';
 
 import { buildItems } from '../src/buildItems';
 
-/** Just the fields the join reads off a mod; a structural subset of `Mod`. */
 interface JoinMod {
   domain: string;
   spawnWeights: { tag: string; weight: number }[];
 }
 
-/**
- * The join exactly as both package READMEs document it: a mod rolls on an item
- * when it shares the item's mod domain and the first of its spawn weights whose
- * tag the item carries is positive.
- */
+/** The join exactly as both package READMEs document it: a mod rolls on an item when it shares the item's mod domain and the first of its spawn weights whose tag the item carries is positive. */
 function compatibleMods(item: { modDomain: string | null; tags: string[] }, mods: Record<string, JoinMod>): string[] {
   return Object.entries(mods)
     .filter(([, mod]) => {
@@ -37,7 +25,6 @@ function compatibleMods(item: { modDomain: string | null; tags: string[] }, mods
     .map(([id]) => id);
 }
 
-/** A body armour (Item domain), a life flask (Flask domain) and a ring. */
 const TABLES: Record<string, TableRow[]> = {
   BaseItemTypes: [
     { Name: 'Vaal Cuirass', ItemClass: 0, ItemVisualIdentity: 0, ModDomain: 1, Tags: [0] },
@@ -63,7 +50,6 @@ const source: GgpkSource = {
   file: () => Promise.resolve(null),
 };
 
-/** Fixtures spanning every join outcome: domain match/miss, tag gate, first-match. */
 const MODS: Record<string, JoinMod> = {
   // Flask domain, gates on life_flask - a life flask only.
   FlaskLife: { domain: 'Flask', spawnWeights: [{ tag: 'life_flask', weight: 1 }, { tag: 'default', weight: 0 }] },

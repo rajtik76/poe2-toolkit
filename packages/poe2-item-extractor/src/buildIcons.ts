@@ -1,11 +1,4 @@
-/**
- * Decodes the item icons referenced by {@link ItemData} into PNGs, keyed by
- * their output path (the GGPK DDS path with a `.png` extension). One PNG per
- * distinct icon. Source: GGPK only.
- *
- * Unlike the legacy script this has no vendored fallback: an icon the source
- * cannot serve is skipped and reported, never pulled from a bundled asset.
- */
+/** Decodes the icons referenced by {@link ItemData} to PNGs keyed by their DDS path with a `.png` extension. No vendored fallback: an unservable icon is skipped and reported. */
 
 import { decodeDdsIcons } from '@poe2-toolkit/ggpk';
 import type { DdsIconsResult, DdsSource, RgbaImage } from '@poe2-toolkit/ggpk';
@@ -15,22 +8,12 @@ import type { ItemData } from './buildItems.js';
 /** Number of layer frames a flask icon sheet packs side by side. */
 const FLASK_FRAMES = 3;
 
-/**
- * Flask icons (bases and uniques) are not single art: GGG stores them as a
- * horizontal sheet of {@link FLASK_FRAMES} layers - the glass container with its
- * cap (frame 0), an intermediate frame, and the coloured liquid fill (frame 2) -
- * so the raw DDS is three bottles wide. The rendered flask is the fill composited
- * onto the container, which is what a build UI wants. Charms and every other item
- * are single-frame and untouched.
- */
+/** Flask icons are a horizontal sheet of {@link FLASK_FRAMES} layers (container + cap, intermediate, liquid fill); the flask is the fill composited onto the container. Charms and other items are single-frame. */
 function isFlaskSheet(ddsPath: string, img: RgbaImage): boolean {
-  // Path picks flasks out from charms (which share the flask item classes); the
-  // width>height guard skips anything already single-frame, so re-running on a
-  // composited icon is a no-op.
+  // Path separates flasks from charms; the width>height guard makes re-running on a composited icon a no-op.
   return ddsPath.toLowerCase().includes('/2ditems/flasks/') && img.width > img.height;
 }
 
-/** Copy the `index`-th of {@link FLASK_FRAMES} equal-width cells into its own image. */
 function flaskFrame(img: RgbaImage, index: number): RgbaImage {
   const startX = Math.round((index * img.width) / FLASK_FRAMES);
   const endX = Math.round(((index + 1) * img.width) / FLASK_FRAMES);
@@ -45,7 +28,6 @@ function flaskFrame(img: RgbaImage, index: number): RgbaImage {
   return { width, height: img.height, rgba };
 }
 
-/** Alpha-composite `top` over `base` (both same size); straight-alpha, premultiplied math. */
 function composite(top: RgbaImage, base: RgbaImage): RgbaImage {
   const width = Math.min(top.width, base.width);
   const height = Math.min(top.height, base.height);
@@ -71,24 +53,14 @@ function composite(top: RgbaImage, base: RgbaImage): RgbaImage {
   return { width, height, rgba };
 }
 
-/**
- * Render a flask sheet to its final icon: the coloured fill (frame 2) composited
- * onto the glass-and-cap container (frame 0). Frame 0 alone is an empty bottle,
- * frame 2 alone is fill with no cap; overlaying the fill leaves the cap and glass
- * rim from the container showing, which matches the in-game item icon.
- */
+/** Fill (frame 2) over the glass-and-cap container (frame 0), matching the in-game icon. */
 function renderFlaskIcon(img: RgbaImage): RgbaImage {
   return composite(flaskFrame(img, FLASK_FRAMES - 1), flaskFrame(img, 0));
 }
 
-/** Decoded icons plus a count of what was packed or skipped. */
 export type ItemIconsResult = DdsIconsResult;
 
-/**
- * Decode every distinct item icon in `data` from the {@link DdsSource}. The
- * source is responsible for path casing; the returned keys keep the original
- * case. Flask sheets are composited to their final icon (see {@link isFlaskSheet}).
- */
+/** Flask sheets are composited to their final icon (see {@link isFlaskSheet}). */
 export async function buildItemIcons(source: DdsSource, data: ItemData): Promise<ItemIconsResult> {
   const ddsPaths: string[] = [];
 

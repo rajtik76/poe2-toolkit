@@ -1,18 +1,11 @@
-// Runs pathofexile-dat's table exporter against config.json in the current
-// working directory. Spawned with cwd = the extract dir (setup.mjs's job) so its
-// `tables/`, `files/` and `.cache/` output land there.
+// Runs pathofexile-dat's table exporter against config.json in the cwd (the extract dir, set by setup.mjs).
 //
-// Applies schema corrections first: a few columns the extractors read are unnamed
-// upstream (poe-tool-dev/dat-schema) - the QuestStaticRewards weapon-set
-// passive-point grant and the PassiveSkills ApplyToArmour flag - so the stock
-// exporter can't select them. Ported from exile2exile's
-// tools/poe-data-extract/extract.mjs, which carries the same shim. Drop a
-// correction once its column is named upstream.
+// Applies schema corrections first: a few columns the extractors read are unnamed upstream (poe-tool-dev/dat-schema),
+// namely the QuestStaticRewards weapon-set passive-point grant and PassiveSkills ApplyToArmour. Drop a correction once
+// its column is named upstream.
 //
-// The stock exporter also tells PoE1 from PoE2 by patch prefix (only "4." counts
-// as PoE2), both for the CDN host and for the table paths/schema variant. GGG
-// renumbered its PoE2 builds (4.5.5.4 -> 0.5.5.4), so this script, which only
-// ever reads PoE2, pins both: the fetch hook rewrites PoE1 CDN URLs to the PoE2
+// The stock exporter also tells PoE1 from PoE2 by patch prefix (only "4." counts), but GGG renumbered PoE2 builds
+// (4.5.5.4 -> 0.5.5.4). This script only reads PoE2, so it pins both: the fetch hook rewrites PoE1 CDN URLs to the PoE2
 // CDN, and the export runs with a PoE2 marker instead of through `cli/run.js`.
 
 import { readFile } from 'node:fs/promises';
@@ -24,10 +17,8 @@ import { SCHEMA_URL } from 'pathofexile-dat-schema';
 
 const QUEST_WEAPON_PASSIVES_INDEX = 1;
 
-/** The unnamed bool after PassiveSkills.IsFree (Path of Building's spec: `ApplyToArmour?`). */
 const PASSIVE_APPLY_TO_ARMOUR_INDEX = 51;
 
-/** dat-schema's `validFor` bit for PoE2 table variants. */
 const POE2 = 2;
 
 function patchSchema(schema) {
@@ -70,8 +61,7 @@ globalThis.fetch = async (input, init) => {
   return originalFetch(input, init);
 };
 
-// The CLI modules are unexported. Resolve them via an exported sibling subpath.
-// Mirrors `cli/run.js` (CDN loader only).
+// The CLI modules are unexported: resolve them via an exported sibling subpath. Mirrors `cli/run.js` (CDN loader only).
 const require = createRequire(import.meta.url);
 const cli = join(dirname(require.resolve('pathofexile-dat/bundles.js')), 'cli');
 const cliModule = (file) => import(pathToFileURL(join(cli, file)).href);
@@ -87,7 +77,6 @@ const loader = await loaders.FileLoader.create(
   new loaders.CachingBundleLoader(await loaders.CdnBundleLoader.create(join(process.cwd(), '.cache'), config.patch)),
 );
 
-// The exporter's only PoE2 signal that does not depend on the patch prefix.
 const poe2Config = { ...config, steam: 'Path of Exile 2' };
 
 await exportFiles(poe2Config, join(process.cwd(), 'files'), loader);

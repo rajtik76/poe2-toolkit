@@ -1,11 +1,4 @@
-/**
- * Switching class or ascendancy must deactivate nodes that no longer apply:
- *  - changing class deactivates EVERYTHING (main tree + any ascendancy), since
- *    the old paths are meaningless under a new class start;
- *  - changing ascendancy deactivates only the PREVIOUS ascendancy's nodes (you
- *    can path just one ascendancy), leaving the main tree and others intact.
- * These guard the planner's reset behaviour.
- */
+/** Switching class or ascendancy must deactivate nodes that no longer apply: - changing class deactivates EVERYTHING (main tree + any ascendancy), since the old paths are meaningless under a new class start; - changing ascendancy deactivates only the PREVIOUS ascendancy's nodes (you can path just one ascendancy), leaving the main tree and others intact. */
 
 import { describe, expect, it } from 'vitest';
 import { clearAscendancyAllocation, freshAllocation } from '../src/index.js';
@@ -15,7 +8,6 @@ function node(partial: Partial<TreeNode> & { skill: number }): TreeNode {
   return { group: 0, orbit: 0, orbitIndex: 0, x: 0, y: 0, connections: [], name: '', icon: '', stats: [], ...partial };
 }
 
-/** Main-tree node 1, Oracle nodes 10/11, Shaman node 20. */
 function data(): TreeData {
   return {
     version: '0_5',
@@ -33,7 +25,7 @@ function data(): TreeData {
   };
 }
 
-describe('freshAllocation — class change deactivates everything', () => {
+describe('freshAllocation - class change deactivates everything', () => {
   it('returns an empty allocation for the new class (no nodes, no ascendancy)', () => {
     expect(freshAllocation(3)).toEqual({ classId: 3, allocated: [] });
   });
@@ -45,7 +37,7 @@ describe('freshAllocation — class change deactivates everything', () => {
   });
 });
 
-describe('clearAscendancyAllocation — ascendancy change deactivates the previous one', () => {
+describe('clearAscendancyAllocation - ascendancy change deactivates the previous one', () => {
   it('drops only the previous ascendancy nodes, keeping main tree and other ascendancies', () => {
     const cleared = clearAscendancyAllocation(data(), [1, 10, 11, 20], 'Oracle');
     expect(cleared).toEqual([1, 20]);

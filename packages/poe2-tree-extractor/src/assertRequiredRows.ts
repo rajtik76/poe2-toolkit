@@ -1,9 +1,4 @@
-/**
- * Cast a decoded table to a row shape with required fields, failing loud if any
- * row is actually missing one - the GGPK column may have been renamed or
- * dropped upstream, and a silent `as` cast would otherwise let `undefined`
- * propagate deep into the pipeline instead of erroring at the table boundary.
- */
+/** Fails loud if any row misses a required field: a renamed/dropped GGPK column would otherwise propagate `undefined` deep into the pipeline. */
 
 import type { TableRow } from '@poe2-toolkit/ggpk';
 
@@ -20,6 +15,5 @@ export function assertRequiredRows<T>(
     }
   }
 
-  // Validated above: every row actually carries the fields T declares required.
   return rows as unknown as T[];
 }

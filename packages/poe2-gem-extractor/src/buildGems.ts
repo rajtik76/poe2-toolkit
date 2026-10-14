@@ -1,203 +1,95 @@
 /**
- * Builds the Path of Exile 2 gem data from GGPK tables, joining the relational
- * `SkillGems` -> `GemEffects` -> `GrantedEffects` -> `ActiveSkills` chain into a
- * flat, build-facing shape. Source of truth: GGPK only.
- *
- * Keying mirrors how a build importer looks gems up: by the last path segment of
- * the base item's game id (Path of Building's `normalizeGemId`). Icons and the
- * hover-art background are kept as their raw GGPK DDS paths - decoding them to
- * PNG is {@link buildGemIcons}' concern.
- *
- * The per-level attribute requirement curve is ported verbatim from PoB's
- * `calcLib.getGemStatRequirement` (CalcTools.lua), so the numbers match the game.
- *
- * The per-level tooltip scaling (cost, cast time, crit, translated stat lines,
- * quality bonuses) is built the way Path of Building builds a gem tooltip. Each
- * stat set - `GrantedEffects.StatSet`, then its `AdditionalStatSets`, which
- * inherit the first set's stats - sums its stats at a gem level
- * (`GrantedEffectStatSetsPerLevel` values, flags at 1, constants) and renders
- * them together through the set's stat-description scope: the skill's own
- * `ActiveSkills.StatDescription` file (or the gem file for supports) followed by
- * the files it includes. `GrantedEffectQualityStats` supplies the quality bonus
- * lines.
+ * Builds gem data from GGPK tables, joining `SkillGems` -> `GemEffects` -> `GrantedEffects` -> `ActiveSkills`.
+ * Keyed by the last path segment of the base item's game id (PoB's `normalizeGemId`). Icons stay raw DDS paths
+ * (decoded by {@link buildGemIcons}). Requirements and tooltip scaling follow PoB's formulas so the numbers match the game.
  */
 
 import { buildStatIndex, csdInclude, renderBlock } from '@poe2-toolkit/ggpk';
 import type { GgpkSource, StatIndex } from '@poe2-toolkit/ggpk';
 
-/** Active skill, support, or spirit (persistent buff) gem. */
 export type GemKind = 'active' | 'support' | 'spirit';
 
-/** Gem socket colour: red (str), green (dex), blue (int), white (any). */
 export type GemColor = 'r' | 'g' | 'b' | 'w';
 
-/** GemType / GemColour are bare i32 in the schema - enums derived from the data. */
 const GEM_KIND: Record<number, GemKind> = { 0: 'active', 1: 'support', 2: 'spirit' };
 const GEM_COLOR: Record<number, GemColor> = { 1: 'r', 2: 'g', 3: 'b', 4: 'w' };
 
-/**
- * A gem's headline requirement: the percent-of-attribute weights plus its
- * minimum character level. This is the flat summary on {@link Gem}; the full
- * per-level curve lives in {@link GemRequirement}.
- */
 export interface GemReq {
-  /** Strength requirement as a percent-of-attribute weight (0 for none, e.g. all support gems). */
   str: number;
-  /** Dexterity requirement as a percent-of-attribute weight (0 for none, e.g. all support gems). */
   dex: number;
-  /** Intelligence requirement as a percent-of-attribute weight (0 for none, e.g. all support gems). */
   int: number;
-  /** Minimum character level to use the gem at all (its floor, not the per-level curve). */
   level: number;
 }
 
-/** One gem as serialized for the build front-end. */
 export interface Gem {
-  /** Display name from the gem's base item (e.g. `Ice Nova`, `Fire Attunement`). */
   name: string;
-  /** Whether it is an `active` skill, a `support`, or a `spirit` (persistent buff) gem. */
   kind: GemKind;
-  /** Socket colour: `r` (str), `g` (dex), `b` (int) or `w` (any). */
   color: GemColor;
-  /** Gem tags with bbcode stripped (e.g. `Spell`, `AoE`, `Cold`); `[]` when none. */
   tags: string[];
-  /**
-   * Skill / support description with bbcode stripped - from `ActiveSkills` for
-   * active and spirit gems, from `GemEffects.SupportText` for supports. `null`
-   * when the source text is empty.
-   */
   description: string | null;
-  /** Headline attribute-percent weights plus minimum character level. */
   req: GemReq;
-  /** Raw GGPK DDS path of the gem's icon, or `null` when none is referenced. */
   icon: string | null;
   /**
-   * Raw `SkillGems.UI_Image` reference to the gem's tooltip background art, or
-   * `null` when none is referenced. Kept as the table holds it, so its form
-   * follows the patch: a DDS path (`Art/Textures/.../X.dds`) up to 4.5.4, a
-   * UIImages sprite name (`Art/2DArt/UIImages/InGame/...`, no extension) from
-   * 4.5.5 on. `buildGemIcons` decodes both and keys the PNG by this value plus
-   * `.png` either way.
-   *
-   * Coverage is sparse in the source data: no support gem has one, and only a
-   * fraction of active/spirit gems do (verified against a live extract - not a
-   * bug in this extractor).
+   * Raw `SkillGems.UI_Image` of the tooltip background art, as the table holds it: a DDS path up to 4.5.4, a UIImages
+   * sprite name (no extension) from 4.5.5 on. Sparse in the source: no support gem has one.
    */
   hoverImage: string | null;
 }
 
-/** A gem's resolved requirement at one gem level. */
 export interface GemLevel {
-  /**
-   * Minimum character level for this gem level: the gem's level progression
-   * (`ItemExperiencePerLevel.Level`), never lower than the level before it, at
-   * least 1.
-   */
+  /** From the gem's level progression (`ItemExperiencePerLevel.Level`), never lower than the previous level, at least 1. */
   requiredLevel: number;
-  /** Strength required at this level, via PoB's formula (0 for supports / zero-weight attributes). */
   str: number;
-  /** Dexterity required at this level, via PoB's formula (0 for supports / zero-weight attributes). */
   dex: number;
-  /** Intelligence required at this level, via PoB's formula (0 for supports / zero-weight attributes). */
   int: number;
 }
 
-/** The full per-level requirement curve for one gem. */
 export interface GemRequirement {
-  /** Display name of the gem (same as the matching {@link Gem.name}). */
   name: string;
-  /** The requirement at each gem level, keyed by gem level (`1`, `2`, ...). */
   levels: Record<number, GemLevel>;
 }
 
-/** One translated tooltip stat line plus the raw numbers behind it. */
 export interface GemStatLine {
-  /** Rendered text via the stat-description engine (bbcode stripped, real newlines). */
   text: string;
-  /**
-   * The lower bound of the line's numeric range: the sole value for a
-   * single-value stat, or the first of a min/max pair (e.g. a damage roll).
-   */
+  /** Sole value for a single-value stat, or the first of a min/max pair. */
   min: number;
-  /** The upper bound: equal to {@link min} for a single-value stat. */
   max: number;
 }
 
-/** A gem's resolved tooltip scaling at one gem level. */
 export interface GemLevelScaling {
-  /** The gem level this scaling applies to (matches {@link GemLevel}'s keying level). */
   level: number;
-  /** Mana cost at this level (`GrantedEffectsPerLevel.CostAmounts[0]`), or `null` if the skill costs nothing. */
   cost: number | null;
-  /**
-   * Cast/attack time in seconds. Spells read `GrantedEffects.CastTime` (flat,
-   * repeated across levels); attack skills read the per-level
-   * `GrantedEffectsPerLevel.AttackTime` instead, when it is nonzero. `null` when
-   * neither source has a value.
-   */
+  /** Spells read `GrantedEffects.CastTime`; attack skills read the per-level `AttackTime` when nonzero. */
   castTime: number | null;
-  /** Cooldown in seconds, or `null` when the skill has none. */
   cooldown: number | null;
-  /** Reservation amount, raw units as stored (mana or life, not distinguished here), or `null` when the skill reserves nothing. */
   reservation: number | null;
-  /** Spell critical hit chance as a percent (e.g. `9` for 9.00%). */
   spellCritChance: number;
-  /** Attack critical hit chance as a percent. */
   attackCritChance: number;
-  /** Translated per-level stat lines of the first stat set (damage, chain count, etc.), in tooltip order. */
   stats: GemStatLine[];
-  /**
-   * The granted effect's further stat sets (`GrantedEffects.AdditionalStatSets`,
-   * e.g. Ice Nova's "Cold-Infused"), each a full tooltip block of its own: it
-   * inherits the first set's stats. Absent when the effect has none.
-   */
+  /** `GrantedEffects.AdditionalStatSets` (e.g. Ice Nova's "Cold-Infused"); each inherits the first set's stats. */
   additionalStatSets?: GemStatSet[];
 }
 
-/** One further stat set of a gem: its tooltip label and rendered lines. */
 export interface GemStatSet {
-  /** The set's label (`GrantedEffectLabels.Text`, else the skill's name). */
   label: string;
-  /** Translated stat lines of the set, in tooltip order. */
   stats: GemStatLine[];
 }
 
-/** A gem's full tooltip scaling: its per-level curve plus quality bonuses. */
 export interface GemScaling {
-  /** Display name of the gem (same as the matching {@link Gem.name}). */
   name: string;
-  /** Resolved scaling at each gem level the source defines (often just one for non-scaling supports). */
   levels: GemLevelScaling[];
-  /**
-   * Bonus lines granted per point of gem quality, already resolved at quality
-   * 20 (`min` is always `0`, the value at quality 0). Support gems and a gem
-   * with no quality bonus have `[]`.
-   */
+  /** Bonus lines per point of quality, resolved at quality 20 (`min` is the value at quality 0). */
   qualityStats: GemStatLine[];
 }
 
-/** Everything the gem extractor produces. */
 export interface GemData {
-  /**
-   * Gems keyed by the last path segment of their base item id (PoB's
-   * `normalizeGemId`, e.g. `SkillGemIceNova`). Last segment wins on collision,
-   * matching the consumer's lookup.
-   */
+  /** Last segment wins on collision, matching the consumer's lookup. */
   gems: Record<string, Gem>;
-  /**
-   * Per-level requirement curves, keyed the same way as {@link GemData.gems}.
-   * A gem with no per-level curve (e.g. many supports) is omitted here.
-   */
+  /** A gem with no per-level curve (e.g. many supports) is omitted. */
   requirements: Record<string, GemRequirement>;
-  /**
-   * Tooltip scaling (cost, cast time, crit, translated stat lines, quality
-   * bonuses), keyed the same way as {@link GemData.gems}. Omitted for a gem
-   * whose `GrantedEffects` row has no `StatSet`.
-   */
+  /** Omitted for a gem whose `GrantedEffects` row has no `StatSet`. */
   scaling: Record<string, GemScaling>;
 }
-
-// --- raw GGPK row shapes (only the columns this build reads) -----------------
 
 interface SkillGemRow {
   BaseItemType?: number | null;
@@ -208,7 +100,6 @@ interface SkillGemRow {
   GemColour?: number;
   MinLevelReq?: number;
   GemEffects?: number[];
-  /** The gem's level progression in ItemExperiencePerLevel. */
   ItemExperienceType?: number | null;
   UI_Image?: string;
 }
@@ -226,7 +117,6 @@ interface ActiveSkillRow {
   DisplayedName?: string;
   Description?: string;
   Icon_DDSFile?: string;
-  /** Path of the skill's own stat-description file, for its first stat set (`statset_0`). */
   StatDescription?: string;
 }
 interface GemTagRow { Id?: string; Name?: string }
@@ -262,7 +152,6 @@ interface GrantedEffectStatSetPerLevelRow {
   AdditionalStatsValues?: number[];
   FloatStats?: number[];
   AdditionalStats?: number[];
-  /** Flag stats that hold at this level (value 1). */
   AdditionalFlags?: number[];
 }
 
@@ -272,7 +161,6 @@ interface GrantedEffectQualityStatRow {
   StatsValuesPermille?: number[];
   AltStats?: number[];
   AltStatValuesPermille?: number[];
-  /** Stat sets the quality bonus applies to; the first picks its description scope. */
   ApplyToStatSets?: number[];
 }
 
@@ -280,9 +168,7 @@ interface StatRow { Id?: string }
 
 interface ItemExperiencePerLevelRow { ItemExperienceType?: number | null; ItemCurrentLevel?: number; Level?: number }
 
-/**
- * Strip PoE bbcode: `[Cold]` -> `Cold`, `[AoESkill|AoE]` -> `AoE` (display half).
- */
+/** Strip PoE bbcode: `[Cold]` -> `Cold`, `[AoESkill|AoE]` -> `AoE`. */
 export function stripBbcode(text: string): string {
   return text.replace(/\[([^\]]+)\]/g, (_, inner: string) => {
     const pipe = inner.lastIndexOf('|');
@@ -291,11 +177,7 @@ export function stripBbcode(text: string): string {
   });
 }
 
-/**
- * Gems GGG itself names as unreleased: "[DNT ...]" (do not translate, e.g.
- * "[DNT-UNUSED] Spiral Projectiles I"), "Coming Soon" slots, playtest skills and
- * the "Removed Skill" stub. None of them reaches a player.
- */
+/** Gems GGG names as unreleased: "[DNT ...]", "Coming Soon" slots, playtest skills, the "Removed Skill" stub. */
 const PLACEHOLDER_GEM = /\[DNT|^Coming Soon$|^Playtest |^Removed Skill$/;
 
 export function isPlaceholderGem(name: string): boolean {
@@ -307,11 +189,7 @@ function lastSegment(id: string): string {
   return id.slice(id.lastIndexOf('/') + 1);
 }
 
-/**
- * Per-level attribute requirement, ported verbatim from PoB's
- * `calcLib.getGemStatRequirement` (CalcTools.lua): support gems and zero-percent
- * attributes require nothing, and a result under 8 rounds down to 0.
- */
+/** Ported from PoB's `calcLib.getGemStatRequirement`: supports and zero-percent attributes require nothing, a result under 8 rounds to 0. */
 export function gemStatRequirement(level: number, percent: number, isSupport: boolean): number {
   if (percent === 0 || isSupport) {
     return 0;
@@ -322,10 +200,8 @@ export function gemStatRequirement(level: number, percent: number, isSupport: bo
   return req < 8 ? 0 : req;
 }
 
-/** Character quality points a gem can normally carry (uncorrupted cap). */
 const MAX_QUALITY = 20;
 
-/** Decode a `.csd` file's UTF-16 text via {@link GgpkSource.file}, or `null` if the source has none. */
 async function readCsd(source: GgpkSource, path: string): Promise<string | null> {
   const bytes = await source.file(path);
 
@@ -337,14 +213,9 @@ function multiline(text: string): string {
   return text.replace(/\\n/g, '\n');
 }
 
-/** Description scope of support gems, and of the meta gems among them. */
 const GEM_SCOPE = 'Data/StatDescriptions/gem_stat_descriptions.csd';
 const META_GEM_SCOPE = 'Data/StatDescriptions/meta_gem_stat_descriptions.csd';
 
-/**
- * Build the gem export from the supplied {@link GgpkSource}. All data comes from
- * the source's tables; this function performs no I/O of its own.
- */
 export async function buildGems(source: GgpkSource): Promise<GemData> {
   const SkillGems = (await source.table('SkillGems')) as SkillGemRow[];
   const BaseItemTypes = (await source.table('BaseItemTypes')) as BaseItemTypeRow[];
@@ -377,8 +248,7 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
     progression.get(row.ItemExperienceType)!.set(row.ItemCurrentLevel, row.Level ?? 0);
   }
 
-  // Description files, each read and parsed once (stat_descriptions.csd alone is
-  // tens of MB) and shared by every scope that includes it.
+  // stat_descriptions.csd alone is tens of MB: read and parse each description file once.
   const csdFiles = new Map<string, Promise<{ index: StatIndex; include: string | null } | null>>();
 
   function loadCsd(path: string): Promise<{ index: StatIndex; include: string | null } | null> {
@@ -393,7 +263,6 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
     return file;
   }
 
-  /** A description scope: the file at `path` followed by the files it includes, most specific first. */
   async function scopeChain(path: string): Promise<StatIndex[] | null> {
     const chain: StatIndex[] = [];
 
@@ -411,11 +280,7 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
     return chain.length ? chain : null;
   }
 
-  /**
-   * The scope stat set `setIndex` of a granted effect renders through, as Path of
-   * Building picks it: the gem (or meta gem) file for a support, else the skill's
-   * own file with `statset_0` swapped for the set's number.
-   */
+  /** Scope a set renders through, as PoB picks it: the gem (or meta gem) file for a support, else the skill's file with `statset_0` swapped for the set's number. */
   async function statSetScope(
     granted: GrantedEffectRow,
     active: ActiveSkillRow | undefined,
@@ -435,7 +300,6 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
     return (await scopeChain(path.replace('statset_0', `statset_${setIndex}`))) ?? scopeChain(path);
   }
 
-  /** Render a summed stat map through a scope into tooltip lines, in tooltip order. */
   function renderStats(chain: StatIndex[], stats: Map<string, number>, quality = false): GemStatLine[] {
     const ids = [...stats.keys()];
     const { lines, lineStatIds } = renderBlock(chain, ids, ids.map((id) => stats.get(id)!), {
@@ -551,10 +415,7 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
       hoverImage: gem.UI_Image || null,
     };
 
-    // Per-level requirement curve, as PoB's skill export builds it: the character
-    // level comes from the gem's level progression and never drops below the
-    // level before; attributes follow PoB's formula. Support gems impose no
-    // attribute requirement.
+    // Character level never drops below the previous level; supports impose no attribute requirement.
     const levels: Record<number, GemLevel> = {};
     const perLevel = grantedIndex != null ? perLevelByGrantedEffect.get(grantedIndex) ?? [] : [];
     const playerLevels = gem.ItemExperienceType != null ? progression.get(gem.ItemExperienceType) : undefined;
@@ -581,10 +442,7 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
       requirements[segment] = { name: base.Name ?? '', levels };
     }
 
-    // Tooltip scaling, independent of the attribute-requirement curve above (a
-    // support with no level curve can still have flat, level-1-only scaling).
-    // Built as Path of Building's gem tooltip: each stat set sums its stats at a
-    // gem level and renders them together through its own description scope.
+    // Independent of the requirement curve: a support with no level curve can still have flat level-1 scaling.
     const setIndices = granted?.StatSet != null ? [granted.StatSet, ...(granted.AdditionalStatSets ?? [])] : [];
     const sets = setIndices.map((index) => GrantedEffectStatSets[index]);
 
@@ -600,18 +458,12 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
       ));
       const label = (set: GrantedEffectStatSetRow): string =>
         (set.Label != null ? GrantedEffectLabels[set.Label]?.Text : undefined) || active?.DisplayedName || base.Name || '';
-      // Sets labelled "Hidden" carry internal mechanics the game never shows in the
-      // tooltip (PoB leaves them out too); they still count for the scope numbering.
+      // Sets labelled "Hidden" are left out of the tooltip (as in PoB) but still count for scope numbering.
       const shown = statSets
         .map((set, k) => k)
         .filter((k) => GrantedEffectLabels[statSets[k]!.Label ?? -1]?.Id !== 'Hidden');
 
-      /**
-       * Stat set `k`'s stats at a gem level, summed the way PoB's
-       * `calcLib.buildSkillInstanceStats` sums them: per-level values, then flags
-       * at 1 (only when the stat has no value yet), then constants. A later set
-       * inherits the first set's stats, minus the ones it ignores.
-       */
+      /** Set `k`'s stats at a gem level, summed as PoB's `buildSkillInstanceStats`: per-level values, then flags at 1 (if unset), then constants. A later set inherits the first set's stats minus the ones it ignores. */
       const statsAt = (k: number, level: number): Map<string, number> => {
         const stats = new Map<string, number>();
         const ignored = new Set(k > 0 ? (statSets[k]!.IgnoredStats ?? []).map(statId) : []);
@@ -694,9 +546,7 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
         });
       }
 
-      // Quality bonus lines at MAX_QUALITY (min is the quality-0 value, 0). PoB
-      // gives support gems none, and renders each bonus stat on its own through
-      // the scope of the first stat set it applies to.
+      // Quality bonus at MAX_QUALITY. PoB gives supports none and renders each bonus through the scope of the first set it applies to.
       const quality = !granted.IsSupport && grantedIndex != null ? qualityStatsByGrantedEffect.get(grantedIndex) : undefined;
       const qualityScope = scopes[quality?.ApplyToStatSets?.[0] ?? 0] ?? scopes[0];
       const qualityStats = quality && qualityScope

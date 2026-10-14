@@ -1,10 +1,4 @@
-/**
- * Conditional nodes (GGG `unlockConstraint`, e.g. the Druid/Oracle "The Unseen
- * Path" clusters) are hidden on the base tree and only appear once ALL their
- * unlock nodes are allocated — matching PoB's checkUnlockConstraints. Regression
- * guard: they were once hidden unconditionally (never reappeared), and the gating
- * must also apply to their edges.
- */
+/** Conditional nodes (GGG `unlockConstraint`, e.g. the Druid/Oracle "The Unseen Path" clusters) are hidden on the base tree and only appear once ALL their unlock nodes are allocated - matching PoB's checkUnlockConstraints. */
 
 import { describe, expect, it } from 'vitest';
 import { buildScene } from '../src/index.js';
@@ -25,10 +19,7 @@ function node(partial: Partial<TreeNode> & { skill: number }): TreeNode {
   };
 }
 
-/**
- * A two-node group: node 1 (the unlock node) and node 2 (a conditional node
- * gated behind node 1), connected to each other.
- */
+/** A two-node group: node 1 (the unlock node) and node 2 (a conditional node gated behind node 1), connected to each other. */
 function data(): TreeData {
   return {
     version: '0_5',

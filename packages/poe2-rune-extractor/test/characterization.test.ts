@@ -1,17 +1,4 @@
-/**
- * Characterization test: rebuild rune data from a real GGPK extract and assert it
- * reproduces the deployed golden `runes.json` 1:1.
- *
- * The extract and the golden carry derived GGG game data, so neither lives in
- * this repo. Point `POE2_GGPK_EXTRACT` at a directory holding `tables/English`
- * (the decoded tables, plus a `.cache` and `config.json` for the patch) and
- * `POE2_DATA_GOLDEN` at the directory holding the golden `runes.json`. Without
- * both, the suite skips (as it does in CI).
- *
- * Unlike items and gems, `buildRunes` also reads GGG's `stat_descriptions.csd`
- * via the source, so the run needs that file served from the patch CDN or the
- * extract's bundle `.cache`.
- */
+/** Characterization test: rebuild rune data from a real GGPK extract and assert it reproduces the deployed golden `runes.json` 1:1. */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,7 +10,6 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { buildRunes } from '../src/buildRunes';
 import type { RuneData } from '../src/buildRunes';
 
-/** Repo root — where scripts/golden-fixtures/setup.mjs writes its (gitignored) output. */
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 const EXTRACT = process.env.POE2_GGPK_EXTRACT ?? join(REPO_ROOT, '.ggpk-extract');

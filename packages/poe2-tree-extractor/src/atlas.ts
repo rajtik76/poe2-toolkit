@@ -1,45 +1,28 @@
-/**
- * Shelf bin-packer: composites decoded sprites into one sheet and emits the
- * frame-map the renderer reads (`{ frames: { key: { frame: { x, y, w, h } } } }`).
- */
+/** Shelf bin-packer: composites sprites into one sheet and emits the frame-map the renderer reads. */
 
 import { encodePng } from '@poe2-toolkit/ggpk';
 
-/** A decoded sprite to place in an atlas, keyed by its renderer atlas key. */
 export interface AtlasSprite {
-  /** Renderer atlas key this sprite is looked up by. */
   key: string;
-  /** Sprite width in pixels. */
   width: number;
-  /** Sprite height in pixels. */
   height: number;
-  /** Raw RGBA pixels, row-major, `width * height * 4` bytes. */
   rgba: Uint8Array;
 }
 
-/** One placed sprite's pixel rect inside the packed sheet. */
 export interface AtlasFrame {
-  /**
-   * The sprite's sub-rectangle within the sheet: `x`/`y` its top-left pixel
-   * offset, `w`/`h` its width/height. The renderer blits from this rect.
-   */
   frame: { x: number; y: number; w: number; h: number };
 }
 
-/** A packed atlas: its PNG bytes and the frame-map keyed by sprite key. */
 export interface PackedAtlas {
-  /** The composited sheet as encoded PNG bytes. */
   png: Buffer;
-  /** Each sprite's placement rect, keyed by its {@link AtlasSprite.key}. */
   frames: Record<string, AtlasFrame>;
 }
 
 /** Transparent gutter so neighbours never bleed under bilinear sampling. */
 const PAD = 1;
 
-/** Pack sprites into a single sheet, tallest-first, wrapping at `maxWidth`. */
 export function packAtlas(sprites: AtlasSprite[], maxWidth = 2048): PackedAtlas {
-  // Tallest-first shelf packing keeps rows tight and the sheet near-square.
+  // Tallest-first keeps rows tight and the sheet near-square.
   const sorted = [...sprites].sort((a, b) => b.height - a.height);
 
   let x = 0, y = 0, shelfHeight = 0, sheetWidth = 0;

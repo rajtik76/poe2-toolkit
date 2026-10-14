@@ -5,13 +5,7 @@ import { buildScene, computeCentreLayout, project } from '../src/index.js';
 
 const DEG = Math.PI / 180;
 
-/**
- * A miniature GGG export with real-world values: the Ranger start node sits where
- * the live 0_5 data puts it (1308.1, -3294.7), so the derived ring rotation must
- * come out to the verified 21.7°. Exercises baked positions, merged in/out edges,
- * the global attribute overrides, ascendancy-id translation and a class with no
- * start node.
- */
+/** A miniature GGG export with real-world values: the Ranger start node sits where the live 0_5 data puts it (1308.1, -3294.7), so the derived ring rotation must come out to the verified 21.7°. */
 function fixture(): GggTreeJson {
   return {
     groups: {

@@ -1,8 +1,4 @@
-/**
- * Behavioural coverage for the pure visual decisions extracted from the
- * renderer: node visuals, rail layering, overlay strokes, pulse math and the
- * ascendancy relocation offset. These pin what the canvas draws without pixi.
- */
+/** Behavioural coverage for the pure visual decisions extracted from the renderer: node visuals, rail layering, overlay strokes, pulse math and the ascendancy relocation offset. */
 
 import type { Scene } from '@poe2-toolkit/tree-core';
 import { describe, expect, it } from 'vitest';
@@ -53,7 +49,7 @@ function conn(overrides: Partial<SceneConnection>): SceneConnection {
 }
 
 describe('nodeVisual', () => {
-  it('returns null for masteries — they draw as their effect pattern', () => {
+  it('returns null for masteries - they draw as their effect pattern', () => {
     expect(nodeVisual(node({ kind: 'mastery' }))).toBeNull();
   });
 

@@ -1,16 +1,6 @@
 /**
- * Central hub geometry: the size and orientation of the middle circle, and how
- * its gold ring rotates to point at the active class.
- *
- * Three concentric layers sit at the hub (the origin): the static class
- * portrait, a rotating gold ring, and a static ornate frame. The ring's
- * rotation is the only moving part, and it is derived — not eyeballed — from the
- * direction of the class's start node:
- *
- *   ringRotation = π/2 + atan2(startNode.y − centre.y, startNode.x − centre.x)
- *
- * That same atan2 direction is where the class sits on the rim (its start
- * "leaf").
+ * Central hub geometry: class portrait, rotating gold ring and ornate frame at the origin. The ring rotation is derived
+ * from the class start node's direction: `ringRotation = π/2 + atan2(start.y - centre.y, start.x - centre.x)`.
  */
 
 import type { CentreLayout, ClassAnchor, TreeData } from '../types.js';
@@ -20,10 +10,8 @@ const HALF_PI = Math.PI / 2;
 
 export function computeCentreLayout(data: TreeData): CentreLayout {
   const first = data.classes[0];
-  // The hub is shared by every class; fall back to the origin if there are no
-  // classes (a degenerate tree) so the layout is always well-formed.
+  // Fall back to the origin when there are no classes, so the layout is always well-formed.
   const centre = first ? { x: first.centre.x, y: first.centre.y } : { x: 0, y: 0 };
-  // World radius = native layer width (each layer is drawn at 2*width centred).
   const ring = first
     ? {
         artRadius: first.centre.art.width,
@@ -39,9 +27,7 @@ export function computeCentreLayout(data: TreeData): CentreLayout {
       continue;
     }
 
-    // Skip PoE1 placeholder classes (Marauder/Duelist/Shadow/Templar): GGG keeps
-    // their array slots and pairs each with a real class on a shared start node,
-    // but they have no ascendancies and are not playable in PoE2.
+    // Skip PoE1 placeholder classes (Marauder/Duelist/Shadow/Templar): they share a start node with a real class but have no ascendancies.
     if (cls.ascendancies.length === 0) {
       continue;
     }

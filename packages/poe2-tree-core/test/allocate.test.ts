@@ -27,10 +27,7 @@ function node(skill: number, connections: number[], extra: Partial<TreeNode> = {
   };
 }
 
-/**
- * A small line graph: start(0) - 1 - 2 - 3 - 4, plus a mastery (9) hanging off 2
- * (not walkable) and a branch 2 - 5.
- */
+/** A small line graph: start(0) - 1 - 2 - 3 - 4, plus a mastery (9) hanging off 2 (not walkable) and a branch 2 - 5. */
 function lineData(): TreeData {
   return {
     version: '0_5',
@@ -60,9 +57,7 @@ describe('buildTreeGraph', () => {
   });
 
   it('excludes the synthetic centre node so class starts are not bridged', () => {
-    // GGG's centre `root` (no numeric skill -> NaN) wires every class start to
-    // the hub. Two separate class sectors joined only through it must stay
-    // disconnected for pathing, or a path would shortcut across the centre.
+    // GGG's centre `root` (no numeric skill -> NaN) wires every class start to the hub.
     const centre = node(NaN, [0, 10]);
     const bridged: TreeData = {
       ...lineData(),
@@ -85,9 +80,7 @@ describe('buildTreeGraph', () => {
   });
 
   it('drops other class start nodes when scoped to the active class', () => {
-    // Ranger start(0) - 1 - g1(2) ; Witch start(10) flanked by gateways g1(2) and
-    // g2(3), reachable from each other only through the Witch start. A Ranger must
-    // not step through Witch's start to bridge g1 and g2.
+    // Ranger start(0) - 1 - g1(2) ; Witch start(10) flanked by gateways g1(2) and g2(3), reachable from each other only through the Witch start.
     const shared: TreeData = {
       ...lineData(),
       nodes: {
@@ -104,7 +97,7 @@ describe('buildTreeGraph', () => {
     expect(raw.has(10)).toBe(true);
     expect(pathToNode(raw, new Set([0]), 3)).toEqual([1, 2, 10, 3]); // bridges through Witch start
 
-    // Scoped to Ranger (start 0): Witch's start is dropped, so g2 is unreachable —
+    // Scoped to Ranger (start 0): Witch's start is dropped, so g2 is unreachable -
     // g1 and g2 are no longer bridged through the foreign start.
     const scoped = buildTreeGraph(shared, 0);
     expect(scoped.has(10)).toBe(false);
@@ -141,7 +134,7 @@ describe('toggleAllocation', () => {
 
   it('removes the clicked node and everything beyond it', () => {
     // start(0)-1-2-3-4 line; clicking 2 removes 2 and the part further out (3,4),
-    // keeping 1 — a click deletes the node and its dependents (PoB semantics).
+    // keeping 1 - a click deletes the node and its dependents (PoB semantics).
     const result = toggleAllocation(data, 0, new Set([1, 2, 3, 4]), 2);
     expect(result.sort()).toEqual([1]);
   });
@@ -219,7 +212,7 @@ describe('toggleAllocationInMode', () => {
 
   it('removes a clicked junction and every branch beyond it, keeping the trunk', () => {
     // 0-1-2 trunk; 2 is a junction to leaf 5 and to the 3-4 chain. Clicking 2
-    // removes 2, 3, 4 and 5 — its whole dependent subtree — but keeps 1.
+    // removes 2, 3, 4 and 5 - its whole dependent subtree - but keeps 1.
     const all = { allocated: [1, 2, 3, 4, 5], weaponSets: {} };
     const next = toggleAllocationInMode(data, 0, all, 2, 0, graph);
     expect(next.allocated.sort()).toEqual([1]);
@@ -240,10 +233,7 @@ describe('toggleAllocationInMode', () => {
   });
 });
 
-/**
- * Main line 0(start)-1, plus a Lich ascendancy chain: 100(start)-101-102-103,
- * with a foreign ascendancy node (200) to confirm the boundary holds.
- */
+/** Main line 0(start)-1, plus a Lich ascendancy chain: 100(start)-101-102-103, with a foreign ascendancy node (200) to confirm the boundary holds. */
 function ascData(): TreeData {
   const asc = (skill: number, connections: number[], extra: Partial<TreeNode> = {}): TreeNode =>
     node(skill, connections, { ascendancyName: 'Lich', ...extra });

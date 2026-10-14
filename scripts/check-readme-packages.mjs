@@ -1,9 +1,6 @@
 #!/usr/bin/env node
-// Fail loud if a package under packages/* has no row in the root README's
-// Packages table. Catches the exact gap that let mod-extractor go unlisted:
-// a new package added without a README update. Descriptions are intentionally
-// paraphrased shorter in the table than in package.json, so this only checks
-// that a link to the package exists - not that the wording matches.
+// Fails loud if a package under packages/* has no row in the root README's Packages table. Only checks that a link exists,
+// the table's wording is intentionally shorter than package.json's.
 import { readFileSync, readdirSync } from 'node:fs';
 
 const rootUrl = new URL('..', import.meta.url);

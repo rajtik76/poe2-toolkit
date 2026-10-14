@@ -13,8 +13,6 @@ import {
   worldToScreen,
 } from '../src/viewport.js';
 
-// --- fixtures ---------------------------------------------------------------
-
 function node(over: Partial<PlacedNode> & Pick<PlacedNode, 'skill' | 'x' | 'y'>): PlacedNode {
   return {
     kind: 'notable',
@@ -27,7 +25,6 @@ function node(over: Partial<PlacedNode> & Pick<PlacedNode, 'skill' | 'x' | 'y'>)
   };
 }
 
-/** A minimal but type-complete Scene; only the fields the viewport math reads vary. */
 function makeScene(over: {
   mainBounds?: Scene['mainBounds'];
   nodes?: PlacedNode[];
@@ -54,8 +51,6 @@ function makeScene(over: {
 
 const LIMITS: ResolvedZoom = { maxScale: 4, minFitFactor: 0.85, overscroll: 0.5 };
 
-// --- clamp ------------------------------------------------------------------
-
 describe('clamp', () => {
   it('passes a value already inside the range through unchanged', () => {
     expect(clamp(5, 0, 10)).toBe(5);
@@ -66,8 +61,6 @@ describe('clamp', () => {
     expect(clamp(99, 0, 10)).toBe(10);
   });
 });
-
-// --- worldToScreen ----------------------------------------------------------
 
 describe('worldToScreen', () => {
   it('applies scale then translation: screen = world * scale + (tx, ty)', () => {
@@ -84,8 +77,6 @@ describe('worldToScreen', () => {
   });
 });
 
-// --- fitScale ---------------------------------------------------------------
-
 describe('fitScale', () => {
   it('fits the limiting dimension and leaves the padding margin', () => {
     // world 1000x500 into 800x600: width is the tighter fit (0.8 < 1.2).
@@ -99,8 +90,6 @@ describe('fitScale', () => {
     expect(fitScale(scene, 800, 600)).toBeCloseTo(600 * 0.92);
   });
 });
-
-// --- centreViewport ---------------------------------------------------------
 
 describe('centreViewport', () => {
   it('places the hub centre at the middle of the viewport', () => {
@@ -118,8 +107,6 @@ describe('centreViewport', () => {
   });
 });
 
-// --- viewportForRect --------------------------------------------------------
-
 describe('viewportForRect', () => {
   it('centres the rect and fits it with padding', () => {
     const rect = { minX: 0, minY: 0, maxX: 200, maxY: 100 };
@@ -131,8 +118,6 @@ describe('viewportForRect', () => {
     expect(screen.y).toBeCloseTo(300);
   });
 });
-
-// --- clampViewport ----------------------------------------------------------
 
 describe('clampViewport', () => {
   it('is a no-op for a zero-sized viewport (avoids NaN before first layout)', () => {
@@ -177,8 +162,6 @@ describe('clampViewport', () => {
     expect(viewport).toEqual({ tx: 0, ty: 0, scale: 1 });
   });
 });
-
-// --- hitTest ----------------------------------------------------------------
 
 describe('hitTest', () => {
   const identity: Viewport = { tx: 0, ty: 0, scale: 1 };
@@ -254,8 +237,6 @@ describe('hitTest', () => {
     expect(hitTest(scene, identity, 0, 0, 'Abyssal Lich')).toBe(2);
   });
 });
-
-// --- edgeKey ----------------------------------------------------------------
 
 describe('edgeKey', () => {
   it('is order-independent (min-max of the two ids)', () => {

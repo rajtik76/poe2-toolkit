@@ -1,10 +1,4 @@
-/**
- * Behavioural coverage for the StatDescriptions engine on a hand-written `.csd`
- * sample, so the parser and renderer are exercised without a GGPK extract. The
- * gated test in `statDescriptions.test.ts` proves parity with the legacy engine
- * on the real file; this one pins down the semantics: block indexing, language
- * skipping, condition selection, value handlers, templates and bbcode.
- */
+/** Behavioural coverage for the StatDescriptions engine on a hand-written `.csd` sample, so the parser and renderer are exercised without a GGPK extract. */
 
 import { describe, expect, it } from 'vitest';
 
@@ -83,7 +77,6 @@ const SAMPLE = [
 
 const index = buildStatIndex(SAMPLE);
 
-/** Each value handler: raw value in, printed value out. */
 const HANDLER_CASES: [handler: string, raw: number, printed: string][] = [
   ['negate', 5, '-5'],
   ['negate_and_double', 5, '-10'],

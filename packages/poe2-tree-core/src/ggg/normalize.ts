@@ -1,20 +1,12 @@
 /**
- * Normalise GGG's official skill-tree export (`data.json`) into the engine's
- * {@link TreeData}.
- *
- * This is the only place that knows GGG's field names and quirks. Everything
- * downstream works against the clean {@link TreeData} contract. The transform is
- * deliberately tolerant: optional fields come and go across patches and missing
- * data should never throw.
- *
- * The GGG quirks handled here:
- *  - node positions are **baked** (`node.x`/`node.y`); the export ships none of
- *    the orbit-radius constants needed to recompute them, so they are read as-is;
- *  - edges are split across `in` + `out` id lists, merged into one set here;
- *  - arc geometry lives in a separate top-level `edges` table, not on the node;
- *  - attribute choices live in a global `skillOverrides` table, not per node;
- *  - ascendancy ids are internal (`Ranger1`) and mapped to display names here;
- *  - centre/ring dimensions are absent — filled from stable atlas frame sizes.
+ * Normalises GGG's skill-tree export (`data.json`) into {@link TreeData}. The only place that knows GGG's quirks,
+ * deliberately tolerant of fields that come and go across patches:
+ *  - node positions are baked (`node.x`/`node.y`), read as-is;
+ *  - edges are split across `in` + `out`, merged here;
+ *  - arc geometry lives in a top-level `edges` table;
+ *  - attribute choices live in a global `skillOverrides` table;
+ *  - ascendancy ids are internal (`Ranger1`), mapped to display names;
+ *  - centre/ring dimensions are absent, filled from atlas frame sizes.
  */
 
 import type {
@@ -27,15 +19,11 @@ import type {
   TreeNode,
 } from '../types.js';
 
-// --- raw GGG shapes (only the fields we read) ------------------------------
-
 export interface GggTreeJson {
   groups: Record<string, GggGroup>;
   nodes: Record<string, GggNode>;
   classes: GggClass[];
-  /** Per-edge geometry: arcs carry `orbit` + the arc centre `orbitX`/`orbitY`. */
   edges?: GggEdge[];
-  /** Global attribute-choice definitions, keyed by the (shared) override id. */
   skillOverrides?: Record<string, GggSkillOverride>;
   jewelSlots?: (string | number)[];
   min_x: number;
@@ -47,9 +35,7 @@ export interface GggTreeJson {
 interface GggEdge {
   from: string | number;
   to: string | number;
-  /** Present when the edge is an arc; the orbit it follows. */
   orbit?: number;
-  /** World centre of the arc, when GGG provides it. */
   orbitX?: number;
   orbitY?: number;
 }
@@ -77,13 +63,11 @@ interface GggNode {
   isKeystone?: boolean;
   isMastery?: boolean;
   isJewelSocket?: boolean;
-  /** Socket without a radius (the anointment-only Sinister sockets). */
   noRadius?: boolean;
   isGenericAttribute?: boolean;
   isAscendancyStart?: boolean;
   activeEffectImage?: string;
   ascendancyId?: string;
-  /** Class indices (into `classes`) that start at this node. */
   classStartIndex?: number[];
   flavourText?: string[] | string;
   recipe?: string[];
@@ -101,12 +85,9 @@ interface GggSkillOverride {
 interface GggAscendancy {
   id: string;
   name?: string;
-  /** Hub-relative position of the disc centre (radius ~1332 toward the class). */
   offsetX?: number;
   offsetY?: number;
-  /** Internal id of the ascendancy whose nodes this one plays on (`Witch3`). */
   replaces?: string;
-  /** Node display overrides while this ascendancy is active: base skill id -> override skill id. */
   overridePairs?: Record<string | number, number>;
 }
 
@@ -117,25 +98,17 @@ interface GggClass {
   base_int: number;
   image?: string;
   ascendancies?: GggAscendancy[];
-  /** Per-class node display overrides: base skill id -> override skill id. */
   overridePairs?: Record<string | number, number>;
 }
 
-// --- centre/ring sizes (GGG atlas frame dimensions, stable across classes) --
-
-/** Class portrait atlas frame (`background-<class>` Class0..3), 1500². */
 const PORTRAIT_SIZE = 1500;
-/** Ornate + rotating ring atlas frames (`group-background`), 2000². */
 const RING_SIZE = 2000;
-/** Ascendancy disc portrait, 1500². */
 const ASCENDANCY_DISC_SIZE = 1500;
-/** Central opening radius — the game's `PSSCentreInnerRadius` constant. */
 const CENTRE_INNER_RADIUS = 130;
 
 /**
  * @param raw     parsed GGG `data.json`
- * @param version tree/patch version (e.g. "0_5") — GGG does not store it inside
- *                the file, so it is supplied here
+ * @param version tree/patch version (e.g. "0_5"), not stored in the file
  */
 export function normalizeGggTree(raw: GggTreeJson, version: string): TreeData {
   const ascendancyNames = mapAscendancyNames(raw.classes);
@@ -180,11 +153,7 @@ function edgeKey(a: number, b: number): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
-/**
- * GGG's top-level `edges` table marks arcs and gives each arc's world centre
- * directly (`orbitX`/`orbitY`). Map it by undirected edge key; only entries with
- * a centre are kept (arcs without one fall back to the geometric rule).
- */
+/** Arcs by undirected edge key; only entries with a centre are kept (others fall back to the geometric rule). */
 function mapEdgeArcs(edges: GggEdge[] | undefined): Map<string, Point> {
   const arcs = new Map<string, Point>();
 
@@ -247,13 +216,10 @@ function normalizeNode(
     name,
     icon: raw.icon ?? '',
     stats: cleanStats(raw.stats),
-    // Kind flags and metadata are added only when present, so absence stays
-    // absent (exactOptionalPropertyTypes-friendly).
     ...(raw.isNotable ? { isNotable: true } : {}),
     ...(raw.isKeystone ? { isKeystone: true } : {}),
     ...(raw.isJewelSocket ? { isJewelSocket: true } : {}),
-    // The hidden Sinister sockets: flagged `noRadius` by the extractor (anointment-only
-    // sockets); older exports carried no flag, only the raw bbcode name.
+    // Hidden Sinister sockets: the extractor flags `noRadius`; older exports only had the raw bbcode name.
     ...(raw.noRadius || (raw.isJewelSocket && name.includes('SinisterJewelSocket')) ? { noRadius: true } : {}),
     ...(raw.isMastery ? { isMastery: true } : {}),
     ...(raw.isAscendancyStart ? { isAscendancyStart: true } : {}),
@@ -273,32 +239,20 @@ function normalizeNode(
   };
 }
 
-/** GGG ships keystone flavour text as an array of lines; join into one string. */
 function joinFlavour(flavour: string[] | string): string {
   return Array.isArray(flavour) ? flavour.join('\n') : flavour;
 }
 
-/**
- * GGG stat lines carry inline reference tags: `[ref|display]` renders as
- * `display`, `[ref]` as `ref` (e.g. `[Critical|Critical Hit Chance]` ->
- * "Critical Hit Chance", `[Curse|Curses]` -> "Curses", `[Shock]` -> "Shock").
- * The `display` side is the player-facing text, including the correct plural —
- * strip the tags down to it.
- */
+/** Strips inline reference tags to the player-facing text: `[ref|display]` -> `display`, `[ref]` -> `ref`. */
 function cleanStatText(line: string): string {
   return line.replace(/\[(?:[^|\]]*\|)?([^\]]+)\]/g, '$1');
 }
 
-/** Apply {@link cleanStatText} across a list of stat lines. */
 function cleanStats(stats: string[] | undefined): string[] {
   return (stats ?? []).map(cleanStatText);
 }
 
-/**
- * Map GGG's internal ascendancy ids ("Ranger1") to display names ("Deadeye").
- * The display name is what a build's chosen ascendancy is keyed by, so node and
- * allocation agree. Unreleased ascendancies carry no name and are skipped.
- */
+/** Internal ascendancy ids ("Ranger1") to display names ("Deadeye"), which is what a build keys by. Unnamed (unreleased) ones are skipped. */
 function mapAscendancyNames(classes: GggClass[]): Map<string, string> {
   const names = new Map<string, string>();
 
@@ -313,15 +267,9 @@ function mapAscendancyNames(classes: GggClass[]): Map<string, string> {
   return names;
 }
 
-/** Preferred display order of attribute choices (GGG keys them by numeric id). */
 const ATTRIBUTE_ORDER = ['Strength', 'Dexterity', 'Intelligence'];
 
-/**
- * The three shared attribute choices (Str / Dex / Int), read from GGG's global
- * `skillOverrides` table. That table also holds unrelated overrides (Pathfinder
- * alternates, per-class node swaps), so it is filtered to the `generic_attribute`
- * entries. Every generic-attribute node reuses these, ordered Str/Dex/Int.
- */
+/** The Str/Dex/Int choices from `skillOverrides`, filtered to `generic_attribute` (the table also holds Pathfinder alternates and per-class swaps). */
 function mapAttributeOptions(overrides: Record<string, GggSkillOverride> | undefined): NodeOption[] {
   if (!overrides) {
     return [];
@@ -344,13 +292,7 @@ function orderIndex(name: string): number {
   return index === -1 ? ATTRIBUTE_ORDER.length : index;
 }
 
-/**
- * The world position of each ascendancy's start node (the diamond), keyed by
- * GGG ascendancy id. GGG bakes every ascendancy at a far-flung cluster; the
- * start node is the anchor the renderer relocates onto the hub. Ascendancies
- * with no nodes of their own (unreleased ones, or one that replaces another) are
- * simply absent.
- */
+/** World position of each ascendancy's start node, the anchor the renderer relocates onto the hub. Ascendancies without nodes of their own are absent. */
 function mapAscendancyStarts(nodes: Record<string, GggNode>): Map<string, Point> {
   const starts = new Map<string, Point>();
 
@@ -363,11 +305,7 @@ function mapAscendancyStarts(nodes: Record<string, GggNode>): Map<string, Point>
   return starts;
 }
 
-/**
- * Build a class-index -> start-node-skill-id map. A class-start node lists the
- * class indices that start there in `classStartIndex` (often two); the same node
- * can serve several classes.
- */
+/** Class index -> start node. One start node can serve several classes (`classStartIndex`). */
 function mapClassStartNodes(nodes: Record<string, GggNode>): Map<number, number> {
   const byClass = new Map<number, number>();
 
@@ -406,9 +344,7 @@ function normalizeClass(
       active: { width: RING_SIZE, height: RING_SIZE },
       frame: { width: RING_SIZE, height: RING_SIZE },
     },
-    // Keep only released ascendancies - ones with a name AND a start node, their
-    // own or, for one that replaces another (the Abyssal Lich plays on the Lich's
-    // nodes), the replaced one's. A named ascendancy without either has no nodes yet.
+    // Released = a name AND a start node, own or the replaced ascendancy's (Abyssal Lich plays on the Lich's nodes).
     ascendancies: (raw.ascendancies ?? [])
       .filter((asc): asc is GggAscendancy & { name: string } =>
         Boolean(asc.name) && ascendancyStarts.has(asc.replaces ?? asc.id),
@@ -418,7 +354,6 @@ function normalizeClass(
   };
 }
 
-/** Normalise the override map's string keys to numeric skill ids. */
 function normalizeOverrides(raw: Record<string | number, number>): Record<number, number> {
   const out: Record<number, number> = {};
 
@@ -434,13 +369,9 @@ function normalizeAscendancy(
   ascendancyStarts: Map<string, Point>,
   ascendancyNames: Map<string, string>,
 ): AscendancyDef {
-  // A replacing ascendancy sits on the replaced one's disc, so it anchors there.
   const start = ascendancyStarts.get(raw.replaces ?? raw.id) ?? { x: 0, y: 0 };
-  // The renderer relocates each disc node by `centre − worldAnchor`. GGG's
-  // `offsetX/offsetY` is where the start diamond must land in the hub — on the
-  // class's quatrefoil axis, 1332u out (verified against the original PoB
-  // layout, exact to ~10u). So worldAnchor = startNode + offset places the
-  // diamond on the quatrefoil axis and the rest of the cluster around it.
+  // The renderer relocates each disc node by `centre - worldAnchor`. GGG's `offsetX/offsetY` is where the start diamond
+  // must land on the class's quatrefoil axis, 1332u out (exact to ~10u vs the original PoB layout).
   const offsetX = raw.offsetX ?? 0;
   const offsetY = raw.offsetY ?? 0;
 

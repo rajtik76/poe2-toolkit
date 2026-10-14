@@ -1,9 +1,4 @@
-/**
- * An ascendancy can replace another and play on its disc instead of nodes of its
- * own (GGG `replaces`): the Abyssal Lich uses the Lich's nodes, a few of them
- * shown as other passives. Allocation stays on the shared nodes (as in Path of
- * Building); only the display changes while the replacing ascendancy is active.
- */
+/** An ascendancy can replace another and play on its disc instead of nodes of its own (GGG `replaces`): the Abyssal Lich uses the Lich's nodes, a few of them shown as other passives. */
 
 import { describe, expect, it } from 'vitest';
 import { normalizeGggTree } from '../src/ggg/normalize.js';
@@ -18,7 +13,6 @@ import {
 } from '../src/index.js';
 import { tree, treeDataAvailable } from './treeData.js';
 
-/** A Witch whose Lich disc (start 100 -> notable 101) the Abyssal Lich replaces. */
 function fixture(): GggTreeJson {
   return {
     groups: {

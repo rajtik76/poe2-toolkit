@@ -1,9 +1,4 @@
-/**
- * In-process DDS decode (BC1/BC2/BC3/BC7 + uncompressed RGBA/BGRA8) to straight
- * RGBA8. No system ImageMagick and no native dependencies, which keeps
- * extraction portable in CI. PoE2 tree art is DX10/BC1 (icons) with some BC3;
- * UI art is BC7; item icons are uncompressed DX10 R8G8B8A8 (dxgi 28/29).
- */
+/** In-process DDS decode (BC1/BC2/BC3/BC7, uncompressed RGBA/BGRA8) to straight RGBA8. No ImageMagick or native dependencies, which keeps extraction portable in CI. */
 
 import { decodeBc7Block } from './bc7.js';
 import type { RgbaImage } from './types.js';
@@ -18,12 +13,9 @@ const DXGI_RGBA8 = new Set([28, 29]); // R8G8B8A8_UNORM(_SRGB)
 const DXGI_BGRA8 = new Set([87, 88]); // B8G8R8A8_UNORM(_SRGB)
 
 /**
- * Decode a DDS buffer to straight RGBA8. Handles block-compressed
- * BC1/BC2/BC3/BC7 and uncompressed 32-bit RGBA8/BGRA8 (DX10 dxgi 28/29/87/88).
  * Only the base mip level is returned.
  *
  * @param buf - Raw DDS file bytes.
- * @returns The decoded {@link RgbaImage}.
  * @throws If the buffer is not a DDS or its format is unsupported.
  */
 const MAX_DIMENSION = 8192; // generous upper bound for any real PoE2 texture
@@ -128,12 +120,7 @@ export function decodeDds(buf: Uint8Array): RgbaImage {
   return { width, height, rgba };
 }
 
-/**
- * Copy an uncompressed 32-bit surface to straight RGBA8. Assumes tightly
- * packed rows (pitch = width * 4), which holds for the CDN item textures.
- *
- * @param swapRb - Source is BGRA (dxgi 87/88); swap R/B into RGBA order.
- */
+/** Assumes tightly packed rows (pitch = width * 4). @param swapRb - Source is BGRA (dxgi 87/88). */
 function decodeUncompressed(
   buf: Uint8Array,
   dataOffset: number,
@@ -173,7 +160,6 @@ interface ColorBlock {
   idx: number[];
 }
 
-/** Decode the 4-colour RGB565 + 2-bit index block (shared by BC1/2/3). */
 function readColorBlock(buf: Uint8Array, o: number, isBc1: boolean): ColorBlock {
   const c0 = buf[o]! | (buf[o + 1]! << 8);
   const c1 = buf[o + 2]! | (buf[o + 3]! << 8);
@@ -199,7 +185,6 @@ function readColorBlock(buf: Uint8Array, o: number, isBc1: boolean): ColorBlock 
   return { pal, idx };
 }
 
-/** BC2: 4-bit explicit alpha per texel. */
 function readBc2Alpha(buf: Uint8Array, o: number): number[] {
   const a = new Array<number>(16);
 
@@ -211,7 +196,6 @@ function readBc2Alpha(buf: Uint8Array, o: number): number[] {
   return a;
 }
 
-/** BC3: two alpha endpoints + 3-bit interpolated indices. */
 function readBc3Alpha(buf: Uint8Array, o: number): number[] {
   const a0 = buf[o]!, a1 = buf[o + 1]!;
   const al = [a0, a1, 0, 0, 0, 0, 0, 0];

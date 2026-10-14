@@ -1,8 +1,4 @@
-/**
- * Unit coverage for the sprite-name icon-decode loop - the counterpart to
- * {@link decodeDdsIcons} for the UIImages references GGG's data uses alongside
- * (and, for some columns, instead of) raw DDS paths.
- */
+/** Unit coverage for the sprite-name icon-decode loop - the counterpart to {@link decodeDdsIcons} for the UIImages references GGG's data uses alongside (and, for some columns, instead of) raw DDS paths. */
 
 import { describe, expect, it } from 'vitest';
 
@@ -10,7 +6,6 @@ import { decodeSpriteIcons } from '../../src/decodeSpriteIcons';
 import type { SpriteSource } from '../../src/decodeSpriteIcons';
 import type { RgbaImage } from '../../src/image/types';
 
-/** A fake source serving `sprites[name]`, or `null` for anything else (a "miss"). */
 function fakeSource(sprites: Record<string, RgbaImage>): SpriteSource {
   return {
     uiSprite: async (name: string) => sprites[name] ?? null,

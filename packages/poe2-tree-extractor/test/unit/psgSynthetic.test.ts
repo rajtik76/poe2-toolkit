@@ -1,10 +1,4 @@
-/**
- * Behavioural coverage for the PSG parser on hand-built binary graphs, so the
- * format handling is exercised without the real (git-ignored) `.psg`. The gated
- * test in `psg.test.ts` proves parity with the legacy parser on the real file;
- * this one pins down the layout: header, roots, groups, nodes, connection orbit
- * words and the strict end-of-buffer check.
- */
+/** Behavioural coverage for the PSG parser on hand-built binary graphs, so the format handling is exercised without the real (git-ignored) `.psg`. */
 
 import { describe, expect, it } from 'vitest';
 
@@ -12,11 +6,7 @@ import { parsePsg } from '../../src/psg';
 
 import { PsgWriter } from './psgWriter';
 
-/**
- * A two-group graph: group 0 holds two connected nodes on orbit rings, group 1
- * is an empty proxy anchor. Node 100 arcs to 200 along ring 3; node 200 points
- * back with a straight-line sentinel edge.
- */
+/** A two-group graph: group 0 holds two connected nodes on orbit rings, group 1 is an empty proxy anchor. */
 function sampleGraph(): PsgWriter {
   const w = new PsgWriter();
   w.u8(3).u8(1); // version, graphType

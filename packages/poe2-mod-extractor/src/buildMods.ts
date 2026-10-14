@@ -1,121 +1,54 @@
 /**
- * Builds the Path of Exile 2 item-mod data from GGPK tables. Source of truth:
- * GGPK only.
- *
- * A mod carries its roll as a numeric `(stat id, [min, max])` range per stat; the
- * stat-description engine from `@poe2-toolkit/ggpk` renders each stat to text
- * through GGG's own `stat_descriptions.csd`, and the min and max passes are merged
- * into a single ranged line ("+(9-16) to Armour"). Structured `(stat, min, max)`
- * rolls are kept alongside the rendered lines.
- *
- * Keying is by `Mods.Id` - the stable internal id (e.g.
- * `LocalIncreasedPhysicalDamagePercent8`) - since a mod has no single display
- * name. Each mod also exposes the item-type `spawnWeights` that gate where it can
- * roll; those tags share the `Tags.Id` vocabulary that
- * `@poe2-toolkit/item-extractor` puts on each item's `tags`, so the two datasets
- * join on tags with no shared code.
+ * Builds item-mod data from GGPK tables, keyed by `Mods.Id`. Rolls are `(stat id, [min, max])` ranges; the min and max
+ * passes are rendered via the stat-description engine and merged into one ranged line ("+(9-16) to Armour").
+ * `spawnWeights` use the `Tags.Id` vocabulary of `item-extractor`'s item `tags`, so the datasets join on tags.
  */
 
 import { buildStatIndex, renderBlock } from '@poe2-toolkit/ggpk';
 import type { GgpkSource, StatIndex } from '@poe2-toolkit/ggpk';
 
-/** One stat's inclusive roll range on a mod. */
 export interface ModRoll {
-  /** Stat id, `Stats.Id` (e.g. `local_physical_damage_+%`). */
   stat: string;
-  /** Inclusive minimum of the raw stat value. */
   min: number;
-  /** Inclusive maximum of the raw stat value. */
   max: number;
 }
 
-/**
- * One item-type spawn gate. A mod can roll on an item when the first of its
- * `spawnWeights` whose {@link ModSpawnWeight.tag} the item carries has a
- * {@link ModSpawnWeight.weight} above zero; a `weight` of 0 blocks that tag. The
- * `default` tag matches every item, so a trailing `default` weight is the
- * catch-all. Order is significant (first match wins), so this is a list, not a map.
- */
+/** The first `spawnWeights` entry whose tag the item carries decides: weight 0 blocks it. `default` matches every item. Order matters, so this is a list. */
 export interface ModSpawnWeight {
-  /** Item-type tag, `Tags.Id` (e.g. `weapon`, `str_armour`, `ring`, `default`). */
   tag: string;
-  /** Spawn weight for that tag; 0 excludes the mod from items matching it. */
   weight: number;
 }
 
-/** One item mod: its affix name, roll ranges, tier and spawn gates. */
 export interface Mod {
-  /**
-   * Affix name shown on the item (e.g. `Merciless`), from `Mods.Name`; `null`
-   * when the mod has no name (implicit, unique and many generated mods).
-   */
+  /** From `Mods.Name`; `null` for implicit, unique and many generated mods. */
   name: string | null;
-  /**
-   * Item domain the mod belongs to, from `ModDomains` (e.g. `Item`, `Flask`,
-   * `Monster`). The rollable equipment affix pool is domain `Item`.
-   */
+  /** From `ModDomains`. The rollable equipment affix pool is `Item`. */
   domain: string;
-  /**
-   * How the mod is generated, from `ModGenerationType` (e.g. `Prefix`, `Suffix`,
-   * `Unique`, `Corrupted`). The random affix pool is `Prefix` / `Suffix`.
-   */
   generationType: string;
-  /**
-   * Mod group, `ModType.Name` (e.g. `LocalPhysicalDamagePercent`); `null` when
-   * the mod has no group. Mods sharing a group are the same modifier at different
-   * tiers, so a group is the tier ladder.
-   */
   group: string | null;
   /**
-   * 1-based tier of the mod within its affix ladder, ranked by ascending
-   * {@link Mod.level}: tier 1 is the lowest-level (weakest) tier, matching the
-   * numeric suffix on the id (`...Percent1` is tier 1, `...Percent8` is tier 8).
-   * `null` when the mod has no group. The ladder is scoped to
-   * `(group, domain, generationType)`, so an eight-tier item prefix ranks 1..8
-   * even though its `ModType` also holds the fixed unique rolls of the same
-   * modifier.
+   * 1-based tier in the affix ladder by ascending {@link Mod.level} (tier 1 = lowest level), matching the id suffix.
+   * `null` without a group. Scoped to `(group, domain, generationType)`, so an 8-tier prefix ranks 1..8 despite
+   * the fixed unique rolls sharing its `ModType`.
    */
   tier: number | null;
-  /** Minimum item / area level at which the mod can roll, from `Mods.Level`. */
   level: number;
-  /**
-   * Rendered stat lines with the roll shown as a range (e.g. `+(9-16) to Armour`,
-   * `Adds (1-2) to (4-5) Physical Damage`). Empty when the mod grants no numeric
-   * stats. A fixed roll (min equal to max) renders as a plain number.
-   */
   stats: string[];
-  /**
-   * Structured rolls backing {@link Mod.stats}: each referenced stat with its
-   * inclusive `[min, max]`. Kept separate from the rendered text so a consumer can
-   * do its own math; a two-stat line (added damage) yields two rolls.
-   */
+  /** Structured rolls backing {@link Mod.stats}; a two-stat line (added damage) yields two. */
   rolls: ModRoll[];
-  /**
-   * Mutual-exclusion family ids, from `ModFamily.Id`. Two mods sharing a family
-   * cannot both roll on one item (e.g. flat and hybrid life).
-   */
+  /** From `ModFamily.Id`. Mods sharing a family cannot both roll on one item (e.g. flat and hybrid life). */
   families: string[];
-  /**
-   * Item-type spawn gates from `SpawnWeight_Tags` / `SpawnWeight_Values`, in
-   * order. This is the item-category gate: it decides which item types the mod
-   * can appear on. See {@link ModSpawnWeight}.
-   */
+  /** From `SpawnWeight_Tags` / `SpawnWeight_Values`, in order. See {@link ModSpawnWeight}. */
   spawnWeights: ModSpawnWeight[];
 }
 
-/** Mods keyed by `Mods.Id` - the stable internal mod id. */
 export type ModData = Record<string, Mod>;
 
-/** GGPK path of GGG's stat-description file (UTF-16 text despite the extension). */
 const STAT_DESCRIPTIONS_PATH = 'data/statdescriptions/stat_descriptions.csd';
 
-/** Number of stat slots a mod row carries (`Stat1`..`Stat6`). */
 const STAT_SLOTS = 6;
 
-/**
- * `ModDomains` enumerators in schema order (1-based; `Mods.Domain` indexes this).
- * From `poe-tool-dev/dat-schema`; a value with no name falls back to its number.
- */
+/** `ModDomains` in schema order (1-based), from `poe-tool-dev/dat-schema`; an unnamed value falls back to its number. */
 const MOD_DOMAINS = [
   'Item', 'Flask', 'Monster', 'Chest', 'Area', null, 'Sanctum Relic', null, 'Crafted', 'Base Jewel',
   'Atlas', 'Leaguestone', 'Abyss Jewel', 'Map Device', 'Dummy', 'Delve', 'Delve Area', 'Synthesis A',
@@ -124,10 +57,6 @@ const MOD_DOMAINS = [
   'Sanctum Special', 'Crucible Map', 'Tincture', 'Animal Charm', 'Necropolis Monster', 'Idol', 'Graft',
 ] as const;
 
-/**
- * `ModGenerationType` enumerators in schema order (1-based; `Mods.GenerationType`
- * indexes this). From `poe-tool-dev/dat-schema`.
- */
 const MOD_GENERATION_TYPES = [
   'Prefix', 'Suffix', 'Unique', 'Nemesis', 'Corrupted', 'Bloodlines', 'Torment', 'Tempest', 'Talisman',
   'Enchantment', 'Essence', null, 'Bestiary', 'Delve Area', 'Synthesis A', 'Synthesis Globals',
@@ -137,13 +66,7 @@ const MOD_GENERATION_TYPES = [
   'Necropolis Haunted', 'Necropolis Devoted', 'Memory Altar',
 ] as const;
 
-// --- raw GGPK row shapes (only the columns this build reads) -----------------
-
-/**
- * One `Mods` row. `StatN` is a foreign-row index into `Stats`; `StatNValue` is
- * the `[min, max]` roll for that stat. `Domain` / `GenerationType` are 1-based
- * enum indices; `ModType` and `Families` index `ModType` / `ModFamily`.
- */
+/** `StatN` indexes `Stats`; `StatNValue` is its `[min, max]` roll. `Domain`/`GenerationType` are 1-based enum indices. */
 interface ModRow {
   Id?: string;
   Name?: string;
@@ -173,7 +96,6 @@ interface ModFamilyRow { Id?: string }
 interface StatRow { Id?: string }
 interface TagRow { Id?: string }
 
-/** Look up a 1-based enum value in its name table, falling back to the number. */
 function enumName(table: readonly (string | null)[], value: number | null | undefined): string {
   if (value == null) {
     return 'Unknown';
@@ -182,7 +104,6 @@ function enumName(table: readonly (string | null)[], value: number | null | unde
   return table[value - 1] ?? String(value);
 }
 
-/** Read a UTF-16 `.csd` stat-description file from the source into a string. */
 async function readCsd(source: GgpkSource, path: string): Promise<string> {
   const bytes = await source.file(path);
 
@@ -193,13 +114,7 @@ async function readCsd(source: GgpkSource, path: string): Promise<string> {
   return Buffer.from(bytes).toString('utf16le');
 }
 
-/**
- * Merge a min-value line and a max-value line into one, showing each differing
- * number as `(min-max)` and leaving equal numbers as a plain value. The two lines
- * share their non-numeric text (same template), so the merge zips the number runs;
- * if their structure differs (a rare value-dependent variant), the max line is
- * kept unchanged rather than producing a malformed range.
- */
+/** Merges a min line and a max line, showing each differing number as `(min-max)`. If their structure differs the max line is kept unchanged. */
 function mergeRange(minLine: string, maxLine: string): string {
   const number = /-?\d+(?:\.\d+)?/g;
   const minSegments = minLine.split(number);
@@ -207,9 +122,7 @@ function mergeRange(minLine: string, maxLine: string): string {
   const minNumbers = minLine.match(number) ?? [];
   const maxNumbers = maxLine.match(number) ?? [];
 
-  // The two passes must share the same template - same text around the numbers -
-  // for a range merge to be meaningful. A value-dependent variant (e.g. "reduced"
-  // at one end, "increased" at the other) breaks that, so keep the max line whole.
+  // A value-dependent variant ("reduced" at one end, "increased" at the other) breaks the shared template: keep the max line whole.
   if (minSegments.length !== maxSegments.length || minSegments.some((seg, i) => seg !== maxSegments[i])) {
     return maxLine;
   }
@@ -235,14 +148,11 @@ function mergeRange(minLine: string, maxLine: string): string {
   return out;
 }
 
-/** Collect a mod's `(stat id, [min, max])` rolls from its non-null stat slots. */
 function readRolls(mod: ModRow, Stats: StatRow[]): ModRoll[] {
   const rolls: ModRoll[] = [];
 
   for (let slot = 1; slot <= STAT_SLOTS; slot += 1) {
-    // `Stat1..Stat6`/`Stat1Value..Stat6Value` are declared fields on `ModRow`, not
-    // an open index signature - the cast below only ever names one of those six
-    // pairs, so it can't silently accept a typo'd or unrelated column.
+    // Stat1..Stat6 are declared fields on `ModRow`, so the cast can't accept a typo'd column.
     const statIndex = mod[`Stat${slot}` as keyof ModRow] as number | null | undefined;
 
     if (statIndex == null) {
@@ -262,17 +172,14 @@ function readRolls(mod: ModRow, Stats: StatRow[]): ModRoll[] {
   return rolls;
 }
 
-/** Render a mod's rolls to ranged stat lines via the stat-description engine. */
 function renderStats(statIndex: StatIndex, rolls: ModRoll[]): string[] {
   if (rolls.length === 0) {
     return [];
   }
 
   const statIds = rolls.map((roll) => roll.stat);
-  // A zero end has no line of its own (GGG's `1|#` and `#|-1` lines leave 0 out, and
-  // an all-zero block is hidden), so it picks the line of the range's other end:
-  // (0-2) picks as 2, keeping "+(0-2) Charm Slots" on one template. Without this
-  // the whole roll would lose its line.
+  // A zero end has no line of its own (`1|#`, `#|-1` leave 0 out), so it takes the line of the range's other end:
+  // (0-2) picks as 2, keeping "+(0-2) Charm Slots" on one template.
   const pickAt = (end: number, other: number): number => (end !== 0 ? end : other);
   const minLines = renderBlock(statIndex, statIds, rolls.map((roll) => roll.min), {
     selectBy: rolls.map((roll) => pickAt(roll.min, roll.max)),
@@ -284,7 +191,6 @@ function renderStats(statIndex: StatIndex, rolls: ModRoll[]): string[] {
   return minLines.map((line, i) => mergeRange(line, maxLines[i] ?? line));
 }
 
-/** Zip a mod's spawn-weight tags and values into ordered `{ tag, weight }` gates. */
 function readSpawnWeights(mod: ModRow, Tags: TagRow[]): ModSpawnWeight[] {
   const tags = mod.SpawnWeight_Tags ?? [];
   const values = mod.SpawnWeight_Values ?? [];
@@ -302,14 +208,8 @@ function readSpawnWeights(mod: ModRow, Tags: TagRow[]): ModSpawnWeight[] {
 }
 
 /**
- * Assign each mod a 1-based tier, ranked by ascending level (ties broken by id for
- * a stable order). Returns a map from mod id to tier.
- *
- * Ranking is scoped to the mod's `ModType` *and* its domain and generation type,
- * not the group alone: one `ModType` also holds the same modifier for other
- * contexts (a group's 8 item prefixes sit beside dozens of fixed unique rolls), so
- * ranking the whole group would inflate the tiers. Scoping to
- * `(group, domain, generationType)` recovers the affix ladder a player sees.
+ * 1-based tier by ascending level (ties by id). Scoped to `(group, domain, generationType)`, not the group alone:
+ * one `ModType` also holds fixed unique rolls beside the 8 item prefixes, which would inflate the tiers.
  */
 function computeTiers(mods: ModRow[]): Map<string, number> {
   const byGroup = new Map<string, { id: string; level: number }[]>();
@@ -335,11 +235,6 @@ function computeTiers(mods: ModRow[]): Map<string, number> {
   return tierById;
 }
 
-/**
- * Build the mod export from the supplied {@link GgpkSource}. All data comes from
- * the source's tables and the stat-description file; this function performs no I/O
- * of its own beyond what the source serves.
- */
 export async function buildMods(source: GgpkSource): Promise<ModData> {
   const Mods = (await source.table('Mods')) as ModRow[];
   const ModType = (await source.table('ModType')) as ModTypeRow[];
@@ -367,8 +262,7 @@ export async function buildMods(source: GgpkSource): Promise<ModData> {
       domain: enumName(MOD_DOMAINS, mod.Domain),
       generationType: enumName(MOD_GENERATION_TYPES, mod.GenerationType),
       group,
-      // Tier is a position in the group ladder, so it is only meaningful with a
-      // group; a mod with a resolved group is always tiered (both come from ModType).
+      // Tier is a position in the group ladder, only meaningful with a group.
       tier: group != null ? tierById.get(id)! : null,
       level: mod.Level ?? 0,
       stats: renderStats(statIndex, rolls),

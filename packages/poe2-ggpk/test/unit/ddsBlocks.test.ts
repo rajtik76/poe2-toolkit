@@ -1,20 +1,12 @@
-/**
- * Unit coverage for the block-compressed decode paths (BC1/BC2/BC3) and the
- * header error handling, on hand-built DDS buffers. Endpoint colours are chosen
- * so every interpolated palette entry lands on an integer, keeping the expected
- * pixels exact. The BC7 mode decoder is covered by the gated 1:1 tests against
- * real class portraits; its block format is too wide to hand-craft usefully.
- */
+/** Unit coverage for the block-compressed decode paths (BC1/BC2/BC3) and the header error handling, on hand-built DDS buffers. */
 
 import { describe, expect, it } from 'vitest';
 
 import { decodeDds } from '../../src/image/dds';
 
-/** Pure red and pure blue in RGB565: interpolations are integer thirds. */
 const RED565 = 0xf800;
 const BLUE565 = 0x001f;
 
-/** Build a legacy-header DDS (fourCC at 84, data at 128) around raw block bytes. */
 function makeLegacy(fourCC: string, width: number, height: number, blocks: number[]): Uint8Array {
   const buf = new Uint8Array(128 + blocks.length);
   const dv = new DataView(buf.buffer);
@@ -27,7 +19,6 @@ function makeLegacy(fourCC: string, width: number, height: number, blocks: numbe
   return buf;
 }
 
-/** Build a DX10-header DDS (dxgi at 128, data at 148) around raw block bytes. */
 function makeDx10(dxgi: number, width: number, height: number, blocks: number[]): Uint8Array {
   const buf = new Uint8Array(148 + blocks.length);
   const dv = new DataView(buf.buffer);
@@ -41,7 +32,6 @@ function makeDx10(dxgi: number, width: number, height: number, blocks: number[])
   return buf;
 }
 
-/** One BC1 colour block: two RGB565 endpoints + 16 two-bit palette indices. */
 function colorBlock(c0: number, c1: number, indices: number[]): number[] {
   let bits = 0;
 
@@ -52,7 +42,6 @@ function colorBlock(c0: number, c1: number, indices: number[]): number[] {
   return [c0 & 0xff, c0 >> 8, c1 & 0xff, c1 >> 8, bits & 0xff, (bits >> 8) & 0xff, (bits >> 16) & 0xff, (bits >>> 24) & 0xff];
 }
 
-/** Read the RGBA quadruple of pixel (x, y). */
 function px(img: { width: number; rgba: Uint8Array }, x: number, y: number): number[] {
   const o = (y * img.width + x) * 4;
 
@@ -112,7 +101,6 @@ describe('decodeDds BC2', () => {
 });
 
 describe('decodeDds BC3', () => {
-  /** BC3 alpha block: two endpoints + 16 three-bit indices packed over 6 bytes. */
   function bc3Alpha(a0: number, a1: number, indices: number[]): number[] {
     let bits = 0n;
 

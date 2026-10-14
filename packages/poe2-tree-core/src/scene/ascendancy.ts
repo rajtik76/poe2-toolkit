@@ -1,15 +1,7 @@
-/**
- * Ascendancy lookups shared by allocation and scene building. Most ascendancies
- * own their nodes, but one can replace another and play on its disc instead (GGG
- * `replaces`: the Abyssal Lich uses the Lich's nodes, a few of them shown as other
- * passives). Nodes are always tagged with the ascendancy that owns them, so every
- * "does this node belong to the active ascendancy" check goes through
- * {@link ascendancyNodeOwner}.
- */
+/** Ascendancy lookups. One ascendancy can replace another and play on its disc (GGG `replaces`), so every "node belongs to the active ascendancy" check goes through {@link ascendancyNodeOwner}. */
 
 import type { AscendancyDef, TreeData } from '../types.js';
 
-/** The ascendancy with display id `ascendancy`, from whichever class has it. */
 export function findAscendancy(data: TreeData, ascendancy: string): AscendancyDef | undefined {
   for (const cls of data.classes) {
     const found = cls.ascendancies.find((asc) => asc.id === ascendancy);
@@ -22,21 +14,12 @@ export function findAscendancy(data: TreeData, ascendancy: string): AscendancyDe
   return undefined;
 }
 
-/**
- * The ascendancy whose nodes `ascendancy` plays on: the one it replaces (the
- * Abyssal Lich -> the Lich), or itself. Compare a node's `ascendancyName` against
- * this, not against the ascendancy id itself.
- */
+/** The ascendancy whose nodes `ascendancy` plays on (the replaced one, or itself). Compare a node's `ascendancyName` against this. */
 export function ascendancyNodeOwner(data: TreeData, ascendancy: string): string {
   return findAscendancy(data, ascendancy)?.replaces ?? ascendancy;
 }
 
-/**
- * Which skill id `skill` shows for the active class and ascendancy, or undefined
- * when neither overrides it. The ascendancy wins over the class (it is the more
- * specific choice), and only an ascendancy of the active class counts, so a stale
- * `ascendId` left over from another class lends nothing.
- */
+/** The ascendancy wins over the class, and only an ascendancy of the active class counts (a stale `ascendId` from another class lends nothing). */
 export function activeOverrides(
   data: TreeData,
   classId: number | null | undefined,

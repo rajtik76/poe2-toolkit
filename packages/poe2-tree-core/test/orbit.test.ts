@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { nodePosition } from '../src/index.js';
 import type { TreeData, TreeNode } from '../src/index.js';
 
-/** Minimal node with the GGG-baked fields the engine reads. */
 function node(skill: number, x: number, y: number): TreeNode {
   return { skill, group: 1, orbit: 1, orbitIndex: 0, x, y, connections: [], name: 'Test', icon: 'test', stats: [] };
 }

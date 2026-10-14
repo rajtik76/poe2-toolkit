@@ -1,19 +1,7 @@
 /**
- * The default {@link GgpkSource}: serves decoded tables and raw files from GGG's
- * PoE2 patch CDN, backed by `pathofexile-dat`'s bundle loader and a local cache.
- * This is the acquisition layer — the only place that talks to the network — so
- * the extractor packages stay agnostic to where bytes come from.
- *
- * Tables are read from a directory of `pathofexile-dat`-decoded `<Name>.json`
- * files (its `extract` step output); raw files and sprites are pulled from the
- * patch CDN on demand and cached on disk.
- *
- * Since `pathofexile-dat@15.2.0` the bundle `FileLoader` and the sprite-index
- * parser are part of the package's public API (`./bundles.js`, `./sprites.js`),
- * and `FileLoader` takes any `BundleLoader` — an object with a single
- * `fetchFile(name)` method. The toolkit supplies its own {@link CdnCachingLoader}
- * so it owns where bytes come from and how a miss is handled, instead of reaching
- * past the package's exports into its `dist/` internals.
+ * The default {@link GgpkSource}: the only layer that talks to the network. Tables come from a directory of
+ * `pathofexile-dat`-decoded `<Name>.json` files; raw files and sprites are pulled from GGG's PoE2 patch CDN on demand
+ * and cached on disk, via the toolkit's own {@link CdnCachingLoader} (a `BundleLoader` for `pathofexile-dat`'s `FileLoader`).
  */
 
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
@@ -28,45 +16,26 @@ import { decodeDds } from './image/dds.js';
 import type { RgbaImage } from './image/types.js';
 import type { GgpkSource, TableRow } from './source.js';
 
-/** A UIImages sprite: its backing DDS path and sub-rect within that image. */
 export interface SpriteRef {
-  /** GGPK path of the backing DDS sprite sheet. */
   path: string;
-  /** Top edge of the sub-rect within the sprite sheet, in pixels. */
   top: number;
-  /** Left edge of the sub-rect within the sprite sheet, in pixels. */
   left: number;
-  /** Width of the sub-rect, in pixels. */
   width: number;
-  /** Height of the sub-rect, in pixels. */
   height: number;
 }
 
-/** Image-fetching capability the tree's graphics build needs on top of {@link GgpkSource}. */
 export interface GgpkImageSource {
-  /** Decode a DDS by its GGPK path, or `null` if absent/undecodable (cached). */
   dds(path: string): Promise<RgbaImage | null>;
-  /** Resolve a UIImages logical name to its backing DDS and rect, or `null`. */
   resolveSprite(name: string): Promise<SpriteRef | null>;
-  /** A UIImages sprite decoded and cropped to its rect (legacy `fetchSprite`). */
   uiSprite(name: string): Promise<RgbaImage | null>;
 }
 
-/**
- * A CDN-backed source with both table/file access and image fetching: the
- * return type of {@link createCdnSource}.
- */
 export type CdnSource = GgpkSource & GgpkImageSource;
 
-/** Configuration for {@link createCdnSource}. */
 export interface CdnSourceOptions {
-  /** GGPK patch version, e.g. `4.5.3.1.7`. */
   patch: string;
-  /** Cache root for downloaded bundles (a `<patch>/` subdir is used). */
   cacheDir: string;
-  /** Directory of `pathofexile-dat`-decoded `<Name>.json` tables. */
   tablesDir: string;
-  /** Patch CDN host; defaults to the PoE2 server. */
   cdnHost?: string;
 }
 
@@ -75,24 +44,13 @@ const DEFAULT_CDN_HOST = 'https://patch-poe2.poecdn.com';
 /** Patch server can stall; give up rather than hang extraction forever. */
 const FETCH_TIMEOUT_MS = 30_000;
 
-/** GGG's bundle root under each patch version on the CDN. */
 const BUNDLES_DIR = 'Bundles2';
 
 /**
- * A {@link BundleLoader} over the patch CDN, caching every bundle on disk.
- *
- * `pathofexile-dat`'s own `CdnBundleLoader` calls `process.exit(1)` on a 404 and
- * bakes in its cache path; some texture bundles are not on the patch CDN (only
- * in a full install), so a missing bundle must skip its file, not kill the run.
- * This throws on a miss and caches by the `@`-flattened name `FileLoader`
- * expects, leaving the loader free to surface the error to the caller.
- *
- * Concurrent callers asking for the same not-yet-cached bundle (e.g. several
- * `dds()` paths from {@link decodeDdsIcons}'s worker pool that happen to live
- * in the same bundle) share a single in-flight fetch instead of each racing
- * their own CDN request for identical bytes.
- *
- * Exported for unit testing; not part of the package's public API.
+ * A {@link BundleLoader} over the patch CDN, caching every bundle on disk. `pathofexile-dat`'s own loader calls
+ * `process.exit(1)` on a 404, but some texture bundles are not on the patch CDN, so a miss must skip its file: this
+ * throws instead. Concurrent callers for the same uncached bundle share one in-flight fetch.
+ * Exported for unit testing only.
  */
 export class CdnCachingLoader implements BundleLoader {
   private readonly inflight = new Map<string, Promise<Uint8Array>>();
@@ -112,7 +70,7 @@ export class CdnCachingLoader implements BundleLoader {
     try {
       return await readFile(cached);
     } catch {
-      /* not cached yet */
+      // not cached yet
     }
 
     const pending = this.inflight.get(name);
@@ -139,15 +97,8 @@ export class CdnCachingLoader implements BundleLoader {
 
     const buf = Buffer.from(await res.arrayBuffer());
 
-    // `writeFile` is not atomic: the file is visible with partial content for
-    // the whole duration of the write, and a concurrent `fetchFile`'s
-    // `readFile` happily returns those truncated bytes - the bundle then fails
-    // to decompress downstream ("Failed to decode"). The in-flight map above
-    // cannot prevent that: it only covers this loader instance, not another
-    // worker thread or process sharing the same cache directory, and even here
-    // the cache read happens before the map is consulted. Publish through a
-    // unique temp file + rename (atomic within a directory) so a reader only
-    // ever sees a complete bundle or no file at all.
+    // `writeFile` is not atomic: a concurrent reader (another worker or process sharing the cache dir, which the
+    // in-flight map can't cover) could get truncated bytes and fail to decompress. Write a unique temp file, then rename.
     const tmp = `${cached}.${process.pid}.${CdnCachingLoader.tmpSeq++}.tmp`;
 
     try {
@@ -163,28 +114,17 @@ export class CdnCachingLoader implements BundleLoader {
   }
 }
 
-/**
- * Create a patch-CDN-backed {@link GgpkSource}. Connecting to the network is
- * deferred to the first file/sprite request; table reads only touch the local
- * `tablesDir`.
- *
- * @param options - Patch version, cache/tables directories and optional CDN host.
- * @returns A {@link CdnSource} exposing table/file access plus image fetching.
- */
+/** Creates a patch-CDN-backed {@link GgpkSource}. The network is touched on the first file/sprite request; table reads only use `tablesDir`. */
 export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSource> {
   const { patch, cacheDir, tablesDir, cdnHost = DEFAULT_CDN_HOST } = options;
 
   const bundleCacheDir = join(cacheDir, patch);
   await mkdir(bundleCacheDir, { recursive: true });
 
-  // `FileLoader.create` reads the bundle index through this loader on first use;
-  // every bundle (index included) is fetched from the CDN and cached on disk.
   const loader = await FileLoader.create(new CdnCachingLoader(cdnHost, patch, bundleCacheDir));
 
   const ddsCache = new Map<string, RgbaImage | null>();
-  // Memoize the in-flight build, not the map: a map assigned before its await is
-  // handed to concurrent callers while still empty, and an empty index answers
-  // "no such sprite" instead of waiting for the download to finish.
+  // Memoize the in-flight build, not the map: a map assigned before its await is handed to concurrent callers while still empty.
   let spriteIndex: Promise<Map<string, SpriteImage>> | null = null;
 
   async function file(path: string): Promise<Uint8Array | null> {
@@ -213,10 +153,7 @@ export async function createCdnSource(options: CdnSourceOptions): Promise<CdnSou
       try {
         image = decodeDds(bytes);
       } catch (error) {
-        // Unlike a CDN miss, this is bytes we *did* get but couldn't decode - a
-        // format the decoder doesn't handle or a regression in it. Still skipped
-        // like a miss (no vendored fallback), but surfaced so it isn't silently
-        // folded into the same "missing" bucket as an expected absence.
+        // Bytes we got but couldn't decode (unsupported format or a decoder regression): skipped like a miss, but surfaced separately from expected absences.
         console.warn(`[poe2-toolkit/ggpk] failed to decode DDS at "${path}": ${(error as Error).message}`);
       }
     }

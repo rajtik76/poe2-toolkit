@@ -1,14 +1,9 @@
-/**
- * Unit coverage for the uncompressed DX10 paths (item/rune icons are
- * R8G8B8A8_UNORM, dxgi 28/29; some UI art is B8G8R8A8, dxgi 87/88). These carry
- * no 4x4 blocks, so they exercise the straight-copy branch, not the BC decoders.
- */
+/** Unit coverage for the uncompressed DX10 paths (item/rune icons are R8G8B8A8_UNORM, dxgi 28/29; some UI art is B8G8R8A8, dxgi 87/88). */
 
 import { describe, expect, it } from 'vitest';
 
 import { decodeDds } from '../../src/image/dds';
 
-/** Build a minimal DX10 DDS: 148-byte header + tightly packed 32-bit pixels. */
 function makeDx10(width: number, height: number, dxgi: number, pixels: number[]): Uint8Array {
   const buf = new Uint8Array(148 + width * height * 4);
   const dv = new DataView(buf.buffer);

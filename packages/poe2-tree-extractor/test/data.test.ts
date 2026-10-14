@@ -1,12 +1,4 @@
-/**
- * Golden-contract tests for the passive-tree `data.json` — they pin the exact
- * shape of the last extraction.
- *
- * `data.json` carries derived GGG game data (node names, stats, flavour text),
- * so it is kept out of the repo. These tests therefore run locally — where the
- * golden file is present — and skip in CI. The 1:1 regeneration gate lives in
- * `test/ts/`.
- */
+/** Golden-contract tests for the passive-tree `data.json` - they pin the exact shape of the last extraction. */
 
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';

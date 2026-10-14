@@ -1,10 +1,4 @@
-/**
- * Behavioural coverage for `buildTree` on a hand-built source: a tiny `.psg`,
- * stat descriptions and tables, so the export rules run without a GGPK extract.
- * Pins down what the tree keeps and how it reads its nodes: released content
- * only, plain names, socket flags, anointment recipes, mastery effects, line
- * order and the ascendancy that replaces another.
- */
+/** Behavioural coverage for `buildTree` on a hand-built source: a tiny `.psg`, stat descriptions and tables, so the export rules run without a GGPK extract. */
 
 import type { GgpkSource, TableRow } from '@poe2-toolkit/ggpk';
 import { describe, expect, it } from 'vitest';
@@ -15,13 +9,7 @@ import { PsgWriter } from './psgWriter';
 
 const LINE = 2147483647;
 
-/**
- * Group 0: a jewel socket (10), a notable (11) linked to a node of a disabled
- * ascendancy (12), and a Sinister socket (13). Group 1: only that disabled
- * ascendancy's node (20). Group 2: the Lich start (30), a Lich notable holding a
- * socket (31) and a Lich node Abyssal Lich overrides (32). Group 3: a keystone
- * carrying every optional flag (50).
- */
+/** Group 0: a jewel socket (10), a notable (11) linked to a node of a disabled ascendancy (12), and a Sinister socket (13). */
 function graph(): Uint8Array {
   const w = new PsgWriter();
   w.u8(3).u8(1).u8(2).u8(1).u8(12); // version, graphType, 2 orbit rings: 1 and 12 slots
@@ -64,7 +52,6 @@ const BASE_CSD = [
 
 const PASSIVE_CSD = ['include "Metadata/StatDescriptions/stat_descriptions.csd"', 'description', '\t1 armour_+%', '\t1', '\t\t# "{0}% more Armour"'].join('\n');
 
-/** PassiveSkills rows, indexed by position as other tables reference them. */
 const PASSIVES: TableRow[] = [
   { Id: 'jewel1', PassiveSkillGraphId: 10, Name: '[Jewel] Socket', IsJewelSocket: true, WeaponPointsGranted: 0 },
   // Stats listed armour first; its superseding passive description sits after the

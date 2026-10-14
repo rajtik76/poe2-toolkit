@@ -1,8 +1,4 @@
-/**
- * Port verification for the PNG codec. Two guarantees: encode/decode round-trips
- * losslessly, and the TypeScript codec is byte-identical to the legacy `.mjs`
- * one (so atlas output downstream stays reproducible).
- */
+/** Port verification for the PNG codec. */
 
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -18,7 +14,6 @@ interface LegacyImageModule {
   decodePng(buf: Uint8Array): { width: number; height: number; rgba: Uint8Array };
 }
 
-/** Deterministic pseudo-random RGBA so the test is reproducible without fixtures. */
 function sampleImage(width: number, height: number, seed: number): Uint8Array {
   const rgba = new Uint8Array(width * height * 4);
   let state = seed >>> 0;

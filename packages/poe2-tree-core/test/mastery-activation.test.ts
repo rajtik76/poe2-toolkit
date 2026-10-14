@@ -3,15 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { buildScene } from '../src/index.js';
 import { tree, treeDataAvailable } from './treeData.js';
 
-// Mastery activation, verified against the published tree + the user's in-game
-// observations: a mastery lights from any node sharing a graph edge with it
-// (either direction); dead-end masteries (nothing points in) never light.
-//
-// Needs a local tree data.json (see treeData.ts); skipped without one.
 if (treeDataAvailable()) {
   const { data } = tree();
 
-  /** Is the mastery effect for `skill` lit when `allocated` is allocated? */
   const masteryLit = (skill: number, allocated: number[]): boolean => {
     const scene = buildScene(data, { allocation: { allocated } });
 

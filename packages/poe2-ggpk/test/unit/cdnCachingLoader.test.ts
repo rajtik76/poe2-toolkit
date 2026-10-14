@@ -1,11 +1,4 @@
-/**
- * Offline unit test for the CDN bundle loader. It owns the behaviour the toolkit
- * had to reach past `pathofexile-dat`'s internals for: cache on disk, fetch on a
- * miss, and — unlike the stock loader's `process.exit(1)` — throw on a 404 so a
- * bundle that only ships in a full install skips its file instead of killing the
- * run. Uses a real temp cache dir and a stubbed `fetch`, so it needs no network
- * and no game data and runs in CI.
- */
+/** Offline unit test for the CDN bundle loader. */
 
 import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -18,7 +11,6 @@ const HOST = 'https://patch-poe2.poecdn.com';
 const PATCH = '4.5.3.1.8';
 const NAME = 'art/2dart/94/baseclassillustrations.bundle.bin';
 
-/** A `fetch` stub answering with `body` (200) or a bare status (>=400). */
 function stubFetch(answer: { status: number; body?: Uint8Array }) {
   const fetchMock = vi.fn(async () =>
     answer.status >= 400
@@ -111,9 +103,6 @@ describe('CdnCachingLoader', () => {
 
     await loader.fetchFile(NAME);
 
-    // Only the final flattened name may exist; a lingering *.tmp would mean
-    // the write was published non-atomically (a concurrent reader could have
-    // seen a partial bundle - the "Failed to decode" production failure).
     expect(await readdir(cacheDir)).toEqual([NAME.replace(/\//g, '@')]);
   });
 

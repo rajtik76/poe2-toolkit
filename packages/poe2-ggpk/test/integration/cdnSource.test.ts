@@ -1,12 +1,4 @@
-/**
- * Integration check for the CDN source against the local GGPK extract: it must
- * serve tables and raw files, and decode DDS art identically to the legacy
- * `.mjs` decoder. The DDS parity here is what pins the BC1/BC3/BC7 port — every
- * pixel of a real icon and a real portrait is compared.
- *
- * Skipped without a local extract (decoded tables + bundle cache). Only cached
- * bundles are used, so the test stays offline.
- */
+/** Integration check for the CDN source against the local GGPK extract: it must serve tables and raw files, and decode DDS art identically to the legacy `.mjs` decoder. */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,7 +38,6 @@ describe.skipIf(!extractAvailable())('createCdnSource', () => {
     expect(bytes!.length).toBe(readFileSync(PSG_FILE).length);
   });
 
-  /** Compare up to `limit` of `paths` (those cached locally) against the legacy decode. */
   async function compareDecodes(paths: string[], limit: number): Promise<number> {
     const src = await source();
     const mod = (await import(pathToFileURL(legacy('tree/image.mjs')).href)) as LegacyImageModule;
@@ -57,7 +48,7 @@ describe.skipIf(!extractAvailable())('createCdnSource', () => {
       const bytes = await src.file(path);
 
       if (!bytes) {
-        continue; // not in the local cache — keep the test offline
+        continue; // not in the local cache - keep the test offline
       }
 
       const ours = await src.dds(path);
@@ -86,12 +77,7 @@ describe.skipIf(!extractAvailable())('createCdnSource', () => {
     expect(compared).toBeGreaterThan(0);
   });
 
-  /**
-   * The sprite index is fetched once and shared, so lookups that arrive during
-   * that fetch have to wait for it. An earlier version published the map before
-   * filling it, and every racing lookup then read an empty index - which looks
-   * exactly like art GGG has removed.
-   */
+  /** The sprite index is fetched once and shared, so lookups that arrive during that fetch have to wait for it. */
   it('answers concurrent sprite lookups from a single index build', async () => {
     const name = 'Art/2DArt/UIImages/InGame/SmartHover/GemHoverTitle';
     const known = await (await source()).resolveSprite(name);
@@ -112,7 +98,7 @@ describe.skipIf(!extractAvailable())('createCdnSource', () => {
   });
 
   it('decodes BC7 class portraits identically to the legacy decoder', async () => {
-    // Portraits exercise the BC7 path specifically — icons alone would miss it.
+    // Portraits exercise the BC7 path specifically - icons alone would miss it.
     const src = await source();
     const compared = await compareDecodes(ddsPaths(await src.table('Characters'), 'PassiveTreeImage'), 4);
 

@@ -1,8 +1,4 @@
-/**
- * Self-contained unit tests: the mod build is exercised against a small in-memory
- * {@link GgpkSource} - tables plus a minimal UTF-16 `.csd` - so the suite needs no
- * network or local GGPK extract.
- */
+/** Self-contained unit tests: the mod build is exercised against a small in-memory {@link GgpkSource} - tables plus a minimal UTF-16 `.csd` - so the suite needs no network or local GGPK extract. */
 
 import type { GgpkSource, TableRow } from '@poe2-toolkit/ggpk';
 import { describe, expect, it } from 'vitest';
@@ -10,12 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { buildMods } from '../src/buildMods';
 import { extractMods } from '../src/index';
 
-/**
- * A stat-description file the engine can parse. Blocks: a single-stat additive,
- * an increased-percent, a two-stat added-damage line, a value-dependent variant
- * (reduced vs increased) and a negated line - enough to drive range rendering,
- * the two-stat merge, the variant fallback and the reversed-range order.
- */
+/** A stat-description file the engine can parse. */
 const CSD = [
   'description',
   '\t1 add_str',
@@ -131,7 +122,6 @@ const TABLES: Record<string, TableRow[]> = {
   ],
 };
 
-/** A fake source: tables plus the `.csd` served as UTF-16 bytes (or absent). */
 function fakeSource(csd: string | null = CSD): GgpkSource {
   return {
     table: (name: string) => Promise.resolve(TABLES[name] ?? []),

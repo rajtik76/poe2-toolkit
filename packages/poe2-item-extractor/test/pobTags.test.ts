@@ -1,18 +1,4 @@
-/**
- * Optional validation: the item-class tags that `buildItems` folds into each base's
- * `tags` are checked 1:1 against Path of Building's `Data/Bases` tag sets.
- *
- * PoE2 leaves the item-class tags (`armour`, `weapon`, `bow`, ...) to be inherited
- * from the class rather than storing them on the base, so `buildItems` encodes that
- * inheritance in a curated map; this test proves that map against PoB, the
- * reference implementation. Only the class-contributed tags are compared (the
- * intersection with the class vocabulary below), so base-specific league tags that
- * differ between PoB's snapshot and the extracted patch do not cause noise.
- *
- * Point `POE2_GGPK_EXTRACT` at a directory holding `tables/English` (plus a
- * `.cache` and `config.json`) and `POE2_POB_DIR` at a Path of Building PoE2 checkout
- * (the one holding `src/Data/Bases`). Without both, the suite skips (as in CI).
- */
+/** Optional validation: the item-class tags that `buildItems` folds into each base's `tags` are checked 1:1 against Path of Building's `Data/Bases` tag sets. */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,7 +14,6 @@ const TABLES_DIR = join(EXTRACT, 'tables/English');
 const CACHE_DIR = join(EXTRACT, '.cache');
 const BASES_DIR = join(POB, 'src/Data/Bases');
 
-/** Every tag an item class can contribute; base-specific tags are ignored. */
 const CLASS_VOCABULARY = new Set([
   'default', 'amulet', 'belt', 'ring', 'quiver',
   'armour', 'body_armour', 'boots', 'gloves', 'helmet', 'shield', 'buckler', 'focus',
@@ -50,7 +35,6 @@ function available(): boolean {
   return existsSync(join(TABLES_DIR, 'BaseItemTypes.json')) && existsSync(BASES_DIR);
 }
 
-/** Parse PoB's `Data/Bases/*.lua` into a base-name -> tag-set map. */
 function readPobTags(): Map<string, Set<string>> {
   const byName = new Map<string, Set<string>>();
   const entry = /itemBases\["([^"]+)"\]\s*=\s*\{([\s\S]*?)\n\}/g;
@@ -72,7 +56,6 @@ function readPobTags(): Map<string, Set<string>> {
   return byName;
 }
 
-/** The class-vocabulary tags of a set, sorted for a stable comparison. */
 function classTags(tags: Iterable<string>): string[] {
   return [...tags].filter((tag) => CLASS_VOCABULARY.has(tag)).sort();
 }
