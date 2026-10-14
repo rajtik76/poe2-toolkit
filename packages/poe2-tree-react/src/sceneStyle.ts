@@ -199,6 +199,19 @@ export function nodeVisual(node: Scene['nodes'][number], colors: ResolvedTreeCol
 }
 
 /**
+ * The ascendancy whose nodes the active disc shows, as tagged on scene nodes and
+ * edges: the one it replaces (the Abyssal Lich plays on the Lich's nodes), or
+ * itself. Undefined when no ascendancy is active.
+ */
+export function ascendancyDiscOwner(scene: Scene, activeAscendancy: string | undefined): string | undefined {
+  if (!activeAscendancy) {
+    return undefined;
+  }
+
+  return scene.centre.ascendancies.find((a) => a.id === activeAscendancy)?.replaces ?? activeAscendancy;
+}
+
+/**
  * World offset that relocates the active ascendancy disc into the hub, or null
  * when no disc is active (or the id is unknown). The disc's nodes and edges are
  * drawn shifted by this; overlays over them must carry the same shift.

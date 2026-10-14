@@ -237,6 +237,22 @@ describe('hitTest', () => {
 
     expect(hitTest(scene, identity, 100, 100, 'Deadeye')).toBe(1);
   });
+
+  it('hit-tests a replacing ascendancy on the nodes of the one it replaces', () => {
+    // The Abyssal Lich plays on the Lich's nodes, which stay tagged 'Lich'.
+    const disc = { internalId: 'Witch3', image: '', worldAnchor: { x: 5000, y: 5000 }, size: { width: 1500, height: 1500 } };
+    const scene = makeScene({
+      nodes: [node({ skill: 2, x: 5000, y: 5000, kind: 'ascendancyNotable', ascendancy: 'Lich' })],
+      centre: {
+        ascendancies: [
+          { ...disc, id: 'Lich', name: 'Lich' },
+          { ...disc, id: 'Abyssal Lich', name: 'Abyssal Lich', replaces: 'Lich' },
+        ],
+      },
+    });
+
+    expect(hitTest(scene, identity, 0, 0, 'Abyssal Lich')).toBe(2);
+  });
 });
 
 // --- edgeKey ----------------------------------------------------------------

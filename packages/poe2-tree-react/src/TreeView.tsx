@@ -5,6 +5,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as Reac
 import { isDragMotion, pinchSpread, resolveZoomLimits, wheelZoomFactor, ZOOM_STEP, zoomedViewport } from './interaction.js';
 import type { RenderResources } from './resources.js';
 import {
+  ascendancyDiscOwner,
   ascendancyOffset,
   DEFAULT_HIGHLIGHT,
   DEFAULT_TREE_COLORS,
@@ -882,16 +883,17 @@ function buildScene(
   // Active ascendancy disc: its nodes relocated into the hub. The originals stay
   // at their far world anchor in `nodeLayer`; this is the game-style overlay.
   const offset = ascendancyOffset(scene, activeAscendancy);
+  const discOwner = ascendancyDiscOwner(scene, activeAscendancy);
 
   if (offset) {
     ascLayer.position.set(offset.x, offset.y);
-    const ascConns = scene.connections.filter((conn) => conn.ascendancy === activeAscendancy);
+    const ascConns = scene.connections.filter((conn) => conn.ascendancy === discOwner);
     const ascGraphics = new Graphics();
     buildConnections(ascGraphics, ascConns, true, colors);
     ascLayer.addChild(ascGraphics);
 
     for (const node of scene.nodes) {
-      if (node.ascendancy === activeAscendancy) {
+      if (node.ascendancy === discOwner) {
         buildNode(ascLayer, node, resources, tex, colors);
 
         // Debug ids live on the (un-offset) label layer, so add the disc's
@@ -1213,8 +1215,9 @@ function drawOverlay(
   // The active ascendancy's nodes are drawn relocated into the hub; its overlay
   // (preview/highlight/hover) must carry the same offset or it lands far away.
   const ascOffset = ascendancyOffset(scene, activeAscendancy);
+  const discOwner = ascendancyDiscOwner(scene, activeAscendancy);
   const offsetFor = (ascendancy?: string): [number, number] =>
-    ascOffset && ascendancy && ascendancy === activeAscendancy ? [ascOffset.x, ascOffset.y] : [0, 0];
+    ascOffset && ascendancy && ascendancy === discOwner ? [ascOffset.x, ascOffset.y] : [0, 0];
 
   // Caller-defined edge groups, painted under the preview and rings. Each group
   // strokes its matching connectors in its colour; a later group wins where two

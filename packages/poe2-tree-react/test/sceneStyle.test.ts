@@ -8,6 +8,7 @@ import type { Scene } from '@poe2-toolkit/tree-core';
 import { describe, expect, it } from 'vitest';
 
 import {
+  ascendancyDiscOwner,
   ascendancyOffset,
   DEFAULT_HIGHLIGHT,
   DEFAULT_TREE_COLORS,
@@ -234,6 +235,27 @@ describe('ascendancyOffset', () => {
   it('returns null with no active disc or an unknown id', () => {
     expect(ascendancyOffset(scene, undefined)).toBeNull();
     expect(ascendancyOffset(scene, 'Nope')).toBeNull();
+  });
+});
+
+describe('ascendancyDiscOwner', () => {
+  const scene = {
+    centre: {
+      ascendancies: [
+        { id: 'Lich' },
+        { id: 'Abyssal Lich', replaces: 'Lich' },
+      ],
+    },
+  } as unknown as Scene;
+
+  it('maps a replacing ascendancy onto the nodes it plays on', () => {
+    expect(ascendancyDiscOwner(scene, 'Abyssal Lich')).toBe('Lich');
+    expect(ascendancyDiscOwner(scene, 'Lich')).toBe('Lich');
+  });
+
+  it('keeps an unknown id and returns undefined with no active disc', () => {
+    expect(ascendancyDiscOwner(scene, 'Nope')).toBe('Nope');
+    expect(ascendancyDiscOwner(scene, undefined)).toBeUndefined();
   });
 });
 

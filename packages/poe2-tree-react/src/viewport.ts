@@ -86,12 +86,13 @@ export function hitTest(scene: Scene, viewport: Viewport, sx: number, sy: number
     if (disc) {
       const dx = scene.centre.centre.x - disc.worldAnchor.x;
       const dy = scene.centre.centre.y - disc.worldAnchor.y;
+      const owner = disc.replaces ?? disc.id;
       const world = screenToWorld(viewport, sx, sy);
       let best: number | null = null;
       let bestDistSq = Infinity;
 
       for (const node of scene.nodes) {
-        if (node.ascendancy !== activeAscendancy || node.radius <= 0) {
+        if (node.ascendancy !== owner || node.radius <= 0) {
           continue;
         }
 
