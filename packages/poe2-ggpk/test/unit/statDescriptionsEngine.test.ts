@@ -162,6 +162,14 @@ describe('buildStatIndex', () => {
     expect(life.variants.every((v) => !v.text.includes('vie'))).toBe(true);
   });
 
+  it('keeps the later block for a stat described twice', () => {
+    const twice = buildStatIndex(
+      ['description', '\t1 bleed_duration', '\t1', '\t\t# "{0}% old"', 'description', '\t1 bleed_duration', '\t1', '\t\t# "{0}% new"'].join('\n'),
+    );
+
+    expect(renderBlock(twice, ['bleed_duration'], [5]).lines).toEqual(['5% new']);
+  });
+
   it('drops a leading byte-order mark', () => {
     const bom = buildStatIndex('﻿' + SAMPLE);
 

@@ -16,8 +16,9 @@
  * ```
  *
  * Every stat id is indexed to the block that renders it (a multi-stat block is
- * indexed under each of its stats); rendering picks the line whose per-stat
- * conditions all accept the supplied values.
+ * indexed under each of its stats, and a stat described twice keeps the later
+ * block); rendering picks the line whose per-stat conditions all accept the
+ * supplied values.
  */
 
 /** An inclusive numeric range a stat value must fall in for a line to apply. */
@@ -188,10 +189,9 @@ export function buildStatIndex(csd: string): StatIndex {
       variants.push(parseDescriptionLine(lines[i]!));
     }
 
+    // A stat described twice takes its later block, which supersedes the earlier one.
     for (const id of statIds) {
-      if (!byStat.has(id)) {
-        byStat.set(id, { statIds, variants });
-      }
+      byStat.set(id, { statIds, variants });
     }
   }
 
