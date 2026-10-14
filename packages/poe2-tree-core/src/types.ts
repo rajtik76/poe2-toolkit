@@ -61,6 +61,16 @@ export interface TreeNode {
   isAscendancyStart?: boolean;
   /** GGG: `isGenericAttribute`. */
   isAttribute?: boolean;
+  /** Parent of a pick-one set: at most one linked {@link TreeNode.isMultipleChoiceOption} is allocated. */
+  isMultipleChoice?: boolean;
+  /** One pick of a {@link TreeNode.isMultipleChoice} parent; costs no ascendancy point. */
+  isMultipleChoiceOption?: boolean;
+  /** Costs no passive point. */
+  isFreeAllocate?: boolean;
+  /** Holds a jewel socket, so it is always basic (shared by both weapon sets). */
+  containJewelSocket?: boolean;
+  /** Its stats apply to the equipped body armour (Smith of Kitava). */
+  applyToArmour?: boolean;
 
   /** Background pattern key (masteries and notables). */
   activeEffectImage?: string;

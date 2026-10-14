@@ -66,6 +66,11 @@ interface GggNode {
   noRadius?: boolean;
   isGenericAttribute?: boolean;
   isAscendancyStart?: boolean;
+  isMultipleChoice?: boolean;
+  isMultipleChoiceOption?: boolean;
+  isFreeAllocate?: boolean;
+  containJewelSocket?: boolean;
+  applyToArmour?: boolean;
   activeEffectImage?: string;
   ascendancyId?: string;
   classStartIndex?: number[];
@@ -224,6 +229,11 @@ function normalizeNode(
     ...(raw.isMastery ? { isMastery: true } : {}),
     ...(raw.isAscendancyStart ? { isAscendancyStart: true } : {}),
     ...(raw.isGenericAttribute ? { isAttribute: true } : {}),
+    ...(raw.isMultipleChoice ? { isMultipleChoice: true } : {}),
+    ...(raw.isMultipleChoiceOption ? { isMultipleChoiceOption: true } : {}),
+    ...(raw.isFreeAllocate ? { isFreeAllocate: true } : {}),
+    ...(raw.containJewelSocket ? { containJewelSocket: true } : {}),
+    ...(raw.applyToArmour ? { applyToArmour: true } : {}),
     ...(raw.activeEffectImage !== undefined ? { activeEffectImage: raw.activeEffectImage } : {}),
     ...(ascendancyName !== undefined ? { ascendancyName } : {}),
     ...(raw.flavourText !== undefined ? { flavourText: joinFlavour(raw.flavourText) } : {}),

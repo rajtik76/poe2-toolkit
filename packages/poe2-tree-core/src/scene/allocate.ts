@@ -269,9 +269,9 @@ export interface WeaponSetAllocation {
   weaponSets: Record<number, WeaponSet>;
 }
 
-/** Keystones, jewel sockets and ascendancy nodes are always shared (mode 0), as in PoB. A path may run through them. */
+/** Keystones, jewel sockets, socket holders and ascendancy nodes are always shared (mode 0), as in PoB. A path may run through them. */
 function isForcedBasic(node: TreeNode | undefined): boolean {
-  return !!(node && (node.isKeystone || node.isJewelSocket || node.ascendancyName));
+  return !!(node && (node.isKeystone || node.isJewelSocket || node.containJewelSocket || node.ascendancyName));
 }
 
 function modeOf(weaponSets: Readonly<Record<number, WeaponSet>>, id: number): AllocMode {
@@ -432,5 +432,55 @@ export function toggleAscendancyAllocation(
 
   const nextAsc = toggleAllocation(data, start, ascAllocated, target, graph);
 
-  return [...rest, ...nextAsc];
+  return [...rest, ...keepOneChoice(data, graph, start, ascAllocated, nextAsc)];
+}
+
+/**
+ * A newly allocated multiple-choice option drops its allocated siblings and the
+ * nodes only they connect, as in PoB.
+ */
+function keepOneChoice(
+  data: TreeData,
+  graph: TreeGraph,
+  start: number,
+  before: ReadonlySet<number>,
+  next: number[],
+): number[] {
+  let allocated = new Set(next);
+
+  for (const picked of next) {
+    if (before.has(picked) || !data.nodes[picked]?.isMultipleChoiceOption) {
+      continue;
+    }
+
+    for (const sibling of choiceSiblings(data, picked)) {
+      if (allocated.has(sibling)) {
+        const removed = removalSet(graph, start, allocated, sibling);
+        allocated = new Set([...allocated].filter((id) => !removed.has(id)));
+      }
+    }
+  }
+
+  return next.filter((id) => allocated.has(id));
+}
+
+/** The other options of every multiple-choice parent `option` hangs off. */
+function choiceSiblings(data: TreeData, option: number): number[] {
+  const siblings = new Set<number>();
+
+  for (const parentLink of data.nodes[option]?.connections ?? []) {
+    const parent = data.nodes[parentLink.id];
+
+    if (!parent?.isMultipleChoice) {
+      continue;
+    }
+
+    for (const link of parent.connections) {
+      if (link.id !== option && data.nodes[link.id]?.isMultipleChoiceOption) {
+        siblings.add(link.id);
+      }
+    }
+  }
+
+  return [...siblings];
 }
