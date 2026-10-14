@@ -102,17 +102,42 @@ one place rather than being reimplemented per extractor:
 | `encodePng(width, height, rgba)` | Encode RGBA8 to a PNG buffer (Node zlib, no native deps). |
 | `decodePng(bytes)` | Decode an 8-bit RGBA/RGB PNG to RGBA8. |
 | `buildStatIndex(csd)` | Parse a `stat_descriptions.csd` (UTF-16 text) into a per-stat index. |
-| `renderBlock(index, statIds, vals)` | Render numeric `(stat, value)` pairs into human-readable lines. |
+| `csdInclude(csd)` | The `include "..."` path a `.csd` file falls back to, or `null`. |
+| `renderBlock(index, statIds, vals, options?)` | Render numeric `(stat, value)` pairs into human-readable lines, through one index or a chain of them. |
 | `decodeDdsIcons(source, ddsPaths, transform?, concurrency?)` | Decode a set of distinct DDS paths to PNG, skipping and reporting what the source can't serve. |
 | `decodeSpriteIcons(source, spriteNames, concurrency?)` | Decode a set of distinct UIImages sprite names to PNG, cropped to each name's rect. |
 | `mapConcurrent(items, concurrency, fn)` | Run `fn` over `items` with at most `concurrency` calls in flight, preserving output order. |
 
 `buildStatIndex` returns a `StatIndex`; pass it to `renderBlock` along with
 parallel `statIds`/`vals` arrays. `renderBlock` returns a `RenderedBlock` with
-`lines` (the rendered text) and `unresolved` (any stat ids with no matching
-block). `RgbaImage` (`{ width, height, rgba }`) is the shape returned by every
-image decoder. All of these types are exported; see the exported types for full
-field docs.
+`lines` (the rendered text), `lineStatIds` (the supplied stats each line
+renders) and `unresolved` (any stat ids with no matching block). `RgbaImage`
+(`{ width, height, rgba }`) is the shape returned by every image decoder. All of
+these types are exported; see the exported types for full field docs.
+
+The renderer follows the game's description files the way Path of Building
+reads them:
+
+- **Value handlers** (`per_minute_to_per_second`, `milliseconds_to_seconds_2dp`,
+  `divide_by_ten_1dp_if_required`, `negate_and_double`, ...) transform a value
+  before it is printed, keeping the decimals the handler asks for.
+- **A line is chosen by its conditions** (`#`, `a|b`, `n`, `!n`). A value no
+  line accepts renders nothing, and a block whose values are all zero is hidden.
+  `table_only` lines (the in-game skill table) never render; `gem_quality` lines
+  render only with `options.quality`, for a gem's quality bonus.
+- **A stat described twice keeps its later block**, and `no_description <stat>`
+  hides a stat outright.
+- **Scopes:** a description file `include`s the one it falls back to (a skill's
+  own file -> `skill_stat_descriptions.csd` -> the gem files ->
+  `stat_descriptions.csd`). Pass `renderBlock` the chain of indexes, most
+  specific first - follow it with `csdInclude` - and each stat resolves in the
+  first file that describes it.
+- **Order:** lines come in input order, or with `options.descriptionOrder` the
+  way the game lists them: included files' lines first, each file in its own
+  order.
+
+`options.selectBy` picks lines by other values than it renders, for a range
+renderer that gives a zero end of a range (`0-10`) the line of its other end.
 
 `decodeDdsIcons` is the icon-decode loop every icon-shipping extractor (item,
 gem, rune) runs: given a `DdsSource` (anything with a `dds(path)` method) and an

@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildStatIndex, renderBlock } from '../../src/statDescriptions';
+import { buildStatIndex, csdInclude, renderBlock } from '../../src/statDescriptions';
 
 const SAMPLE = [
   'description',
@@ -146,6 +146,15 @@ describe('value handlers', () => {
   });
 });
 
+describe('csdInclude', () => {
+  it('reads the file a description file includes', () => {
+    expect(csdInclude('\uFEFFinclude "Data/StatDescriptions/skill_stat_descriptions.csd"\ndescription')).toBe(
+      'Data/StatDescriptions/skill_stat_descriptions.csd',
+    );
+    expect(csdInclude('description\n\t1 maximum_life')).toBeNull();
+  });
+});
+
 describe('buildStatIndex', () => {
   it('indexes a multi-stat block under each of its stats', () => {
     const min = index.byStat.get('minimum_added_fire_damage');
@@ -160,6 +169,14 @@ describe('buildStatIndex', () => {
 
     expect(life.variants).toHaveLength(2);
     expect(life.variants.every((v) => !v.text.includes('vie'))).toBe(true);
+  });
+
+  it('hides a stat marked no_description, even one an included file describes', () => {
+    const skill = buildStatIndex(['no_description maximum_life', 'description', '\t1 body_armour_+%', '\t1', '\t\t# "{0}% Armour"'].join('\n'));
+    const out = renderBlock([skill, index], ['maximum_life', 'body_armour_+%'], [10, 5]);
+
+    expect(out.lines).toEqual(['5% Armour']);
+    expect(out.unresolved).toEqual([]);
   });
 
   it('keeps the later block for a stat described twice', () => {
@@ -308,10 +325,17 @@ describe('renderBlock', () => {
     ]);
   });
 
-  it('falls back to a table_only row for a gem stat table, after the regular lines', () => {
-    expect(renderBlock(index, ['base_number_of_projectiles'], [1], { table: true }).lines).toEqual(['Projectiles@1']);
-    expect(renderBlock(index, ['base_number_of_projectiles'], [3], { table: true }).lines).toEqual([
-      'Fires 3 Projectiles',
+  it('resolves a stat in the most specific scope, listing included-file lines first', () => {
+    const skill = buildStatIndex(['description', '\t1 body_armour_+%', '\t1', '\t\t# "Nova radius is {0} metres" divide_by_ten_1dp_if_required 1'].join('\n'));
+    const out = renderBlock([skill, index], ['body_armour_+%', 'maximum_life'], [32, 10], { descriptionOrder: true });
+
+    expect(out.lines).toEqual(['+10 to maximum Life', 'Nova radius is 3.2 metres']);
+    expect(out.lineStatIds).toEqual([['maximum_life'], ['body_armour_+%']]);
+  });
+
+  it('reports the supplied stats each line renders', () => {
+    expect(renderBlock(index, ['minimum_added_fire_damage', 'maximum_added_fire_damage'], [3, 7]).lineStatIds).toEqual([
+      ['minimum_added_fire_damage', 'maximum_added_fire_damage'],
     ]);
   });
 

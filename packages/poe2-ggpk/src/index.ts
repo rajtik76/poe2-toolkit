@@ -13,7 +13,7 @@ export type { CdnSource, CdnSourceOptions, GgpkImageSource, SpriteRef } from './
 export { decodeDds } from './image/dds.js';
 export { encodePng, decodePng } from './image/png.js';
 
-export { buildStatIndex, renderBlock } from './statDescriptions.js';
+export { buildStatIndex, csdInclude, renderBlock } from './statDescriptions.js';
 export type { StatIndex, RenderedBlock, RenderOptions } from './statDescriptions.js';
 
 export { decodeDdsIcons } from './decodeDdsIcons.js';

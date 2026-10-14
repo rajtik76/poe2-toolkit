@@ -37,7 +37,7 @@ interface Variant {
   handlers: string[];
   /** A `gem_quality` line: describes a gem's quality bonus, used only when rendering one. */
   gemQuality: boolean;
-  /** A `table_only` line: a `label@value` row of a gem's stat table, never a tooltip line. */
+  /** A `table_only` line: a `label@value` row of the in-game skill table, never a tooltip line. */
   tableOnly: boolean;
 }
 
@@ -74,17 +74,17 @@ export interface RenderOptions {
    * description file, instead of in the order of `statIds`.
    */
   descriptionOrder?: boolean;
-  /**
-   * Render for a gem's stat table: a stat no regular line describes falls back
-   * to its `table_only` row, printed as GGG writes it (`label@value`).
-   */
-  table?: boolean;
 }
 
 /** The rendered lines of a stat block, plus any stat ids that had no block. */
 export interface RenderedBlock {
   /** Rendered, human-readable text lines for the resolved stats. */
   lines: string[];
+  /**
+   * The supplied stat ids each line renders, parallel to {@link RenderedBlock.lines}
+   * (a block renders several stats together, e.g. min/max added damage).
+   */
+  lineStatIds: string[][];
   /** Stat ids that matched no description block, in input order. */
   unresolved: string[];
 }
@@ -162,7 +162,19 @@ export function buildStatIndex(csd: string): StatIndex {
   let i = 0;
 
   while (i < lines.length) {
-    if (lines[i]!.trim() !== 'description') {
+    const marker = lines[i]!.trim();
+    // `no_description <stat>` hides a stat: an empty block that supersedes any
+    // earlier one (e.g. a skill's own file hiding a flag its included files describe).
+    const hidden = marker.match(/^no_description\s+(\S+)$/)?.[1];
+
+    if (hidden) {
+      byStat.set(hidden, { statIds: [hidden], variants: [], order });
+      order += 1;
+      i += 1;
+      continue;
+    }
+
+    if (marker !== 'description') {
       i += 1;
       continue;
     }
@@ -363,11 +375,12 @@ function formatValue({ value, format }: DisplayValue): string {
  * Pick the variant whose per-stat conditions all accept the raw values, or
  * `null` when none does: a value the block has no line for is not displayed
  * (`1|#` and `#|-1` lines leave 0 out on purpose). `gem_quality` lines take
- * part only when rendering a gem's quality bonus; `table_only` lines only for
- * a gem's stat table, and only once no regular line accepts the values.
+ * part only when rendering a gem's quality bonus; `table_only` lines never do,
+ * as Path of Building drops them.
  */
 function selectVariant(variants: Variant[], rawValues: number[], options: RenderOptions): Variant | null {
   const accepts = (variant: Variant): boolean =>
+    !variant.tableOnly &&
     (!variant.gemQuality || options.quality === true) &&
     variant.conditions.every((cond, i) => {
       const value = rawValues[i] ?? 0;
@@ -375,11 +388,7 @@ function selectVariant(variants: Variant[], rawValues: number[], options: Render
       return value >= cond.min && value <= cond.max && value !== cond.except;
     });
 
-  return (
-    variants.find((variant) => !variant.tableOnly && accepts(variant)) ??
-    (options.table ? variants.find((variant) => variant.tableOnly && accepts(variant)) : undefined) ??
-    null
-  );
+  return variants.find(accepts) ?? null;
 }
 
 /**
@@ -412,23 +421,54 @@ function stripBbcode(text: string): string {
 }
 
 /**
+ * The `include "..."` path a `.csd` file names on its first line (the description
+ * file it falls back to), or `null` when it includes none. Description files form
+ * a chain this way: a skill's own file, then `skill_stat_descriptions.csd`, then
+ * the gem files, then `stat_descriptions.csd`.
+ *
+ * @param csd - The decoded UTF-16 text of a `.csd` file.
+ */
+export function csdInclude(csd: string): string | null {
+  return csd.match(/^\uFEFF?\s*include "([^"]+)"/m)?.[1] ?? null;
+}
+
+/** Find the block for a stat in one index, also under its "base_" prefixed id. */
+function findRecord(index: StatIndex, statId: string): StatRecord | undefined {
+  // Some stats are keyed with a "base_" prefix in the description file
+  // (e.g. curse_duration_+% -> base_curse_duration_+%).
+  return index.byStat.get(statId) ?? index.byStat.get(`base_${statId}`);
+}
+
+/**
  * Render a full stat block. Each stat resolves to its block; a block may render
  * several stats together (e.g. min/max added damage), so its placeholders are
  * filled from whichever of those stats it provides (others default to 0) and all
  * are marked consumed so the line is not repeated. A block renders no line when
  * all its values are zero or when none of its variants accepts the values.
  *
- * @param index - The {@link StatIndex} from {@link buildStatIndex}.
+ * Given a chain of indexes (a description file followed by the files it
+ * includes, see {@link csdInclude}), each stat resolves in the first index that
+ * describes it, the way Path of Building resolves a stat-description scope. With
+ * `descriptionOrder`, lines from included files then come first, each file's in
+ * its own order.
+ *
+ * @param index - The {@link StatIndex} from {@link buildStatIndex}, or a chain of them, most specific first.
  * @param statIds - Stat ids to render.
  * @param vals - Raw stat values, parallel to `statIds`.
  * @param options - See {@link RenderOptions}.
  * @returns A {@link RenderedBlock} of rendered lines and any unresolved stat ids.
  */
-export function renderBlock(index: StatIndex, statIds: string[], vals: number[], options: RenderOptions = {}): RenderedBlock {
+export function renderBlock(
+  index: StatIndex | StatIndex[],
+  statIds: string[],
+  vals: number[],
+  options: RenderOptions = {},
+): RenderedBlock {
+  const chain = Array.isArray(index) ? index : [index];
   const valueByStat = new Map(statIds.map((id, i) => [id, vals[i]!]));
   const selectByStat = new Map(statIds.map((id, i) => [id, (options.selectBy ?? vals)[i]!]));
   const consumed = new Set<string>();
-  const rendered: { line: string; order: number }[] = [];
+  const rendered: { line: string; stats: string[]; depth: number; order: number }[] = [];
   const unresolved: string[] = [];
 
   for (const statId of statIds) {
@@ -436,14 +476,19 @@ export function renderBlock(index: StatIndex, statIds: string[], vals: number[],
       continue;
     }
 
-    // Some stats are keyed with a "base_" prefix in the description file
-    // (e.g. curse_duration_+% -> base_curse_duration_+%).
-    const record = index.byStat.get(statId) ?? index.byStat.get(`base_${statId}`);
+    const depth = chain.findIndex((scope) => findRecord(scope, statId));
+    const record = depth >= 0 ? findRecord(chain[depth]!, statId) : undefined;
 
     if (!record) {
       unresolved.push(statId);
       continue;
     }
+
+    const supplied = record.statIds.flatMap((id) => {
+      const stripped = id.replace(/^base_/, '');
+
+      return valueByStat.has(id) ? [id] : valueByStat.has(stripped) ? [stripped] : [];
+    });
 
     // The block's stat ids may carry a "base_" prefix the source stat lacks, so
     // fall back to the prefix-stripped id when reading the value.
@@ -457,26 +502,24 @@ export function renderBlock(index: StatIndex, statIds: string[], vals: number[],
     if (variant?.text) {
       rendered.push({
         line: stripBbcode(fillTemplate(variant.text, applyHandlers(rawValues, variant.handlers))),
+        stats: supplied,
+        depth,
         order: record.order,
       });
     }
 
-    for (const id of record.statIds) {
-      const stripped = id.replace(/^base_/, '');
-
-      if (valueByStat.has(id)) {
-        consumed.add(id);
-      }
-
-      if (valueByStat.has(stripped)) {
-        consumed.add(stripped);
-      }
+    for (const id of supplied) {
+      consumed.add(id);
     }
   }
 
   if (options.descriptionOrder) {
-    rendered.sort((a, b) => a.order - b.order);
+    rendered.sort((a, b) => b.depth - a.depth || a.order - b.order);
   }
 
-  return { lines: rendered.map((entry) => entry.line), unresolved };
+  return {
+    lines: rendered.map((entry) => entry.line),
+    lineStatIds: rendered.map((entry) => entry.stats),
+    unresolved,
+  };
 }
