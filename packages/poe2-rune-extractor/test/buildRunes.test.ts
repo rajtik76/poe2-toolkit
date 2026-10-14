@@ -19,13 +19,18 @@ const SOCKET_DDS = {
   'ui/socket-empty.png': 'art/textures/interface/2d/2dart/uiimages/ingame/soulcoressocketempty.dds',
 };
 
-/** Minimal tables: a levelled core, a level-0 core, a [DNT] placeholder, an art-less core. */
+/**
+ * Minimal tables: a levelled core, a level-0 core, a [DNT] placeholder, an art-less
+ * core, a helmet rune with a bonded effect, and an unused [DNT-Unused] rune.
+ */
 const TABLES: Record<string, TableRow[]> = {
   BaseItemTypes: [
     { Name: 'Iron Soul Core', ItemVisualIdentity: 0 },
     { Name: 'Body Soul Core', ItemVisualIdentity: 1 },
     { Name: 'Dev Core [DNT]', ItemVisualIdentity: 2 },
     { Name: 'Dual Soul Core', ItemVisualIdentity: null },
+    { Name: 'Rune of Memory ', ItemVisualIdentity: null },
+    { Name: '[DNT-Unused] Rune of Chance', ItemVisualIdentity: null },
   ],
   ItemVisualIdentity: [
     { DDSFile: 'Art/2DItems/SoulCores/iron.dds' },
@@ -37,9 +42,16 @@ const TABLES: Record<string, TableRow[]> = {
     { BaseItemType: 1, RequiredLevel: 0 },
     { BaseItemType: 2, RequiredLevel: 5 },
     { BaseItemType: 3, RequiredLevel: 20 },
+    { BaseItemType: 4, RequiredLevel: 50 },
+    { BaseItemType: 5, RequiredLevel: 1 },
   ],
-  SoulCoreStatCategories: [{ Display: 'All Equipment' }, { Display: '[Martial|Martial Weapon]' }],
-  Stats: [{ Id: 'additional_dexterity' }],
+  SoulCoreStatCategories: [
+    { Id: 'All', Display: 'All Equipment' },
+    { Id: 'Martial Weapon', Display: '[Martial|Martial Weapon]' },
+    // GGG leaves some displays empty; the slot then reads as the category id.
+    { Id: 'Helmet', Display: '' },
+  ],
+  Stats: [{ Id: 'additional_dexterity' }, { Id: 'experience_gain_+%' }, { Id: 'infusion_chance_%' }],
   SoulCoreStats: [
     { SoulCore: 0, StatCategory: 0, Stats: [0], StatsValues: [9] },
     { SoulCore: 1, StatCategory: 1, Stats: [0], StatsValues: [4] },
@@ -47,12 +59,29 @@ const TABLES: Record<string, TableRow[]> = {
     // Two stat-category rows on one core -> two slot-prefixed effect lines.
     { SoulCore: 3, StatCategory: 0, Stats: [0], StatsValues: [5] },
     { SoulCore: 3, StatCategory: 1, Stats: [0], StatsValues: [2] },
+    // Dexterity is described after experience, so the lines come out experience first.
+    { SoulCore: 4, StatCategory: 2, Stats: [0, 1], StatsValues: [1, 2], BondedStats: [2], BondedStatsValues: [12] },
+    { SoulCore: 5, StatCategory: 0, Stats: [0], StatsValues: [1] },
   ],
 };
 
 // A one-block stat-description file the engine can parse: any value renders
 // "+{value} to Dexterity".
-const CSD = ['description', '\t1 additional_dexterity', '\t1', '\t\t# "+{0} to Dexterity"', ''].join('\n');
+const CSD = [
+  'description',
+  '\t1 experience_gain_+%',
+  '\t1',
+  '\t\t# "{0}% increased Experience gain"',
+  'description',
+  '\t1 additional_dexterity',
+  '\t1',
+  '\t\t# "+{0} to Dexterity"',
+  'description',
+  '\t1 infusion_chance_%',
+  '\t1',
+  '\t\t# "{0}% chance to gain an\\nadditional Infusion"',
+  '',
+].join('\n');
 
 /** A fake source: tables + the `.csd` served as UTF-16 bytes, and decoded DDS images. */
 function fakeSource(
@@ -80,7 +109,19 @@ describe('buildRunes', () => {
     expect(runes['Iron Soul Core']).toEqual({
       levelRequirement: 12,
       effects: ['All Equipment: +9 to Dexterity'],
+      bonded: [],
       icon: 'Art/2DItems/SoulCores/iron.dds',
+    });
+  });
+
+  it('labels a slot with no display by its category id, in description order, with bonded effects', async () => {
+    const runes = await buildRunes(fakeSource());
+
+    expect(runes['Rune of Memory']).toEqual({
+      levelRequirement: 50,
+      effects: ['Helmet: 2% increased Experience gain', 'Helmet: +1 to Dexterity'],
+      bonded: ['Helmet: 12% chance to gain an\nadditional Infusion'],
+      icon: null,
     });
   });
 
@@ -112,6 +153,7 @@ describe('buildRunes', () => {
     const runes = await buildRunes(fakeSource());
 
     expect(runes['Dev Core [DNT]']).toBeUndefined();
+    expect(runes['[DNT-Unused] Rune of Chance']).toBeUndefined();
   });
 
   it('throws when the stat-description file is absent', async () => {

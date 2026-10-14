@@ -77,6 +77,12 @@ The rest of this section is the shape and the rules the types alone don't tell y
     "Wand or Staff: Gain 8% of Damage as Extra Fire Damage",
     "Armour: +14% to Fire Resistance"
   ],
+  "bonded": [
+    "Martial Weapon: 30% increased Ignite Magnitude",
+    "Wand or Staff: 30% increased Ignite Magnitude",
+    "Armour: +20 to maximum Life",
+    "Armour: +20 to maximum Mana"
+  ],
   "icon": "Art/2DItems/Currency/Runes/FireRune.dds"
 }
 ```
@@ -85,8 +91,13 @@ The rest of this section is the shape and the rules the types alone don't tell y
   requires none (a `RequiredLevel` of 0 becomes `null`).
 - **`effects`** are rendered stat lines, each `"<slot>: <rendered stat>"`. The
   slot comes from `SoulCoreStatCategories.Display` (e.g. `All Equipment`,
-  `Martial Weapon`, `Armour`); one soul core groups several slot categories, so
-  a single rune's effects span more than one slot.
+  `Martial Weapon`, `Armour`), or the category's `Id` where GGG leaves the
+  display empty (`Helmet`, `Boots`, `Body Armour`, ...); one soul core groups
+  several slot categories, so a single rune's effects span more than one slot.
+  Within a slot the lines follow the description file's order, and a multi-line
+  stat keeps a real newline.
+- **`bonded`** are the bonded effects (`SoulCoreStats.BondedStats`), in the same
+  `"<slot>: <rendered stat>"` form; empty when the rune has none.
 - **`icon`** is the raw GGPK DDS path of the soul core base's art (`null` if none),
   decoded to PNG by `buildRuneIcons`.
 
@@ -143,7 +154,9 @@ All four flags are required. It writes `runes.json` and the icon PNG tree under
 - The three item-socket UI textures are decoded by `buildSocketIcons` from fixed
   GGG paths under `art/textures/interface/2d/2dart/uiimages/ingame/` into the same
   stable-named, skip-and-report contract.
-- `[DNT]` dev placeholders are dropped; a `RequiredLevel` of 0 becomes `null`.
+- Cores whose name contains `DNT` (`[DNT]`, `[DNT-Unused]`) are dropped, names
+  are trimmed, and a `RequiredLevel` of 0 becomes `null`. These rules follow Path
+  of Building's soul-core export.
 
 ## Attributions and legal
 
