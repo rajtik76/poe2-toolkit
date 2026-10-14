@@ -19,13 +19,14 @@ const LINE = 2147483647;
  * Group 0: a jewel socket (10), a notable (11) linked to a node of a disabled
  * ascendancy (12), and a Sinister socket (13). Group 1: only that disabled
  * ascendancy's node (20). Group 2: the Lich start (30), a Lich notable holding a
- * socket (31) and a Lich node Abyssal Lich overrides (32).
+ * socket (31) and a Lich node Abyssal Lich overrides (32). Group 3: a keystone
+ * carrying every optional flag (50).
  */
 function graph(): Uint8Array {
   const w = new PsgWriter();
   w.u8(3).u8(1).u8(2).u8(1).u8(12); // version, graphType, 2 orbit rings: 1 and 12 slots
   w.u32(0); // no roots
-  w.u32(3); // three groups
+  w.u32(4); // four groups
 
   w.f32(0).f32(0).u32(0).u32(0).u8(0).u32(3);
   w.u32(10).u32(0).u32(0).u32(1).u32(11).i32(LINE);
@@ -39,6 +40,9 @@ function graph(): Uint8Array {
   w.u32(30).u32(0).u32(0).u32(1).u32(31).i32(LINE);
   w.u32(31).u32(1).u32(0).u32(1).u32(32).i32(LINE);
   w.u32(32).u32(1).u32(3).u32(0);
+
+  w.f32(1500).f32(0).u32(0).u32(0).u8(0).u32(1);
+  w.u32(50).u32(0).u32(0).u32(0);
 
   return w.build();
 }
@@ -86,6 +90,12 @@ const PASSIVES: TableRow[] = [
   // A node GGG took off the tree but still lists a class override for.
   { Id: 'removed', PassiveSkillGraphId: 40, Name: 'Removed' },
   { Id: 'removed_witch', PassiveSkillGraphId: 41, Name: 'Removed for Witch' },
+  // Every optional flag set, revealed by the Lich once the first jewel socket is allocated.
+  {
+    Id: 'flagged', PassiveSkillGraphId: 50, Name: 'Flagged', IsKeystone: true, IsAttribute: true,
+    IsMultipleChoice: true, IsMultipleChoiceOption: true, IsFree: true, ApplyToArmour: true,
+    Characters: [0], UnlockedBy: [0], VisibleForAscendancy: 0,
+  },
 ];
 
 const TABLES: Record<string, TableRow[]> = {
@@ -171,6 +181,23 @@ describe('buildTree', async () => {
       expect.objectContaining({ id: 'Witch3b', name: 'Abyssal Lich', replaces: 'Witch3', overridePairs: { 32: 33 } }),
     ]);
     expect(tree.nodes[33]).toEqual({ skill: 33, name: 'Abyssal Life', icon: '', stats: ['5% more Armour'] });
+  });
+});
+
+describe('buildTree node flags', async () => {
+  const tree = await buildTree(source);
+
+  it('exports each optional flag a node sets', () => {
+    expect(tree.nodes[50]).toMatchObject({
+      isKeystone: true,
+      isGenericAttribute: true,
+      isMultipleChoice: true,
+      isMultipleChoiceOption: true,
+      isFreeAllocate: true,
+      applyToArmour: true,
+      classStartIndex: [0],
+      unlockConstraint: { ascendancy: 'Lich', nodes: [10] },
+    });
   });
 });
 
