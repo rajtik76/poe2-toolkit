@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#
+# Shared pre-push gate, tracked and run for everyone.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+#
+set -euo pipefail
+
+# ── Full CI gate, run locally so a lint/typecheck/test failure never reaches
+# the actual CI workflow (see .github/workflows/ci.yml, which runs the same
+# `npm run ci`) ─────────────────────────────────────────────────────────────
+npm run ci

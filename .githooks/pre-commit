@@ -1,20 +1,16 @@
 #!/usr/bin/env bash
 #
-# Shared pre-commit gate, tracked and run for everyone.
+# Shared pre-commit gate, tracked and run for everyone. The full CI gate runs
+# before push instead (see pre-push), so committing stays fast.
 #
 # Enable once per clone:  git config core.hooksPath .githooks
 #
 set -euo pipefail
 
-# ── Optional local-only checks (owner's machine, fail-fast before anything else) ──
+# ── Optional local-only checks (owner's machine) ──────────────────────────────
 # --git-common-dir points at the real .git (unaffected by core.hooksPath), so the
 # local hook is found in .git/hooks even while this shared hook runs from .githooks.
 local_hook="$(git rev-parse --git-common-dir)/hooks/pre-commit.local"
 if [ -x "$local_hook" ]; then
   "$local_hook" "$@"
 fi
-
-# ── Full CI gate, run locally so a lint/typecheck/test failure never reaches
-# the actual CI workflow (see .github/workflows/ci.yml, which runs the same
-# `npm run ci`) ─────────────────────────────────────────────────────────────
-npm run ci
