@@ -83,6 +83,9 @@ const PASSIVES: TableRow[] = [
     Stats: [0, 0, 0, 0, 0, 2], Stat6Value: 30,
   },
   { Id: 'abyssal_small', PassiveSkillGraphId: 33, Name: '[Abyss|Abyssal] Life', Stats: [0], Stat1Value: 5 },
+  // A node GGG took off the tree but still lists a class override for.
+  { Id: 'removed', PassiveSkillGraphId: 40, Name: 'Removed' },
+  { Id: 'removed_witch', PassiveSkillGraphId: 41, Name: 'Removed for Witch' },
 ];
 
 const TABLES: Record<string, TableRow[]> = {
@@ -97,7 +100,7 @@ const TABLES: Record<string, TableRow[]> = {
     { Id: 'Duelist1', Name: 'Unreleased', Character: 0, Disabled: true },
   ],
   PassiveJewelSlots: [],
-  ClassPassiveSkillOverrides: [],
+  ClassPassiveSkillOverrides: [{ CharacterToOverrideFor: 0, SkillToOverride: 9, Override: 10 }],
   AscendancyPassiveSkillOverrides: [{ AscendancyToOverrideFor: 1, SkillToOverride: 7, Override: 8 }],
   QuestStaticRewards: [],
   ExperienceLevels: [{ Level: 100 }],
@@ -168,6 +171,15 @@ describe('buildTree', async () => {
       expect.objectContaining({ id: 'Witch3b', name: 'Abyssal Lich', replaces: 'Witch3', overridePairs: { 32: 33 } }),
     ]);
     expect(tree.nodes[33]).toEqual({ skill: 33, name: 'Abyssal Life', icon: '', stats: ['5% more Armour'] });
+  });
+});
+
+describe('buildTree overrides', async () => {
+  const tree = await buildTree(source);
+
+  it('drops an override whose base node is no longer on the tree', () => {
+    expect(tree.classes[0]!.overridePairs).toEqual({});
+    expect(tree.nodes[41]).toBeUndefined();
   });
 });
 

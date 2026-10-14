@@ -112,7 +112,8 @@ coordinates and stat text vary per extract. The rules the types don't spell out:
 - **Geometry is optional.** Graph nodes carry `group`/`orbit`/`orbitIndex`/`x`/`y`
   and `out`; data-only override nodes (swapped in per class, or per ascendancy
   that replaces another, like Abyssal Lich for Lich) carry only
-  `skill`/`name`/`icon`/`stats`, no coordinates or edges.
+  `skill`/`name`/`icon`/`stats`, no coordinates or edges. An override whose base
+  node GGG has taken off the tree is left out.
 - **The passive-point budget is split.** `maxWeaponSetPoints` is every campaign
   weapon-set passive point; `maxBasicPoints` is the level-based budget **plus**
   `maxWeaponSetPoints` folded in, so it already covers spending those points on

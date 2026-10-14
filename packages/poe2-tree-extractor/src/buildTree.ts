@@ -787,7 +787,8 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     const base = PassiveSkills[row.SkillToOverride]?.PassiveSkillGraphId;
     const target = PassiveSkills[row.Override]?.PassiveSkillGraphId;
 
-    if (base == null || target == null) {
+    // GGG keeps overrides for nodes it has since taken off the tree; skip those.
+    if (base == null || target == null || !nodes[base]) {
       continue;
     }
 
@@ -806,7 +807,7 @@ export async function buildTree(source: GgpkSource): Promise<TreeExport> {
     const base = PassiveSkills[row.SkillToOverride]?.PassiveSkillGraphId;
     const target = PassiveSkills[row.Override]?.PassiveSkillGraphId;
 
-    if (base == null || target == null) {
+    if (base == null || target == null || !nodes[base]) {
       continue;
     }
 
