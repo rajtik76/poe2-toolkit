@@ -281,15 +281,25 @@ async function readCsd(source: GgpkSource, path: string): Promise<string> {
  * Render one stat id against the skill-specific index first, falling back to
  * the general (item-mod-shared) index for stats defined there instead (e.g.
  * `number_of_chains`, damage-roll stats). `null` when neither resolves it.
+ * Rendered for the gem's stat table; `quality` renders a quality bonus, which
+ * has lines of its own.
  */
-function renderStat(skillIndex: StatIndex, generalIndex: StatIndex, ids: string[], values: number[]): string | null {
-  const first = renderBlock(skillIndex, ids, values);
+function renderStat(
+  skillIndex: StatIndex,
+  generalIndex: StatIndex,
+  ids: string[],
+  values: number[],
+  quality = false,
+): string | null {
+  const first = renderBlock(skillIndex, ids, values, { quality, table: true });
 
   if (first.lines.length > 0 || first.unresolved.length === 0) {
     return first.lines.join(' ') || null;
   }
 
-  return renderBlock(generalIndex, first.unresolved, first.unresolved.map((id) => values[ids.indexOf(id)]!)).lines.join(' ') || null;
+  const fallbackValues = first.unresolved.map((id) => values[ids.indexOf(id)]!);
+
+  return renderBlock(generalIndex, first.unresolved, fallbackValues, { quality, table: true }).lines.join(' ') || null;
 }
 
 /** One `GemStatLine` per id in a single-value stat/value list (e.g. `ConstantStats`, `AdditionalStats`). */
@@ -542,13 +552,13 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
         ? [
             ...(quality.Stats ?? []).map(statId).map((id, i): GemStatLine | null => {
               const max = Math.round(((quality.StatsValuesPermille?.[i] ?? 0) * MAX_QUALITY) / 1000);
-              const text = renderStat(skillStatIndex, generalStatIndex, [id], [max]);
+              const text = renderStat(skillStatIndex, generalStatIndex, [id], [max], true);
 
               return text ? { text, min: 0, max } : null;
             }),
             ...(quality.AltStats ?? []).map(statId).map((id, i): GemStatLine | null => {
               const max = Math.round(((quality.AltStatValuesPermille?.[i] ?? 0) * MAX_QUALITY) / 1000);
-              const text = renderStat(skillStatIndex, generalStatIndex, [id], [max]);
+              const text = renderStat(skillStatIndex, generalStatIndex, [id], [max], true);
 
               return text ? { text, min: 0, max } : null;
             }),
