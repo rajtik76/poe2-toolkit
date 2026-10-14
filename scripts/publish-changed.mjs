@@ -4,7 +4,7 @@
 // only bumped some packages publishes only those. Run by the Release workflow;
 // assumes `npm run build` already ran and npm trusted publishing (OIDC) is saved
 // for each package with Allow npm publish enabled.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -88,33 +88,39 @@ for (const dir of ORDER) {
 
   console.log(`${values['dry-run'] ? 'dry-run' : 'publish'} ${name}@${version}`);
 
-  try {
-    const args = ['publish', `./packages/${dir}`, '--access', 'public', '--registry', REGISTRY];
+  const args = ['publish', `./packages/${dir}`, '--access', 'public', '--registry', REGISTRY];
 
-    if (values['dry-run']) {
-      args.push('--dry-run');
-    }
-
-    execFileSync('npm', args, {
-      cwd: fileURLToPath(new URL('..', import.meta.url)),
-      stdio: 'inherit',
-    });
-    published++;
-  } catch (error) {
-    // The check above is best-effort: a sibling release run (or a manual re-run)
-    // can publish this exact version between the check and this publish, and npm
-    // answers that with a fatal E403 "cannot publish over previously published
-    // version". Re-query the registry - if the version is now there the publish
-    // is effectively done, so treat it as a skip rather than failing the whole
-    // release. Anything else is a real error and rethrows.
-    if (publishedVersion(name, version) === version) {
-      console.log(`skip   ${name}@${version} (published concurrently)`);
-      continue;
-    }
-
-    console.error(`If npm reports an OIDC authentication error, verify the saved Trusted Publisher at https://www.npmjs.com/package/${name}/access: owner rajtik76, repository poe2-toolkit, workflow release.yml, empty environment, Allow npm publish enabled.`);
-    throw error;
+  if (values['dry-run']) {
+    args.push('--dry-run');
   }
+
+  // stderr is captured (and echoed) so a failed publish can be told apart below.
+  const result = spawnSync('npm', args, {
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
+    stdio: ['ignore', 'inherit', 'pipe'],
+  });
+  const stderr = result.stderr?.toString() ?? '';
+  process.stderr.write(stderr);
+
+  if (result.status === 0) {
+    published++;
+    continue;
+  }
+
+  // The check above is best-effort: a sibling release run (or a manual re-run)
+  // can publish this exact version between the check and this publish, and npm
+  // answers that with a fatal E403 "cannot publish over the previously published
+  // versions". That answer alone proves the version is there; the registry's
+  // read side can lag minutes behind a fresh publish, so a re-query may still
+  // say 404. Either way the publish is effectively done, so skip it rather than
+  // failing the whole release. Anything else is a real error.
+  if (/cannot publish over the previously published version/i.test(stderr) || publishedVersion(name, version) === version) {
+    console.log(`skip   ${name}@${version} (published concurrently)`);
+    continue;
+  }
+
+  console.error(`If npm reports an OIDC authentication error, verify the saved Trusted Publisher at https://www.npmjs.com/package/${name}/access: owner rajtik76, repository poe2-toolkit, workflow release.yml, empty environment, Allow npm publish enabled.`);
+  throw new Error(`npm publish failed for ${name}@${version}.`, { cause: result.error });
 }
 
 console.log(published === 0 ? 'Nothing to publish - all versions current.' : `${values['dry-run'] ? 'Validated' : 'Published'} ${published} package(s).`);

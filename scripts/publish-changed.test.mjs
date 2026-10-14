@@ -37,6 +37,9 @@ if (args[0] === 'view') {
 } else if (args[0] === 'publish') {
   if (scenario.publishError) {
     console.error('npm error code ' + scenario.publishError);
+    if (scenario.publishMessage) {
+      console.error('npm error ' + scenario.publishMessage);
+    }
     process.exit(1);
   }
 } else {
@@ -102,6 +105,16 @@ test('authentication failures stop the release', (t) => {
 
 test('a concurrent publish is safely skipped after checking the registry', (t) => {
   const result = runRelease(t, { publishError: 'E403', concurrent: true }, ['--package', 'ggpk']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.publishes.length, 1);
+  assert.match(result.stdout, /published concurrently/);
+});
+
+test('a concurrent publish the registry does not show yet is still skipped', (t) => {
+  const result = runRelease(t, {
+    publishError: 'E403',
+    publishMessage: '403 Forbidden - You cannot publish over the previously published versions: 1.2.0.',
+  }, ['--package', 'ggpk']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.publishes.length, 1);
   assert.match(result.stdout, /published concurrently/);
