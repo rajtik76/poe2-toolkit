@@ -33,7 +33,7 @@ if (args[0] === 'view') {
     console.log(JSON.stringify({ error: { code: scenario.lookupError || 'E404' } }));
     process.exit(1);
   }
-  console.log(JSON.stringify(version));
+  console.log(JSON.stringify(scenario.scalarVersion ? version : [version]));
 } else if (args[0] === 'publish') {
   if (scenario.publishError) {
     console.error('npm error code ' + scenario.publishError);
@@ -74,8 +74,14 @@ test('publishes directly in dependency order and skips existing versions', (t) =
   assert.match(result.stdout, /Published 6 package\(s\)/);
 });
 
-test('rerunning already published versions uploads nothing', (t) => {
+test('npm 12 version arrays skip already published versions', (t) => {
   const result = runRelease(t, { allPublished: true });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.publishes.length, 0);
+});
+
+test('older npm scalar versions also skip already published versions', (t) => {
+  const result = runRelease(t, { allPublished: true, scalarVersion: true });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.publishes.length, 0);
 });

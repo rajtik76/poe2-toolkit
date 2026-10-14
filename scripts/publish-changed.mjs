@@ -42,7 +42,16 @@ function publishedVersion(name, version) {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    return JSON.parse(out.toString());
+    // npm 12 returns a JSON array even for an exact version; older CLIs may
+    // return a scalar. Normalize both before deciding whether to publish.
+    const result = JSON.parse(out.toString());
+    const versions = Array.isArray(result) ? result : [result];
+
+    if (!versions.every(item => typeof item === 'string')) {
+      throw new Error(`Unexpected npm version response for ${name}@${version}`);
+    }
+
+    return versions.includes(version) ? version : null;
   } catch (error) {
     // Only an absent package/version means it needs publishing. Authentication
     // or registry outages must fail instead of being treated as new versions.
