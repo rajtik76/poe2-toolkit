@@ -5,17 +5,35 @@ name: Release
 # publish a release from it). Only packages whose version is not yet on npm are
 # published, so partial releases are safe.
 #
-# Stages the packages through npm trusted publishing (OIDC), so no long-lived
-# token lives in the repo. Nothing goes public until a maintainer approves each
-# staged version with 2FA (`npm stage approve <id>`, or on npmjs.com). One-time
-# setup per package on npmjs.com (Settings -> Trusted Publisher -> GitHub
-# Actions): repository rajtik76/poe2-toolkit, workflow release.yml, direct
-# publishing left unchecked.
+# Publishes directly through npm trusted publishing (OIDC), without an npm
+# token. Each package must have a saved GitHub Actions Trusted Publisher:
+# owner rajtik76, repository poe2-toolkit, workflow release.yml, no environment,
+# Allow npm publish enabled. Publishing access can continue to require 2FA and
+# disallow bypass tokens; that setting does not block trusted publishers.
 on:
   release:
     types: [published]
-  # Manual run from the Actions tab: stages whatever is not on npm yet.
+  # Manual recovery can publish one package while its siblings are configured.
   workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish
+        type: choice
+        default: all
+        options:
+          - all
+          - ggpk
+          - tree-core
+          - tree-react
+          - tree-extractor
+          - item-extractor
+          - gem-extractor
+          - rune-extractor
+          - mod-extractor
+      dry_run:
+        description: Validate packaging without publishing
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,16 +54,28 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: 22
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
           # Never cache in a release build (npm's trusted publishing guidance).
           package-manager-cache: false
-      # Trusted publishing needs npm 11.5.1 or newer; Node 22 ships an older npm.
-      - run: npm install -g npm@latest
+      # Pin a CLI with OIDC support so releases do not change with npm@latest.
+      - name: Install npm with trusted publishing support
+        run: npm install -g npm@12.2.0
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
-      - run: node scripts/publish-changed.mjs
+      - name: Publish new versions to npm
+        run: |
+          args=()
+          if [[ "$RELEASE_PACKAGE" != "all" ]]; then
+            args+=(--package "$RELEASE_PACKAGE")
+          fi
+          if [[ "$RELEASE_DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          node scripts/publish-changed.mjs "${args[@]}"
         env:
+          RELEASE_PACKAGE: ${{ inputs.package || 'all' }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
           NPM_CONFIG_LOGLEVEL: verbose

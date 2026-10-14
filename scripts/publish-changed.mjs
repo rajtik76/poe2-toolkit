@@ -1,14 +1,21 @@
 #!/usr/bin/env node
-// Stage on npm every package whose current version is not yet on the registry,
+// Publish on npm every package whose current version is not yet on the registry,
 // in dependency order. Already-published versions are skipped, so a release that
-// only bumped some packages stages only those. Staging uploads the package but
-// does not release it: each staged version goes public once a maintainer approves
-// it with 2FA (`npm stage list`, `npm stage approve <id>`). Run by the Release
-// workflow; assumes `npm run build` already ran and that npm trusted publishing
-// (OIDC) is configured for each package.
+// only bumped some packages publishes only those. Run by the Release workflow;
+// assumes `npm run build` already ran and npm trusted publishing (OIDC) is saved
+// for each package with Allow npm publish enabled.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
+
+const REGISTRY = 'https://registry.npmjs.org';
+const { values } = parseArgs({
+  options: {
+    package: { type: 'string' },
+    'dry-run': { type: 'boolean', default: false },
+  },
+});
 
 // Dependency order: a package is published only after everything it depends on.
 const ORDER = [
@@ -22,23 +29,46 @@ const ORDER = [
   'poe2-mod-extractor', // -> ggpk
 ];
 
+const selected = values.package && values.package !== 'all' ? `poe2-${values.package}` : null;
+
+if (selected && !ORDER.includes(selected)) {
+  throw new Error(`Unknown release package: ${values.package}`);
+}
+
 /** The version of `name` already on npm, or null if that exact version is absent. */
 function publishedVersion(name, version) {
   try {
-    const out = execFileSync('npm', ['view', `${name}@${version}`, 'version'], {
-      stdio: ['ignore', 'pipe', 'ignore'],
+    const out = execFileSync('npm', ['view', `${name}@${version}`, 'version', '--json', '--registry', REGISTRY], {
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    return out.toString().trim() || null;
-  } catch {
-    // `npm view` exits non-zero when the version (or package) does not exist.
-    return null;
+    return JSON.parse(out.toString());
+  } catch (error) {
+    // Only an absent package/version means it needs publishing. Authentication
+    // or registry outages must fail instead of being treated as new versions.
+    let code;
+
+    try {
+      code = JSON.parse(error.stdout?.toString() || '{}').error?.code;
+    } catch {
+      // A response that is not npm's JSON error remains a real lookup failure.
+    }
+
+    if (code === 'E404') {
+      return null;
+    }
+
+    throw new Error(`Could not check ${name}@${version} on npm.`, { cause: error });
   }
 }
 
 let published = 0;
 
 for (const dir of ORDER) {
+  if (selected && dir !== selected) {
+    continue;
+  }
+
   const manifestUrl = new URL(`../packages/${dir}/package.json`, import.meta.url);
   const { name, version } = JSON.parse(readFileSync(manifestUrl, 'utf8'));
 
@@ -47,10 +77,16 @@ for (const dir of ORDER) {
     continue;
   }
 
-  console.log(`stage  ${name}@${version}`);
+  console.log(`${values['dry-run'] ? 'dry-run' : 'publish'} ${name}@${version}`);
 
   try {
-    execFileSync('npm', ['stage', 'publish', `./packages/${dir}`], {
+    const args = ['publish', `./packages/${dir}`, '--access', 'public', '--registry', REGISTRY];
+
+    if (values['dry-run']) {
+      args.push('--dry-run');
+    }
+
+    execFileSync('npm', args, {
       cwd: fileURLToPath(new URL('..', import.meta.url)),
       stdio: 'inherit',
     });
@@ -67,8 +103,9 @@ for (const dir of ORDER) {
       continue;
     }
 
+    console.error(`If npm reports an OIDC authentication error, verify the saved Trusted Publisher at https://www.npmjs.com/package/${name}/access: owner rajtik76, repository poe2-toolkit, workflow release.yml, empty environment, Allow npm publish enabled.`);
     throw error;
   }
 }
 
-console.log(published === 0 ? 'Nothing to publish - all versions current.' : `Staged ${published} package(s). Approve them with 2FA to publish.`);
+console.log(published === 0 ? 'Nothing to publish - all versions current.' : `${values['dry-run'] ? 'Validated' : 'Published'} ${published} package(s).`);

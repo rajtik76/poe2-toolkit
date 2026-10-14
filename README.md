@@ -236,6 +236,20 @@ with the changes since that package's last release tag. The tag's commit
 should carry an up-to-date changelog, since the tag/release snapshot is
 frozen the moment it's pushed.
 
+Publishing a GitHub Release runs `.github/workflows/release.yml`. It builds and
+tests the workspaces, then publishes versions missing from npm in dependency
+order. Existing versions are skipped, so rerunning a partial release is safe.
+The Actions tab also allows publishing a single package or a dry run.
+
+Each npm package needs its own saved **Trusted Publisher** connection in its
+Settings tab: GitHub Actions, owner `rajtik76`, repository `poe2-toolkit`, workflow
+filename `release.yml`, and an empty environment. Enable **Allow npm publish**
+for automatic publication. **Allow npm dist-tag** is not required. Publishing
+access can remain **Require two-factor authentication and disallow bypass 2fa
+tokens**. Use **Set up connection** in the Trusted Publisher form and complete
+2FA; **Update Package Settings** saves the separate publishing access settings.
+No npm token is needed in GitHub secrets.
+
 ## Attributions and legal
 
 This is an unofficial, fan-made project. It is **not** affiliated with, endorsed
