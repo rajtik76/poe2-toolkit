@@ -43,13 +43,18 @@ const CSD = [
   '\t2',
   '\t\t#|99 "{0}% Capped"',
   '\t\t# ""',
+  'description',
+  '\t1 fire_res',
+  '\t2',
+  '\t\t1|# "+{0}% to Fire Resistance"',
+  '\t\t#|-1 "{0}% reduced Fire Resistance" negate 1',
   '',
 ].join('\n');
 
 const TABLES: Record<string, TableRow[]> = {
   Stats: [
     { Id: 'add_str' }, { Id: 'phys_pct' }, { Id: 'add_min' }, { Id: 'add_max' },
-    { Id: 'cond' }, { Id: 'neg_stat' }, { Id: 'cap' },
+    { Id: 'cond' }, { Id: 'neg_stat' }, { Id: 'cap' }, { Id: 'fire_res' },
   ],
   Tags: [{ Id: 'ring' }, { Id: 'default' }, { Id: 'weapon' }],
   ModFamily: [{ Id: 'Strength' }, { Id: 'PhysicalDamage' }],
@@ -98,6 +103,10 @@ const TABLES: Record<string, TableRow[]> = {
       Id: 'CapMod', Domain: 1, GenerationType: 1, ModType: 5, Level: 1,
       Stat1: 6, Stat1Value: [5, 100], SpawnWeight_Tags: [1], SpawnWeight_Values: [1],
     },
+    // A range rising from 0 under lines that leave 0 out (1|#, #|-1) keeps its line.
+    { Id: 'ZeroStartRes', Domain: 1, GenerationType: 1, Level: 1, Stat1: 7, Stat1Value: [0, 10] },
+    // A roll fixed at 0 grants nothing and shows no line; the other stat still renders.
+    { Id: 'ZeroRes', Domain: 1, GenerationType: 1, Level: 1, Stat1: 7, Stat1Value: [0, 0], Stat2: 0, Stat2Value: [3, 3] },
     // No stats and no group -> empty stats/rolls, null group/tier; null domain -> "Unknown".
     { Id: 'Blank', Name: 'Blank', Domain: null, GenerationType: 1, Level: 1 },
     // Edge fallbacks: enum holes -> numeric string; a name-less ModType -> null group
@@ -190,6 +199,18 @@ describe('buildMods', () => {
     const mods = await buildMods(fakeSource());
 
     expect(mods.CapMod?.stats).toEqual(['5% Capped']);
+  });
+
+  it('keeps the line of a range that starts at 0', async () => {
+    const mods = await buildMods(fakeSource());
+
+    expect(mods.ZeroStartRes?.stats).toEqual(['+(0-10)% to Fire Resistance']);
+  });
+
+  it('shows no line for a roll fixed at 0', async () => {
+    const mods = await buildMods(fakeSource());
+
+    expect(mods.ZeroRes?.stats).toEqual(['+3 to Strength']);
   });
 
   it('breaks a same-level tier tie by id, so tiers stay stable', async () => {
