@@ -36,7 +36,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          registry-url: 'https://registry.npmjs.org'
+          # No registry-url: it makes setup-node write a placeholder auth token that
+          # npm would send instead of the OIDC credential (E401).
       # Trusted publishing needs npm 11.5.1 or newer; Node 22 ships an older npm.
       - run: npm install -g npm@latest
       - run: npm ci
