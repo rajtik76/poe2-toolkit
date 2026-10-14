@@ -24,6 +24,8 @@
 interface Condition {
   min: number;
   max: number;
+  /** `!n`: any value except this one. */
+  except?: number;
 }
 
 /** One renderable line of a description block. */
@@ -32,6 +34,10 @@ interface Variant {
   text: string;
   /** Flat `name index name index …` handler tokens applied to the values. */
   handlers: string[];
+  /** A `gem_quality` line: describes a gem's quality bonus, used only when rendering one. */
+  gemQuality: boolean;
+  /** A `table_only` line: a `label@value` row of a gem's stat table, never a tooltip line. */
+  tableOnly: boolean;
 }
 
 /** A description block: the stats it renders together and its candidate lines. */
@@ -50,6 +56,23 @@ export interface StatIndex {
   byStat: Map<string, StatRecord>;
 }
 
+/** Optional inputs to {@link renderBlock}. */
+export interface RenderOptions {
+  /**
+   * Values, parallel to `statIds`, that pick each block's line and decide
+   * whether it shows at all, in place of the rendered values. A range renderer
+   * uses it to give a zero end of a range (`0-10`) the line of its other end.
+   */
+  selectBy?: number[];
+  /** Render a gem's quality bonus: lets `gem_quality` lines take part. */
+  quality?: boolean;
+  /**
+   * Render for a gem's stat table: a stat no regular line describes falls back
+   * to its `table_only` row, printed as GGG writes it (`label@value`).
+   */
+  table?: boolean;
+}
+
 /** The rendered lines of a stat block, plus any stat ids that had no block. */
 export interface RenderedBlock {
   /** Rendered, human-readable text lines for the resolved stats. */
@@ -58,10 +81,14 @@ export interface RenderedBlock {
   unresolved: string[];
 }
 
-/** Parse a condition token: `#` = any, `a|b` = range, `n` = exactly n. */
+/** Parse a condition token: `#` = any, `a|b` = range, `!n` = anything but n, `n` = exactly n. */
 function parseCondition(token: string): Condition {
   if (token === '#') {
     return { min: -Infinity, max: Infinity };
+  }
+
+  if (token.startsWith('!')) {
+    return { min: -Infinity, max: Infinity, except: Number(token.slice(1)) };
   }
 
   if (token.includes('|')) {
@@ -78,17 +105,28 @@ function parseCondition(token: string): Condition {
   return { min: exact, max: exact };
 }
 
-/** Split one description line into its conditions, text and handler tokens. */
+/** A word between a line's conditions and its text, e.g. `gem_quality`, rather than a condition. */
+const LINE_FLAG = /^[a-z_]+$/;
+
+/** Split one description line into its conditions, flags, text and handler tokens. */
 function parseDescriptionLine(line: string): Variant {
   const trimmed = line.trim();
   const firstQuote = trimmed.indexOf('"');
   const lastQuote = trimmed.lastIndexOf('"');
 
-  const conditions = trimmed.slice(0, firstQuote).trim().split(/\s+/).filter(Boolean).map(parseCondition);
+  const tokens = trimmed.slice(0, firstQuote).trim().split(/\s+/).filter(Boolean);
+  const flags = tokens.filter((token) => LINE_FLAG.test(token));
+  const conditions = tokens.filter((token) => !LINE_FLAG.test(token)).map(parseCondition);
   const text = trimmed.slice(firstQuote + 1, lastQuote);
   const handlers = trimmed.slice(lastQuote + 1).trim().split(/\s+/).filter(Boolean);
 
-  return { conditions, text, handlers };
+  return {
+    conditions,
+    text,
+    handlers,
+    gemQuality: flags.includes('gem_quality'),
+    tableOnly: flags.includes('table_only'),
+  };
 }
 
 /**
@@ -160,64 +198,179 @@ export function buildStatIndex(csd: string): StatIndex {
   return { byStat };
 }
 
-/** GGG value handlers — transform a raw stat value for display. */
-function applyHandlers(values: number[], handlers: string[]): number[] {
-  const out = [...values];
+/**
+ * How a display value is printed, in printf terms: `d` as an integer, `g` as the
+ * shortest decimal (trailing zeros dropped), `.2f` with exactly two decimals.
+ */
+type ValueFormat = 'd' | 'g' | '.2f';
 
-  for (let h = 0; h + 1 < handlers.length; h += 2) {
-    const name = handlers[h];
-    const index = Number(handlers[h + 1]) - 1;
+/** A stat value after its handlers ran: the display number and how to print it. */
+interface DisplayValue {
+  value: number;
+  format: ValueFormat;
+}
 
-    if (index < 0 || index >= out.length) {
+/** A numeric value handler. A missing `format` keeps the value's current one. */
+interface ValueHandler {
+  apply: (value: number) => number;
+  format?: ValueFormat;
+}
+
+/** Round half up to `decimals` places. */
+function roundTo(value: number, decimals = 0): number {
+  const factor = 10 ** decimals;
+
+  return Math.floor(value * factor + 0.5) / factor;
+}
+
+/** Round down to `decimals` places. The epsilon keeps exact quotients (30 / 60 = 0.5) from flooring a step under. */
+function floorTo(value: number, decimals: number): number {
+  const factor = 10 ** decimals;
+
+  return Math.floor(value * factor + 0.0001) / factor;
+}
+
+const divideBy = (divisor: number): ValueHandler => ({ apply: (v) => v / divisor, format: 'g' });
+const divideRounded = (divisor: number, decimals: number): ValueHandler => ({
+  apply: (v) => roundTo(v / divisor, decimals),
+  format: 'g',
+});
+const divideToInteger = (divisor: number): ValueHandler => ({ apply: (v) => roundTo(v / divisor) });
+
+/**
+ * GGG's numeric value handlers, keyed by the name a description line carries.
+ * The `_Ndp` suffix rounds to N decimals; without one a division keeps its full
+ * fraction. Handlers that don't set `format` keep the current one, so a negate
+ * after a divide still prints the decimals. Non-numeric handlers (item classes,
+ * passive hashes, skill indexes, reminder text) are not listed and leave the
+ * value untouched, as do names this table does not know.
+ */
+const VALUE_HANDLERS: Record<string, ValueHandler> = {
+  negate: { apply: (v) => -v },
+  negate_and_double: { apply: (v) => -2 * v },
+  invert_chance: { apply: (v) => 100 - v },
+  double: { apply: (v) => v * 2 },
+  times_one_point_five: { apply: (v) => v * 1.5 },
+  multiply_by_four: { apply: (v) => v * 4 },
+  multiply_by_four_and_negate: { apply: (v) => -v * 4 },
+  multiply_by_ten: { apply: (v) => v * 10 },
+  times_twenty: { apply: (v) => v * 20 },
+  multiply_by_one_hundred: { apply: (v) => v * 100 },
+  plus_two_hundred: { apply: (v) => v + 200 },
+  '30%_of_value': { apply: (v) => v * 0.3 },
+  '60%_of_value': { apply: (v) => v * 0.6 },
+  multiplicative_damage_modifier: { apply: (v) => 100 + v },
+  multiplicative_permyriad_damage_modifier: { apply: (v) => 100 + v / 100, format: 'g' },
+  one_hundred_divide_by_value: { apply: (v) => roundTo(100 / v, 2), format: 'g' },
+  divide_by_two_0dp: divideToInteger(2),
+  divide_by_three: divideBy(3),
+  divide_by_four: divideBy(4),
+  divide_by_five: divideBy(5),
+  divide_by_six: divideBy(6),
+  divide_by_ten_0dp: divideToInteger(10),
+  divide_by_ten_1dp: divideRounded(10, 1),
+  divide_by_ten_1dp_if_required: divideRounded(10, 1),
+  divide_by_twelve: divideBy(12),
+  divide_by_fifteen_0dp: divideToInteger(15),
+  divide_by_twenty: divideBy(20),
+  divide_by_twenty_then_double_0dp: { apply: (v) => roundTo(v / 20) * 2 },
+  divide_by_fifty: divideBy(50),
+  divide_by_one_hundred: divideBy(100),
+  divide_by_one_hundred_0dp: divideRounded(100, 0),
+  divide_by_one_hundred_1dp: divideRounded(100, 1),
+  divide_by_one_hundred_2dp: divideRounded(100, 2),
+  divide_by_one_hundred_2dp_if_required: divideRounded(100, 2),
+  divide_by_one_hundred_and_negate: { apply: (v) => -v / 100, format: 'g' },
+  divide_by_one_thousand: divideBy(1000),
+  divide_by_ten_thousand_1dp: divideRounded(10000, 1),
+  // Stored per minute, described per second. The undecorated variant rounds down.
+  per_minute_to_per_second: { apply: (v) => floorTo(v / 60, 1), format: 'g' },
+  per_minute_to_per_second_0dp: divideToInteger(60),
+  per_minute_to_per_second_1dp: divideRounded(60, 1),
+  per_minute_to_per_second_2dp: divideRounded(60, 2),
+  per_minute_to_per_second_2dp_if_required: divideRounded(60, 2),
+  milliseconds_to_seconds: divideBy(1000),
+  milliseconds_to_seconds_halved: divideBy(2000),
+  milliseconds_to_seconds_0dp: divideToInteger(1000),
+  milliseconds_to_seconds_1dp: divideRounded(1000, 1),
+  milliseconds_to_seconds_2dp: divideRounded(1000, 2),
+  milliseconds_to_seconds_2dp_if_required: divideRounded(1000, 2),
+  deciseconds_to_seconds: { apply: (v) => v / 10, format: '.2f' },
+};
+
+/**
+ * Run a line's value handlers over its raw stat values, in the order the line
+ * lists them. Handlers come as `name argument` pairs, except `canonical_line`,
+ * a bare marker that takes no argument.
+ */
+function applyHandlers(values: number[], handlers: string[]): DisplayValue[] {
+  const out = values.map((value): DisplayValue => ({ value, format: 'd' }));
+
+  let h = 0;
+
+  while (h < handlers.length) {
+    const name = handlers[h]!;
+
+    if (name === 'canonical_line') {
+      h += 1;
       continue;
     }
 
-    switch (name) {
-      case 'negate':
-        out[index] = -out[index]!;
-        break;
-      case 'divide_by_one_hundred':
-      case 'divide_by_one_hundred_2dp':
-      case 'divide_by_one_hundred_2dp_if_required':
-      case 'per_minute_to_per_second':
-        out[index]! /= 100;
-        break;
-      case 'milliseconds_to_seconds':
-      case 'milliseconds_to_seconds_2dp':
-      case 'milliseconds_to_seconds_2dp_if_required':
-      case 'divide_by_one_thousand':
-        out[index]! /= 1000;
-        break;
-      case 'divide_by_ten_0dp':
-        out[index]! /= 10;
-        break;
-      default:
-        break;
+    const handler = VALUE_HANDLERS[name];
+    const index = Number(handlers[h + 1]) - 1;
+
+    h += 2;
+
+    if (!handler || !(index >= 0 && index < out.length)) {
+      continue;
     }
+
+    const current = out[index]!;
+
+    out[index] = { value: handler.apply(current.value), format: handler.format ?? current.format };
   }
 
   return out;
 }
 
-/** Pick the variant whose per-stat conditions all accept the raw values. */
-function selectVariant(variants: Variant[], rawValues: number[]): Variant | null {
-  for (const variant of variants) {
-    const ok = variant.conditions.every((cond, i) => {
-      const value = rawValues[i] ?? 0;
-
-      return value >= cond.min && value <= cond.max;
-    });
-
-    if (ok) {
-      return variant;
-    }
+/** Print a display value in its format. */
+function formatValue({ value, format }: DisplayValue): string {
+  if (format === '.2f') {
+    return value.toFixed(2);
   }
 
-  return variants[0] ?? null;
+  // `g`: six significant digits, then the shortest form, so 0.50 prints as "0.5".
+  return String(format === 'g' ? Number(value.toPrecision(6)) : Math.round(value));
 }
 
-/** Fill `{0}`, `{0:+d}`, `{0:d}` placeholders, and GGG's bare `{}` (implicit next index), with rounded values. */
-function fillTemplate(text: string, values: number[]): string {
+/**
+ * Pick the variant whose per-stat conditions all accept the raw values, or
+ * `null` when none does: a value the block has no line for is not displayed
+ * (`1|#` and `#|-1` lines leave 0 out on purpose). `gem_quality` lines take
+ * part only when rendering a gem's quality bonus; `table_only` lines only for
+ * a gem's stat table, and only once no regular line accepts the values.
+ */
+function selectVariant(variants: Variant[], rawValues: number[], options: RenderOptions): Variant | null {
+  const accepts = (variant: Variant): boolean =>
+    (!variant.gemQuality || options.quality === true) &&
+    variant.conditions.every((cond, i) => {
+      const value = rawValues[i] ?? 0;
+
+      return value >= cond.min && value <= cond.max && value !== cond.except;
+    });
+
+  return (
+    variants.find((variant) => !variant.tableOnly && accepts(variant)) ??
+    (options.table ? variants.find((variant) => variant.tableOnly && accepts(variant)) : undefined) ??
+    null
+  );
+}
+
+/**
+ * Fill `{0}`, `{0:+d}`, `{0:d}` placeholders, and GGG's bare `{}` (implicit next
+ * index), each value printed in the format its handlers left it in.
+ */
+function fillTemplate(text: string, values: DisplayValue[]): string {
   let implicitIndex = 0;
 
   return text.replace(/\{(\d*)(?::([^}]+))?\}/g, (_, index: string, format: string | undefined) => {
@@ -227,9 +380,9 @@ function fillTemplate(text: string, values: number[]): string {
       return '';
     }
 
-    const rounded = Math.round(value);
+    const printed = formatValue(value);
 
-    return format === '+d' && rounded >= 0 ? `+${rounded}` : String(rounded);
+    return format === '+d' && !printed.startsWith('-') ? `+${printed}` : printed;
   });
 }
 
@@ -246,15 +399,18 @@ function stripBbcode(text: string): string {
  * Render a full stat block. Each stat resolves to its block; a block may render
  * several stats together (e.g. min/max added damage), so its placeholders are
  * filled from whichever of those stats it provides (others default to 0) and all
- * are marked consumed so the line is not repeated.
+ * are marked consumed so the line is not repeated. A block renders no line when
+ * all its values are zero or when none of its variants accepts the values.
  *
  * @param index - The {@link StatIndex} from {@link buildStatIndex}.
  * @param statIds - Stat ids to render.
  * @param vals - Raw stat values, parallel to `statIds`.
+ * @param options - See {@link RenderOptions}.
  * @returns A {@link RenderedBlock} of rendered lines and any unresolved stat ids.
  */
-export function renderBlock(index: StatIndex, statIds: string[], vals: number[]): RenderedBlock {
+export function renderBlock(index: StatIndex, statIds: string[], vals: number[], options: RenderOptions = {}): RenderedBlock {
   const valueByStat = new Map(statIds.map((id, i) => [id, vals[i]!]));
+  const selectByStat = new Map(statIds.map((id, i) => [id, (options.selectBy ?? vals)[i]!]));
   const consumed = new Set<string>();
   const lines: string[] = [];
   const unresolved: string[] = [];
@@ -275,9 +431,12 @@ export function renderBlock(index: StatIndex, statIds: string[], vals: number[])
 
     // The block's stat ids may carry a "base_" prefix the source stat lacks, so
     // fall back to the prefix-stripped id when reading the value.
-    const valueFor = (id: string): number => valueByStat.get(id) ?? valueByStat.get(id.replace(/^base_/, '')) ?? 0;
-    const rawValues = record.statIds.map(valueFor);
-    const variant = selectVariant(record.variants, rawValues);
+    const lookup = (values: Map<string, number>, id: string): number =>
+      values.get(id) ?? values.get(id.replace(/^base_/, '')) ?? 0;
+    const rawValues = record.statIds.map((id) => lookup(valueByStat, id));
+    const selectValues = record.statIds.map((id) => lookup(selectByStat, id));
+    // A block whose stats are all zero grants nothing and is not displayed.
+    const variant = selectValues.some((value) => value !== 0) ? selectVariant(record.variants, selectValues, options) : null;
 
     if (variant?.text) {
       lines.push(stripBbcode(fillTemplate(variant.text, applyHandlers(rawValues, variant.handlers))));
