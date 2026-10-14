@@ -4,6 +4,17 @@ All notable changes to `@poe2-toolkit/tree-react` are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-10-14
+
+### Added
+
+- A replacing ascendancy (the Abyssal Lich) draws, highlights and hit-tests
+  the nodes of the disc it plays on, which stay tagged with their owner.
+
+### Changed
+
+- Bumped the pinned `@poe2-toolkit/tree-core` range to `^1.1.0`.
+
 ## [1.0.0] - 2026-07-30
 
 ### Changed

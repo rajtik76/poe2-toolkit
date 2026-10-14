@@ -4,6 +4,28 @@ All notable changes to `@poe2-toolkit/tree-core` are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-10-14
+
+### Added
+
+- An ascendancy that replaces another (the Abyssal Lich plays on the Lich's
+  disc) is kept, anchored on the replaced disc. `AscendancyDef` carries
+  `replaces` and its own `overridePairs`.
+- `ascendancyNodeOwner` and `findAscendancy`: the ascendancy whose nodes an
+  ascendancy plays on, and an ascendancy by id.
+- `classOverrideNode` takes the active ascendancy and applies its overrides.
+
+### Changed
+
+- Allocation helpers (`ascendancyStartNode`, `buildAscendancyGraph`,
+  `clearAscendancyAllocation`, `toggleAscendancyAllocation`) path a replacing
+  ascendancy on the nodes it plays on.
+- `buildScene` shows the active ascendancy's overrides. Nodes and edges keep
+  the tag of the ascendancy that owns them; the renderer maps a replacing
+  disc onto it.
+- An ascendancy override wins over the class's on the same node, and only an
+  ascendancy of the active class lends its overrides.
+
 ## [1.0.1] - 2026-10-14
 
 ### Fixed

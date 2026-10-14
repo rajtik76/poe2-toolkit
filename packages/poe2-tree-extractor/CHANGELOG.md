@@ -4,6 +4,16 @@ All notable changes to `@poe2-toolkit/tree-extractor` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-10-14
+
+### Fixed
+
+- A class or ascendancy override node's icon is packed in the frame variant of
+  the node it replaces, so a swapped notable no longer renders as an empty frame.
+- Override targets and ascendancy starts no longer pack `normal` sprites the
+  renderer never asks for.
+- `buildGraphics` accepts an older export without a class's `overridePairs`.
+
 ## [1.1.0] - 2026-10-14
 
 ### Added
