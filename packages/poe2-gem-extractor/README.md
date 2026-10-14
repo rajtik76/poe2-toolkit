@@ -150,25 +150,29 @@ scaling per gem level, plus quality bonus lines:
       "level": 1, "cost": 8, "castTime": 1.1, "cooldown": null, "reservation": null,
       "spellCritChance": 9, "attackCritChance": 0,
       "stats": [
+        { "text": "Deals 1 to 13 Lightning Damage", "min": 1, "max": 13 },
+        { "text": "Chains 5 times", "min": 5, "max": 5 },
+        { "text": "Chains 6 additional times when Lightning Infused", "min": 6, "max": 6 },
         { "text": "200% more damage when Lightning Infused", "min": 200, "max": 200 },
-        { "text": "Deals 1 to 13 Lightning Damage", "min": 1, "max": 13 }
+        { "text": "50% increased Magnitude of Shock inflicted", "min": 50, "max": 50 }
       ]
     },
     { "level": 20, "cost": 81, "castTime": 1.1, "spellCritChance": 9,
-      "stats": [{ "text": "Deals 20 to 386 Lightning Damage", "min": 20, "max": 386 }] }
+      "stats": [
+        { "text": "Deals 20 to 386 Lightning Damage", "min": 20, "max": 386 },
+        { "text": "Chains 9 times", "min": 9, "max": 9 }
+      ] }
   ],
   "qualityStats": [
-    { "text": "Skills Chain +2 times", "min": 0, "max": 2 }
+    { "text": "Chains +2 times", "min": 0, "max": 2 }
   ]
 }
 ```
 
-Verified against a live extract, level-for-level, against Arc's in-game tooltip:
-cost, cast time, crit chance and every scaling stat line match exactly (the
-`(min—max)` figures the UI would show are your gem-level-1 and gem-level-20
-entries side by side - `scaling` intentionally hands back per-level numbers, not
-a pre-rendered range string, so a level-scaling slider has real numbers to work
-with).
+The tooltip lines are built the way Path of Building builds its gem tooltip, and
+were checked against it level for level, stat set for stat set, on a live
+extract. `scaling` hands back per-level numbers rather than a pre-rendered range
+string, so a level-scaling slider has real numbers to work with.
 
 The rules the shape alone doesn't tell you:
 
@@ -178,18 +182,26 @@ The rules the shape alone doesn't tell you:
 - **`castTime` prefers the per-level `AttackTime`** (for attack skills, which can
   vary with weapon speed) **and falls back to the flat `GrantedEffects.CastTime`**
   (for spells, which don't scale by level) when `AttackTime` is `0`.
-- **`stats` lines come from three sources**, all rendered through the same
-  stat-description engine: `GrantedEffectStatSets.ConstantStats` (fixed across
-  every level), `GrantedEffectStatSetsPerLevel.AdditionalStats` (this level's
-  value), and `FloatStats` paired positionally with `BaseResolvedValues` two at a
-  time (GGG's min/max convention, e.g. a damage roll) - verified against a live
-  extract, not assumed from the schema alone.
-- **`qualityStats` are resolved at 20 quality** (the normal cap); `min` is always
-  `0`, the value at 0 quality, since every quality bonus scales linearly.
-- **A stat id with no matching description block is silently dropped**, not
-  reported as an error - this is expected for the source data's internal-only
-  flag stats (e.g. `active_skill_consumes_a_lightning_infusion`), which have no
-  player-facing text at all.
+- **`stats` sums a stat set's stats at the level and renders them together**:
+  `GrantedEffectStatSetsPerLevel` `FloatStats` (with `BaseResolvedValues`) and
+  `AdditionalStats` (with their values), flag stats at 1 (`AdditionalFlags`,
+  `GrantedEffectStatSets.ImplicitStats`) and `ConstantStats`. A block that
+  renders several stats (a damage roll) is one line; `min`/`max` are the values
+  of its first and last stat.
+- **Each stat set renders through its own description scope**: the skill's
+  `ActiveSkills.StatDescription` file (its `statset_N` file for the set at
+  position N), or `gem_stat_descriptions.csd` (`meta_gem_stat_descriptions.csd`
+  for meta gems) for a support, followed by the files it includes. Lines come in
+  the game's order - included files first - and a stat the scope hides
+  (`no_description`) or never describes is left out.
+- **`additionalStatSets`** carries the granted effect's further stat sets
+  (`GrantedEffects.AdditionalStatSets`, e.g. Ice Nova's "Cold-Infused"), each
+  with its label and full lines: it inherits the first set's stats, minus its
+  `IgnoredStats`. Sets labelled "Hidden" are internal and left out.
+- **`qualityStats` are resolved at 20 quality** (the normal cap), each bonus
+  stat on its own, kept whole as the game's integer stat holds it; `min` is
+  always `0`. Support gems carry none, and the alternate quality (`AltStats`,
+  only active with Gemling) is left out.
 - **`data.scaling` omits a gem whose `GrantedEffects` row has no `StatSet`.**
   On a live extract every real gem resolved one, so in practice this only
   matters for malformed rows.
@@ -232,32 +244,36 @@ converting to WebP for the web is a separate publish step left to you.
 - **Data** joins the relational `SkillGems` -> `GemEffects` -> `GrantedEffects`
   -> `ActiveSkills` chain into one flat record per gem. Support gems take their
   icon from `SupportGems` and their text from `GemEffects.SupportText`; active
-  gems take theirs from `ActiveSkills`. `[DNT]` dev placeholders are dropped.
+  gems take theirs from `ActiveSkills`. Gems GGG itself names as unreleased are
+  dropped: `[DNT ...]`, "Coming Soon", "Playtest ..." and "Removed Skill".
 - **The per-level requirement curve** is ported verbatim from Path of Building's
   `calcLib.getGemStatRequirement` (CalcTools.lua), so the numbers match the game:
   support gems and zero-percent attributes require nothing, and a result under 8
-  rounds to 0. Required character level is `floor(ActorLevel)` from
-  `GrantedEffectsPerLevel`.
-- **The tooltip scaling** joins a second chain rooted at `GrantedEffects.StatSet`:
-  `GrantedEffectStatSets` for the level-independent part and
-  `GrantedEffectStatSetsPerLevel` for the per-`GemLevel` values, plus
+  rounds to 0. The required character level comes from the gem's level
+  progression (`SkillGems.ItemExperienceType` -> `ItemExperiencePerLevel.Level`)
+  and never drops below the level before, as in PoB's skill export.
+- **The tooltip scaling** joins a second chain rooted at `GrantedEffects.StatSet`
+  and `AdditionalStatSets`: `GrantedEffectStatSets` for the level-independent
+  part and `GrantedEffectStatSetsPerLevel` for the per-`GemLevel` values, plus
   `GrantedEffectQualityStats` for quality bonuses. Stat text is rendered via
-  `@poe2-toolkit/ggpk`'s `buildStatIndex`/`renderBlock` against two `.csd`
-  files - `data/statdescriptions/skill_stat_descriptions.csd` first, falling
-  back to the general `data/statdescriptions/stat_descriptions.csd` (shared with
-  item mods) for stats defined there instead.
+  `@poe2-toolkit/ggpk`'s `buildStatIndex`/`renderBlock` through each set's
+  description scope, the include chain read with `csdInclude`.
 - **Icons and hover art** are kept as their raw GGPK DDS paths in the data and
   decoded to PNG by `buildGemIcons`. A path the source cannot serve is skipped
   and reported, never pulled from a vendored asset.
 
-### Tables this needs beyond what was already pinned
+### Tables and columns this needs
 
 `GrantedEffectStatSets`, `GrantedEffectStatSetsPerLevel`,
-`GrantedEffectQualityStats` and `Stats` are new requirements - a source whose
-config doesn't export them will throw reading the missing table file.
-`GrantedEffects` additionally needs its `CastTime` column pinned (`StatSet` was
-already required for nothing until now). Everything else this package reads was
-already pinned by the existing gem build.
+`GrantedEffectQualityStats`, `GrantedEffectLabels`, `ItemExperiencePerLevel`
+and `Stats` are required - a source whose config doesn't export them will throw
+reading the missing table file. Beyond the gem build's own columns this reads
+`GrantedEffects.CastTime`/`IsSupport`/`AdditionalStatSets`,
+`ActiveSkills.StatDescription`, `GemTags.Id`, `SkillGems.ItemExperienceType`,
+`GrantedEffectStatSets.Label`/`ImplicitStats`/`IgnoredStats`,
+`GrantedEffectStatSetsPerLevel.AdditionalFlags` and
+`GrantedEffectQualityStats.ApplyToStatSets`. The description files are read
+from the source as the scopes name them.
 
 ## Attributions and legal
 

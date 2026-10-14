@@ -1,6 +1,6 @@
 /**
  * Characterization test: rebuild gem data from a real GGPK extract and assert it
- * reproduces the deployed golden `gems.json` / `gem_requirements.json` 1:1.
+ * reproduces the deployed golden `gems.json` / `gem_requirements.json` / `gem_scaling.json` 1:1.
  *
  * The extract and the golden carry derived GGG game data, so neither lives in
  * this repo. Point `POE2_GGPK_EXTRACT` at a directory holding `tables/English`
@@ -35,6 +35,13 @@ const TABLES_DIR = join(EXTRACT, 'tables/English');
 const CACHE_DIR = join(EXTRACT, '.cache');
 const GOLDEN_GEMS = join(GOLDEN, 'gems.json');
 const GOLDEN_REQS = join(GOLDEN, 'gem_requirements.json');
+const GOLDEN_SCALING = join(GOLDEN, 'gem_scaling.json');
+
+/**
+ * The build parses every description file a skill scope names (several hundred,
+ * stat_descriptions.csd alone tens of MB), close to vitest's 10 s hook default.
+ */
+const BUILD_TIMEOUT_MS = 60_000;
 
 function readPatch(): string {
   try {
@@ -45,7 +52,7 @@ function readPatch(): string {
 }
 
 function available(): boolean {
-  return existsSync(join(TABLES_DIR, 'SkillGems.json')) && existsSync(GOLDEN_GEMS) && existsSync(GOLDEN_REQS);
+  return existsSync(join(TABLES_DIR, 'SkillGems.json')) && existsSync(GOLDEN_GEMS) && existsSync(GOLDEN_REQS) && existsSync(GOLDEN_SCALING);
 }
 
 /**
@@ -66,13 +73,15 @@ describe.skipIf(!available())('gems 1:1 against the deployed golden', () => {
   let built: GemData;
   let goldenGems: Record<string, Gem>;
   let goldenReqs: GemData['requirements'];
+  let goldenScaling: GemData['scaling'];
 
   beforeAll(async () => {
     const source = await createCdnSource({ patch: readPatch(), cacheDir: CACHE_DIR, tablesDir: TABLES_DIR });
     built = await buildGems(source);
     goldenGems = JSON.parse(readFileSync(GOLDEN_GEMS, 'utf8')) as Record<string, Gem>;
     goldenReqs = JSON.parse(readFileSync(GOLDEN_REQS, 'utf8')) as GemData['requirements'];
-  });
+    goldenScaling = JSON.parse(readFileSync(GOLDEN_SCALING, 'utf8')) as GemData['scaling'];
+  }, BUILD_TIMEOUT_MS);
 
   it('reproduces every gem (icon paths normalized to GGPK base)', () => {
     expect(built.gems).toEqual(normalizeGoldenIcons(goldenGems));
@@ -80,5 +89,9 @@ describe.skipIf(!available())('gems 1:1 against the deployed golden', () => {
 
   it('reproduces the per-level requirement curves exactly', () => {
     expect(built.requirements).toEqual(goldenReqs);
+  });
+
+  it('reproduces the tooltip scaling exactly', () => {
+    expect(built.scaling).toEqual(goldenScaling);
   });
 });

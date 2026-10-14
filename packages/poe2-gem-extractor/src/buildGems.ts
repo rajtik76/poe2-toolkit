@@ -12,17 +12,17 @@
  * `calcLib.getGemStatRequirement` (CalcTools.lua), so the numbers match the game.
  *
  * The per-level tooltip scaling (cost, cast time, crit, translated stat lines,
- * quality bonuses) joins a second relational chain rooted at
- * `GrantedEffects.StatSet`: `GrantedEffectStatSets` (the level-independent part)
- * and `GrantedEffectStatSetsPerLevel` (the per-`GemLevel` scaling values), plus
- * `GrantedEffectQualityStats` for the quality bonus lines. Text is rendered via
- * `@poe2-toolkit/ggpk`'s stat-description engine against two `.csd` files -
- * `skill_stat_descriptions.csd` (skill-specific stats) falling back to the
- * general `stat_descriptions.csd` (shared with item mods) for stats defined
- * there instead (e.g. `number_of_chains`, the two damage-roll stats).
+ * quality bonuses) is built the way Path of Building builds a gem tooltip. Each
+ * stat set - `GrantedEffects.StatSet`, then its `AdditionalStatSets`, which
+ * inherit the first set's stats - sums its stats at a gem level
+ * (`GrantedEffectStatSetsPerLevel` values, flags at 1, constants) and renders
+ * them together through the set's stat-description scope: the skill's own
+ * `ActiveSkills.StatDescription` file (or the gem file for supports) followed by
+ * the files it includes. `GrantedEffectQualityStats` supplies the quality bonus
+ * lines.
  */
 
-import { buildStatIndex, renderBlock } from '@poe2-toolkit/ggpk';
+import { buildStatIndex, csdInclude, renderBlock } from '@poe2-toolkit/ggpk';
 import type { GgpkSource, StatIndex } from '@poe2-toolkit/ggpk';
 
 /** Active skill, support, or spirit (persistent buff) gem. */
@@ -88,7 +88,11 @@ export interface Gem {
 
 /** A gem's resolved requirement at one gem level. */
 export interface GemLevel {
-  /** Minimum character level for this gem level (`floor(ActorLevel)`, at least 1). */
+  /**
+   * Minimum character level for this gem level: the gem's level progression
+   * (`ItemExperiencePerLevel.Level`), never lower than the level before it, at
+   * least 1.
+   */
   requiredLevel: number;
   /** Strength required at this level, via PoB's formula (0 for supports / zero-weight attributes). */
   str: number;
@@ -108,7 +112,7 @@ export interface GemRequirement {
 
 /** One translated tooltip stat line plus the raw numbers behind it. */
 export interface GemStatLine {
-  /** Rendered text via the stat-description engine (bbcode stripped). */
+  /** Rendered text via the stat-description engine (bbcode stripped, real newlines). */
   text: string;
   /**
    * The lower bound of the line's numeric range: the sole value for a
@@ -140,7 +144,21 @@ export interface GemLevelScaling {
   spellCritChance: number;
   /** Attack critical hit chance as a percent. */
   attackCritChance: number;
-  /** Translated per-level stat lines (damage, chain count, etc.), in table order. */
+  /** Translated per-level stat lines of the first stat set (damage, chain count, etc.), in tooltip order. */
+  stats: GemStatLine[];
+  /**
+   * The granted effect's further stat sets (`GrantedEffects.AdditionalStatSets`,
+   * e.g. Ice Nova's "Cold-Infused"), each a full tooltip block of its own: it
+   * inherits the first set's stats. Absent when the effect has none.
+   */
+  additionalStatSets?: GemStatSet[];
+}
+
+/** One further stat set of a gem: its tooltip label and rendered lines. */
+export interface GemStatSet {
+  /** The set's label (`GrantedEffectLabels.Text`, else the skill's name). */
+  label: string;
+  /** Translated stat lines of the set, in tooltip order. */
   stats: GemStatLine[];
 }
 
@@ -152,8 +170,8 @@ export interface GemScaling {
   levels: GemLevelScaling[];
   /**
    * Bonus lines granted per point of gem quality, already resolved at quality
-   * 20 (`min` is always `0`, the value at quality 0). A gem with no quality
-   * bonus has `[]`.
+   * 20 (`min` is always `0`, the value at quality 0). Support gems and a gem
+   * with no quality bonus have `[]`.
    */
   qualityStats: GemStatLine[];
 }
@@ -190,14 +208,29 @@ interface SkillGemRow {
   GemColour?: number;
   MinLevelReq?: number;
   GemEffects?: number[];
+  /** The gem's level progression in ItemExperiencePerLevel. */
+  ItemExperienceType?: number | null;
   UI_Image?: string;
 }
 
 interface BaseItemTypeRow { Id?: string; Name?: string }
 interface GemEffectRow { GrantedEffect?: number | null; SupportText?: string; GemTags?: number[] }
-interface GrantedEffectRow { ActiveSkill?: number | null; StatSet?: number | null; CastTime?: number }
-interface ActiveSkillRow { Description?: string; Icon_DDSFile?: string }
-interface GemTagRow { Name?: string }
+interface GrantedEffectRow {
+  ActiveSkill?: number | null;
+  IsSupport?: boolean;
+  StatSet?: number | null;
+  AdditionalStatSets?: number[];
+  CastTime?: number;
+}
+interface ActiveSkillRow {
+  DisplayedName?: string;
+  Description?: string;
+  Icon_DDSFile?: string;
+  /** Path of the skill's own stat-description file, for its first stat set (`statset_0`). */
+  StatDescription?: string;
+}
+interface GemTagRow { Id?: string; Name?: string }
+interface GrantedEffectLabelRow { Id?: string; Text?: string }
 interface SupportGemRow { SkillGem?: number | null; Icon?: string }
 
 interface GrantedEffectPerLevelRow {
@@ -211,8 +244,13 @@ interface GrantedEffectPerLevelRow {
 }
 
 interface GrantedEffectStatSetRow {
+  Label?: number | null;
+  /** Flag stats that hold for the whole set (value 1). */
+  ImplicitStats?: number[];
   ConstantStats?: number[];
   ConstantStatsValues?: number[];
+  /** Stats a later set drops from those it inherits from the first set. */
+  IgnoredStats?: number[];
 }
 
 interface GrantedEffectStatSetPerLevelRow {
@@ -224,6 +262,8 @@ interface GrantedEffectStatSetPerLevelRow {
   AdditionalStatsValues?: number[];
   FloatStats?: number[];
   AdditionalStats?: number[];
+  /** Flag stats that hold at this level (value 1). */
+  AdditionalFlags?: number[];
 }
 
 interface GrantedEffectQualityStatRow {
@@ -232,9 +272,13 @@ interface GrantedEffectQualityStatRow {
   StatsValuesPermille?: number[];
   AltStats?: number[];
   AltStatValuesPermille?: number[];
+  /** Stat sets the quality bonus applies to; the first picks its description scope. */
+  ApplyToStatSets?: number[];
 }
 
 interface StatRow { Id?: string }
+
+interface ItemExperiencePerLevelRow { ItemExperienceType?: number | null; ItemCurrentLevel?: number; Level?: number }
 
 /**
  * Strip PoE bbcode: `[Cold]` -> `Cold`, `[AoESkill|AoE]` -> `AoE` (display half).
@@ -245,6 +289,17 @@ export function stripBbcode(text: string): string {
 
     return pipe === -1 ? inner : inner.slice(pipe + 1);
   });
+}
+
+/**
+ * Gems GGG itself names as unreleased: "[DNT ...]" (do not translate, e.g.
+ * "[DNT-UNUSED] Spiral Projectiles I"), "Coming Soon" slots, playtest skills and
+ * the "Removed Skill" stub. None of them reaches a player.
+ */
+const PLACEHOLDER_GEM = /\[DNT|^Coming Soon$|^Playtest |^Removed Skill$/;
+
+export function isPlaceholderGem(name: string): boolean {
+  return PLACEHOLDER_GEM.test(name);
 }
 
 /** Last `/`-separated segment of a game id (the build's gem key). */
@@ -270,75 +325,21 @@ export function gemStatRequirement(level: number, percent: number, isSupport: bo
 /** Character quality points a gem can normally carry (uncorrupted cap). */
 const MAX_QUALITY = 20;
 
-/** Decode a `.csd` file's UTF-16 text via {@link GgpkSource.file}, or `''` if the source has none. */
-async function readCsd(source: GgpkSource, path: string): Promise<string> {
+/** Decode a `.csd` file's UTF-16 text via {@link GgpkSource.file}, or `null` if the source has none. */
+async function readCsd(source: GgpkSource, path: string): Promise<string | null> {
   const bytes = await source.file(path);
 
-  return bytes ? Buffer.from(bytes).toString('utf16le') : '';
+  return bytes ? Buffer.from(bytes).toString('utf16le') : null;
 }
 
-/**
- * Render one stat id against the skill-specific index first, falling back to
- * the general (item-mod-shared) index for stats defined there instead (e.g.
- * `number_of_chains`, damage-roll stats). `null` when neither resolves it.
- * Rendered for the gem's stat table; `quality` renders a quality bonus, which
- * has lines of its own.
- */
-function renderStat(
-  skillIndex: StatIndex,
-  generalIndex: StatIndex,
-  ids: string[],
-  values: number[],
-  quality = false,
-): string | null {
-  const first = renderBlock(skillIndex, ids, values, { quality, table: true });
-
-  if (first.lines.length > 0 || first.unresolved.length === 0) {
-    return first.lines.join(' ') || null;
-  }
-
-  const fallbackValues = first.unresolved.map((id) => values[ids.indexOf(id)]!);
-
-  return renderBlock(generalIndex, first.unresolved, fallbackValues, { quality, table: true }).lines.join(' ') || null;
+/** GGG templates carry literal "\n" for multi-line stats; make it a real newline. */
+function multiline(text: string): string {
+  return text.replace(/\\n/g, '\n');
 }
 
-/** One `GemStatLine` per id in a single-value stat/value list (e.g. `ConstantStats`, `AdditionalStats`). */
-function renderSingleStats(skillIndex: StatIndex, generalIndex: StatIndex, statIds: string[], values: number[]): GemStatLine[] {
-  const lines: GemStatLine[] = [];
-
-  statIds.forEach((id, i) => {
-    const value = values[i] ?? 0;
-    const text = renderStat(skillIndex, generalIndex, [id], [value]);
-
-    if (text) {
-      lines.push({ text, min: value, max: value });
-    }
-  });
-
-  return lines;
-}
-
-/**
- * `GemStatLine`s from a stat/value list taken two at a time (GGG's convention
- * for a min/max pair, e.g. `spell_minimum_base_lightning_damage` +
- * `spell_maximum_base_lightning_damage`) - verified against a live extract
- * (Arc). An odd trailing id renders alone, `min` equal to `max`.
- */
-function renderPairedStats(skillIndex: StatIndex, generalIndex: StatIndex, statIds: string[], values: number[]): GemStatLine[] {
-  const lines: GemStatLine[] = [];
-
-  for (let i = 0; i < statIds.length; i += 2) {
-    const pairIds = statIds.slice(i, i + 2);
-    const pairValues = values.slice(i, i + 2);
-    const text = renderStat(skillIndex, generalIndex, pairIds, pairValues);
-
-    if (text) {
-      lines.push({ text, min: pairValues[0]!, max: pairValues[pairValues.length - 1]! });
-    }
-  }
-
-  return lines;
-}
+/** Description scope of support gems, and of the meta gems among them. */
+const GEM_SCOPE = 'Data/StatDescriptions/gem_stat_descriptions.csd';
+const META_GEM_SCOPE = 'Data/StatDescriptions/meta_gem_stat_descriptions.csd';
 
 /**
  * Build the gem export from the supplied {@link GgpkSource}. All data comes from
@@ -356,18 +357,98 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
   const GrantedEffectStatSets = (await source.table('GrantedEffectStatSets')) as GrantedEffectStatSetRow[];
   const GrantedEffectStatSetsPerLevel = (await source.table('GrantedEffectStatSetsPerLevel')) as GrantedEffectStatSetPerLevelRow[];
   const GrantedEffectQualityStats = (await source.table('GrantedEffectQualityStats')) as GrantedEffectQualityStatRow[];
+  const GrantedEffectLabels = (await source.table('GrantedEffectLabels')) as GrantedEffectLabelRow[];
   const Stats = (await source.table('Stats')) as StatRow[];
-
-  // The general .csd is tens of MB - only read + parse both files when there is
-  // at least one StatSet to render (a source that hasn't pinned the new tables
-  // yet, or genuinely has none, pays nothing for this).
-  const skillStatIndex = GrantedEffectStatSets.length > 0
-    ? buildStatIndex(await readCsd(source, 'data/statdescriptions/skill_stat_descriptions.csd'))
-    : buildStatIndex('');
-  const generalStatIndex = GrantedEffectStatSets.length > 0
-    ? buildStatIndex(await readCsd(source, 'data/statdescriptions/stat_descriptions.csd'))
-    : buildStatIndex('');
+  const ItemExperiencePerLevel = (await source.table('ItemExperiencePerLevel')) as ItemExperiencePerLevelRow[];
   const statId = (index: number): string => Stats[index]?.Id ?? '';
+
+  // Level progression -> gem level -> the character level it requires.
+  const progression = new Map<number, Map<number, number>>();
+
+  for (const row of ItemExperiencePerLevel) {
+    if (row.ItemExperienceType == null || row.ItemCurrentLevel == null) {
+      continue;
+    }
+
+    if (!progression.has(row.ItemExperienceType)) {
+      progression.set(row.ItemExperienceType, new Map());
+    }
+
+    progression.get(row.ItemExperienceType)!.set(row.ItemCurrentLevel, row.Level ?? 0);
+  }
+
+  // Description files, each read and parsed once (stat_descriptions.csd alone is
+  // tens of MB) and shared by every scope that includes it.
+  const csdFiles = new Map<string, Promise<{ index: StatIndex; include: string | null } | null>>();
+
+  function loadCsd(path: string): Promise<{ index: StatIndex; include: string | null } | null> {
+    const key = path.replace(/\\/g, '/').toLowerCase();
+    let file = csdFiles.get(key);
+
+    if (!file) {
+      file = readCsd(source, key).then((text) => (text === null ? null : { index: buildStatIndex(text), include: csdInclude(text) }));
+      csdFiles.set(key, file);
+    }
+
+    return file;
+  }
+
+  /** A description scope: the file at `path` followed by the files it includes, most specific first. */
+  async function scopeChain(path: string): Promise<StatIndex[] | null> {
+    const chain: StatIndex[] = [];
+
+    for (let next: string | null = path; next !== null;) {
+      const file = await loadCsd(next);
+
+      if (!file) {
+        break;
+      }
+
+      chain.push(file.index);
+      next = file.include;
+    }
+
+    return chain.length ? chain : null;
+  }
+
+  /**
+   * The scope stat set `setIndex` of a granted effect renders through, as Path of
+   * Building picks it: the gem (or meta gem) file for a support, else the skill's
+   * own file with `statset_0` swapped for the set's number.
+   */
+  async function statSetScope(
+    granted: GrantedEffectRow,
+    active: ActiveSkillRow | undefined,
+    setIndex: number,
+    isMeta: boolean,
+  ): Promise<StatIndex[] | null> {
+    if (granted.IsSupport) {
+      return scopeChain(isMeta ? META_GEM_SCOPE : GEM_SCOPE);
+    }
+
+    const path = active?.StatDescription;
+
+    if (!path) {
+      return null;
+    }
+
+    return (await scopeChain(path.replace('statset_0', `statset_${setIndex}`))) ?? scopeChain(path);
+  }
+
+  /** Render a summed stat map through a scope into tooltip lines, in tooltip order. */
+  function renderStats(chain: StatIndex[], stats: Map<string, number>, quality = false): GemStatLine[] {
+    const ids = [...stats.keys()];
+    const { lines, lineStatIds } = renderBlock(chain, ids, ids.map((id) => stats.get(id)!), {
+      descriptionOrder: true,
+      quality,
+    });
+
+    return lines.map((text, i) => {
+      const used = lineStatIds[i]!;
+
+      return { text: multiline(text), min: stats.get(used[0]!) ?? 0, max: stats.get(used[used.length - 1]!) ?? 0 };
+    });
+  }
 
   // GrantedEffect index -> its per-level rows (ActorLevel = required char level).
   const perLevelByGrantedEffect = new Map<number, GrantedEffectPerLevelRow[]>();
@@ -417,16 +498,15 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
   const requirements: Record<string, GemRequirement> = {};
   const scaling: Record<string, GemScaling> = {};
 
-  SkillGems.forEach((gem, gemIndex) => {
+  for (const [gemIndex, gem] of SkillGems.entries()) {
     const base = gem.BaseItemType != null ? BaseItemTypes[gem.BaseItemType] : undefined;
 
     if (!base?.Id) {
-      return;
+      continue;
     }
 
-    // [DNT] = "Do Not Translate" dev placeholder, never a real gem.
-    if (typeof base.Name === 'string' && base.Name.includes('[DNT]')) {
-      return;
+    if (isPlaceholderGem(base.Name ?? '')) {
+      continue;
     }
 
     const effectIndex = gem.GemEffects?.[0];
@@ -471,19 +551,23 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
       hoverImage: gem.UI_Image || null,
     };
 
-    // Per-level requirement curve: char level = floor(ActorLevel), attributes via
-    // PoB's formula. Support gems impose no attribute requirement.
+    // Per-level requirement curve, as PoB's skill export builds it: the character
+    // level comes from the gem's level progression and never drops below the
+    // level before; attributes follow PoB's formula. Support gems impose no
+    // attribute requirement.
     const levels: Record<number, GemLevel> = {};
     const perLevel = grantedIndex != null ? perLevelByGrantedEffect.get(grantedIndex) ?? [] : [];
+    const playerLevels = gem.ItemExperienceType != null ? progression.get(gem.ItemExperienceType) : undefined;
+    let previousLevel = 0;
 
-    for (const row of perLevel) {
-      if (row.Level == null || row.ActorLevel == null) {
+    for (const row of [...perLevel].sort((a, b) => (a.Level ?? 0) - (b.Level ?? 0))) {
+      if (row.Level == null) {
         continue;
       }
 
-      // PoB feeds the integer character level (not the raw float ActorLevel) into
-      // the requirement formula, so floor first.
-      const requiredLevel = Math.max(1, Math.floor(row.ActorLevel));
+      previousLevel = Math.max(playerLevels?.get(row.Level) ?? 0, previousLevel);
+
+      const requiredLevel = Math.max(1, previousLevel);
 
       levels[row.Level] = {
         requiredLevel,
@@ -497,79 +581,138 @@ export async function buildGems(source: GgpkSource): Promise<GemData> {
       requirements[segment] = { name: base.Name ?? '', levels };
     }
 
-    // Tooltip scaling: rooted at GrantedEffects.StatSet, independent of the
-    // attribute-requirement curve above (a support with no level curve can
-    // still have flat, level-1-only scaling, e.g. a flat attack-speed bonus).
-    const statSetIndex = granted?.StatSet;
-    const statSet = statSetIndex != null ? GrantedEffectStatSets[statSetIndex] : undefined;
+    // Tooltip scaling, independent of the attribute-requirement curve above (a
+    // support with no level curve can still have flat, level-1-only scaling).
+    // Built as Path of Building's gem tooltip: each stat set sums its stats at a
+    // gem level and renders them together through its own description scope.
+    const setIndices = granted?.StatSet != null ? [granted.StatSet, ...(granted.AdditionalStatSets ?? [])] : [];
+    const sets = setIndices.map((index) => GrantedEffectStatSets[index]);
 
-    if (statSetIndex != null && statSet) {
-      const constantIds = (statSet.ConstantStats ?? []).map(statId);
-      const constantValues = statSet.ConstantStatsValues ?? [];
-      const perGemLevel = statSetPerLevelByStatSet.get(statSetIndex) ?? [];
+    if (granted && sets.length > 0 && sets.every((set) => set !== undefined)) {
+      const statSets = sets as GrantedEffectStatSetRow[];
+      const isMeta = (effect?.GemTags ?? []).some((index) => GemTags[index]?.Id === 'meta');
+      const scopes = await Promise.all(statSets.map((_, k) => statSetScope(granted, active, k, isMeta)));
+      // Per set: GemLevel -> that level's scaling row.
+      const levelRows = setIndices.map((index) => new Map(
+        (statSetPerLevelByStatSet.get(index) ?? [])
+          .filter((row) => row.GemLevel != null)
+          .map((row) => [row.GemLevel!, row] as const),
+      ));
+      const label = (set: GrantedEffectStatSetRow): string =>
+        (set.Label != null ? GrantedEffectLabels[set.Label]?.Text : undefined) || active?.DisplayedName || base.Name || '';
+      // Sets labelled "Hidden" carry internal mechanics the game never shows in the
+      // tooltip (PoB leaves them out too); they still count for the scope numbering.
+      const shown = statSets
+        .map((set, k) => k)
+        .filter((k) => GrantedEffectLabels[statSets[k]!.Label ?? -1]?.Id !== 'Hidden');
+
+      /**
+       * Stat set `k`'s stats at a gem level, summed the way PoB's
+       * `calcLib.buildSkillInstanceStats` sums them: per-level values, then flags
+       * at 1 (only when the stat has no value yet), then constants. A later set
+       * inherits the first set's stats, minus the ones it ignores.
+       */
+      const statsAt = (k: number, level: number): Map<string, number> => {
+        const stats = new Map<string, number>();
+        const ignored = new Set(k > 0 ? (statSets[k]!.IgnoredStats ?? []).map(statId) : []);
+        const parts = k > 0 ? [0, k] : [0];
+        // The first set's stats are inherited, and only those can be ignored.
+        const keep = (part: number, id: string): boolean => Boolean(id) && (part > 0 || !ignored.has(id));
+        const add = (id: string, value: number): void => {
+          stats.set(id, (stats.get(id) ?? 0) + value);
+        };
+
+        parts.forEach((setK, part) => {
+          const row = levelRows[setK]!.get(level);
+
+          (row?.FloatStats ?? []).forEach((index, i) => {
+            const id = statId(index);
+
+            if (keep(part, id)) {
+              add(id, row!.BaseResolvedValues?.[i] ?? 0);
+            }
+          });
+          (row?.AdditionalStats ?? []).forEach((index, i) => {
+            const id = statId(index);
+
+            if (keep(part, id)) {
+              add(id, row!.AdditionalStatsValues?.[i] ?? 0);
+            }
+          });
+        });
+
+        const flag = (id: string): void => {
+          if (id && !stats.has(id)) {
+            stats.set(id, 1);
+          }
+        };
+
+        (levelRows[k]!.get(level)?.AdditionalFlags ?? []).map(statId).forEach(flag);
+        parts.forEach((setK, part) => {
+          (statSets[setK]!.ImplicitStats ?? []).map(statId).filter((id) => keep(part, id)).forEach(flag);
+        });
+        parts.forEach((setK, part) => {
+          const set = statSets[setK]!;
+
+          (set.ConstantStats ?? []).forEach((index, i) => {
+            const id = statId(index);
+
+            if (keep(part, id)) {
+              add(id, set.ConstantStatsValues?.[i] ?? 0);
+            }
+          });
+        });
+
+        return stats;
+      };
 
       const gemLevels: GemLevelScaling[] = [];
 
-      for (const row of perGemLevel) {
-        if (row.GemLevel == null) {
-          continue;
-        }
-
-        const costRow = perLevel.find((r) => r.Level === row.GemLevel);
+      for (const level of [...levelRows[0]!.keys()].sort((a, b) => a - b)) {
+        const row = levelRows[0]!.get(level)!;
+        const costRow = perLevel.find((r) => r.Level === level);
         const attackTimeMs = costRow?.AttackTime ?? 0;
-        const castTimeMs = attackTimeMs > 0 ? attackTimeMs : (granted?.CastTime ?? 0);
+        const castTimeMs = attackTimeMs > 0 ? attackTimeMs : (granted.CastTime ?? 0);
         const cooldownMs = costRow?.Cooldown ?? 0;
         const reservation = costRow?.Reservation ?? 0;
-
-        const stats = [
-          ...renderSingleStats(skillStatIndex, generalStatIndex, constantIds, constantValues),
-          ...renderSingleStats(
-            skillStatIndex, generalStatIndex,
-            (row.AdditionalStats ?? []).map(statId), row.AdditionalStatsValues ?? [],
-          ),
-          ...renderPairedStats(
-            skillStatIndex, generalStatIndex,
-            (row.FloatStats ?? []).map(statId), row.BaseResolvedValues ?? [],
-          ),
-        ];
+        const rendered = shown.map((k): GemStatSet => ({
+          label: label(statSets[k]!),
+          stats: scopes[k] ? renderStats(scopes[k]!, statsAt(k, level)) : [],
+        }));
+        const additionalStatSets = rendered.slice(1);
 
         gemLevels.push({
-          level: row.GemLevel,
+          level,
           cost: costRow?.CostAmounts?.[0] ?? null,
           castTime: castTimeMs > 0 ? castTimeMs / 1000 : null,
           cooldown: cooldownMs > 0 ? cooldownMs / 1000 : null,
           reservation: reservation > 0 ? reservation : null,
           spellCritChance: (row.SpellCritChance ?? 0) / 100,
           attackCritChance: (row.AttackCritChance ?? 0) / 100,
-          stats,
+          stats: rendered[0]?.stats ?? [],
+          ...(additionalStatSets.length ? { additionalStatSets } : {}),
         });
       }
 
-      // Quality bonus lines, resolved at MAX_QUALITY (min is always the
-      // quality-0 value, 0, since every quality stat scales linearly from it).
-      const quality = grantedIndex != null ? qualityStatsByGrantedEffect.get(grantedIndex) : undefined;
-      const qualityStats: GemStatLine[] = quality
-        ? [
-            ...(quality.Stats ?? []).map(statId).map((id, i): GemStatLine | null => {
-              const max = Math.round(((quality.StatsValuesPermille?.[i] ?? 0) * MAX_QUALITY) / 1000);
-              const text = renderStat(skillStatIndex, generalStatIndex, [id], [max], true);
+      // Quality bonus lines at MAX_QUALITY (min is the quality-0 value, 0). PoB
+      // gives support gems none, and renders each bonus stat on its own through
+      // the scope of the first stat set it applies to.
+      const quality = !granted.IsSupport && grantedIndex != null ? qualityStatsByGrantedEffect.get(grantedIndex) : undefined;
+      const qualityScope = scopes[quality?.ApplyToStatSets?.[0] ?? 0] ?? scopes[0];
+      const qualityStats = quality && qualityScope
+        ? (quality.Stats ?? []).flatMap((index, i) => {
+            // Stat values are whole numbers: the bonus keeps the integer part (PoB's math.modf).
+            const value = Math.trunc(((quality.StatsValuesPermille?.[i] ?? 0) * MAX_QUALITY) / 1000);
 
-              return text ? { text, min: 0, max } : null;
-            }),
-            ...(quality.AltStats ?? []).map(statId).map((id, i): GemStatLine | null => {
-              const max = Math.round(((quality.AltStatValuesPermille?.[i] ?? 0) * MAX_QUALITY) / 1000);
-              const text = renderStat(skillStatIndex, generalStatIndex, [id], [max], true);
-
-              return text ? { text, min: 0, max } : null;
-            }),
-          ].filter((line): line is GemStatLine => line !== null)
+            return renderStats(qualityScope, new Map([[statId(index), value]]), true).map((line) => ({ ...line, min: 0 }));
+          })
         : [];
 
       if (gemLevels.length > 0) {
         scaling[segment] = { name: base.Name ?? '', levels: gemLevels, qualityStats };
       }
     }
-  });
+  }
 
   return { gems, requirements, scaling };
 }
