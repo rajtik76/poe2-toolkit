@@ -231,6 +231,19 @@ export interface AscendancyDef {
   worldAnchor: Point;
   /** Disc native size (1500²). */
   size: Size;
+  /**
+   * Display id of the ascendancy whose disc and nodes this one plays on instead of
+   * nodes of its own (GGG `replaces`): the Abyssal Lich uses the Lich's. Absent for
+   * an ascendancy with its own nodes. See {@link ascendancyNodeOwner}.
+   */
+  replaces?: string;
+  /**
+   * Node display overrides while this ascendancy is active: a node skill id of the
+   * replaced ascendancy -> the skill id whose name/stats/icon it shows instead (the
+   * Abyssal Lich sees the Lich's "Price of Power" as "Steward of Kulemak"). Geometry
+   * and allocation stay on the base node, as in Path of Building.
+   */
+  overridePairs?: Record<number, number>;
 }
 
 // ---------------------------------------------------------------------------

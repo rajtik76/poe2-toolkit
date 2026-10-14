@@ -42,7 +42,9 @@ if (treeDataAvailable()) {
           const def = scene.centre.ascendancies.find((a) => a.internalId === asc.internalId);
           expect(def, `${asc.name} missing from centre layout`).toBeDefined();
 
-          const d = diamond(asc.internalId);
+          // A replacing ascendancy (the Abyssal Lich) sits on the replaced one's disc.
+          const owner = cls.ascendancies.find((a) => a.id === asc.replaces) ?? asc;
+          const d = diamond(owner.internalId);
           // Where the renderer drops the diamond: centre - (worldAnchor - diamondPos).
           const landX = centre.x - (def!.worldAnchor.x - d.x);
           const landY = centre.y - (def!.worldAnchor.y - d.y);

@@ -327,6 +327,15 @@ a single ascendancy's own subgraph (rooted at its start node) and leaves the
 main-tree allocation untouched, using `buildAscendancyGraph` and
 `ascendancyStartNode`.
 
+An ascendancy can replace another and play on its disc instead of nodes of its
+own (the Abyssal Lich uses the Lich's): its `AscendancyDef` carries `replaces`
+and the `overridePairs` it shows over the shared nodes. Nodes stay tagged with the
+ascendancy that owns them, so compare a node's `ascendancyName` against
+`ascendancyNodeOwner(data, ascendancy)`, never the ascendancy id itself. The
+allocation helpers already do; `buildScene` and `classOverrideNode` apply the
+active ascendancy's overrides when it is passed in. Its overrides win over the
+class's on the same node, and only an ascendancy of the active class counts.
+
 For framing the view, `allocatedBounds(scene)` returns the world bounds of the
 allocated nodes (handy to zoom to a freshly imported build), and
 `classBounds(scene, classId)` returns the bounds of one class's sector of the
@@ -429,7 +438,7 @@ These are skipped in the scene; the data still contains them.
 | `classifyNode` | Node's render `kind`. |
 | `nodeTargetSize` | Derived icon/overlay/effect sizes. |
 | `chosenAttributeOption` | The Str/Dex/Int option a build picked for a node. |
-| `classOverrideNode` | The node a class shows at a position (per-class name/stats/icon override). |
+| `classOverrideNode` | The node shown at a position: the name/stats/icon override of the active class, or of the active ascendancy (optional `ascendId`). |
 | `allocatedBounds` | World bounds of the allocated nodes. |
 | `allocatedBoundsWithCentre` | Allocated bounds grown to include the centre hub (for framing a fresh import). |
 | `classBounds` | World bounds of a class's tree sector. |
@@ -447,6 +456,8 @@ These are skipped in the scene; the data still contains them.
 | `weaponSetRemovalSet` | Set-aware `removalSet`, respecting each set's connectivity. |
 | `buildAscendancyGraph` | Adjacency graph of one ascendancy. |
 | `ascendancyStartNode` | An ascendancy's pathing root. |
+| `ascendancyNodeOwner` | The ascendancy whose nodes an ascendancy plays on (the one it replaces, or itself). |
+| `findAscendancy` | An ascendancy's `AscendancyDef` by id, from whichever class has it. |
 | `toggleAscendancyAllocation` | Edit within one ascendancy's subgraph. |
 | `clearAscendancyAllocation` | Drop one ascendancy's allocated nodes (on ascendancy switch). |
 | `freshAllocation` | A blank allocation for a class (on class switch). |

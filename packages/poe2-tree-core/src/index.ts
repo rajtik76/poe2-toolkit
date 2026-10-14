@@ -56,6 +56,7 @@ export { project, projectPoint, screenToWorld, nodeAt } from './geometry/project
 export { allocatedBounds, allocatedBoundsWithCentre, classBounds } from './geometry/framing.js';
 
 export { buildScene, chosenAttributeOption, classOverrideNode } from './scene/buildScene.js';
+export { ascendancyNodeOwner, findAscendancy } from './scene/ascendancy.js';
 export {
   ascendancyStartNode,
   buildAscendancyGraph,

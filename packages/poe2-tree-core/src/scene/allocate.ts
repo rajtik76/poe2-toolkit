@@ -8,6 +8,7 @@
  */
 
 import type { AllocMode, BuildAllocation, TreeData, TreeNode, WeaponSet } from '../types.js';
+import { ascendancyNodeOwner } from './ascendancy.js';
 
 /** Adjacency list of the walkable tree: node id -> connected node ids. */
 export type TreeGraph = Map<number, Set<number>>;
@@ -113,8 +114,10 @@ export function buildTreeGraph(data: TreeData, activeStart?: number): TreeGraph 
  * the ascendancy has none in the data.
  */
 export function ascendancyStartNode(data: TreeData, ascendancy: string): number | undefined {
+  const owner = ascendancyNodeOwner(data, ascendancy);
+
   for (const node of Object.values(data.nodes)) {
-    if (node.isAscendancyStart && node.ascendancyName === ascendancy) {
+    if (node.isAscendancyStart && node.ascendancyName === owner) {
       return node.skill;
     }
   }
@@ -128,6 +131,7 @@ export function ascendancyStartNode(data: TreeData, ascendancy: string): number 
  * within this self-contained subgraph — never across the main-tree boundary.
  */
 export function buildAscendancyGraph(data: TreeData, ascendancy: string): TreeGraph {
+  const owner = ascendancyNodeOwner(data, ascendancy);
   const graph: TreeGraph = new Map();
   const link = (from: number, to: number): void => {
     let set = graph.get(from);
@@ -141,7 +145,7 @@ export function buildAscendancyGraph(data: TreeData, ascendancy: string): TreeGr
   };
 
   for (const node of Object.values(data.nodes)) {
-    if (node.ascendancyName !== ascendancy) {
+    if (node.ascendancyName !== owner) {
       continue;
     }
 
@@ -152,7 +156,7 @@ export function buildAscendancyGraph(data: TreeData, ascendancy: string): TreeGr
     for (const conn of node.connections) {
       const target = data.nodes[conn.id];
 
-      if (!target || target.ascendancyName !== ascendancy) {
+      if (!target || target.ascendancyName !== owner) {
         continue;
       }
 
@@ -324,7 +328,9 @@ export function toggleAllocation(
  * this with the OLD ascendancy before activating the new one.
  */
 export function clearAscendancyAllocation(data: TreeData, allocated: Iterable<number>, ascendancy: string): number[] {
-  return [...allocated].filter((id) => data.nodes[id]?.ascendancyName !== ascendancy);
+  const owner = ascendancyNodeOwner(data, ascendancy);
+
+  return [...allocated].filter((id) => data.nodes[id]?.ascendancyName !== owner);
 }
 
 // ---------------------------------------------------------------------------

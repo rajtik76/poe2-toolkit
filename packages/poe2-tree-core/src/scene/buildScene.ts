@@ -20,6 +20,8 @@ import type {
   WeaponSet,
   WorldRect,
 } from '../types.js';
+import { ascendancyStartNode } from './allocate.js';
+import { activeOverrides } from './ascendancy.js';
 import { placeConnection } from './connections.js';
 import { classifyNode, nodeTargetSize } from './nodeSize.js';
 
@@ -52,15 +54,12 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
   // The active ascendancy's start node (the diamond every first node launches
   // from) is implicitly allocated — you have the ascendancy — so its rails into
   // the first allocated nodes render as active instead of looking disconnected.
+  // A replacing ascendancy (the Abyssal Lich) starts from the disc it plays on.
   const ascId = opts.allocation?.ascendId;
+  const ascStart = ascId ? ascendancyStartNode(data, ascId) : undefined;
 
-  if (ascId) {
-    for (const node of Object.values(data.nodes)) {
-      if (node.isAscendancyStart && node.ascendancyName === ascId) {
-        allocated.add(node.skill);
-        break;
-      }
-    }
+  if (ascStart !== undefined) {
+    allocated.add(ascStart);
   }
 
   // A conditional node (GGG `unlockConstraint`) is shown only once ALL its unlock
@@ -70,8 +69,9 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
     !node.conditional || (node.unlockNodes !== undefined && node.unlockNodes.every((id) => allocated.has(id)));
 
   // Active class's per-node display overrides (the Witch's "Spell and Minion
-  // Damage" for the generic "Spell Damage" node, etc.).
-  const overridePairs = data.classes.find((cls) => cls.id === opts.allocation?.classId)?.overridePairs;
+  // Damage" for the generic "Spell Damage" node, etc.), and the active
+  // ascendancy's over the nodes it plays on.
+  const overrideOf = activeOverrides(data, opts.allocation?.classId, ascId);
 
   const nodes: PlacedNode[] = [];
   const masteryEffects: PlacedEffect[] = [];
@@ -115,7 +115,7 @@ export function buildScene(data: TreeData, opts: SceneOptions = {}): Scene {
     const size = nodeTargetSize(node);
     // The active class's override icon for this node, if any (e.g. the Witch's
     // "Spell and Minion Damage" art over the generic "Spell Damage").
-    const overrideTarget = overridePairs?.[node.skill];
+    const overrideTarget = overrideOf(node.skill);
     const overrideIcon = overrideTarget !== undefined ? data.nodes[overrideTarget]?.icon : undefined;
     const isAllocated = allocated.has(node.skill);
     const weaponSet = weaponSetOf(node.skill);
@@ -265,19 +265,18 @@ export function chosenAttributeOption(node: TreeNode, allocation: BuildAllocatio
 /**
  * The node a class actually shows at `node`'s position. When the active class
  * overrides it (e.g. the Witch's "Spell and Minion Damage" for the generic
- * "Spell Damage"), the override's name/stats/icon replace the base node's; the
- * geometry and kind flags stay. Returns the node unchanged otherwise.
+ * "Spell Damage"), or the active ascendancy does over the nodes it plays on (the
+ * Abyssal Lich's "Steward of Kulemak" for the Lich's "Price of Power"), the
+ * override's name/stats/icon replace the base node's; the geometry and kind flags
+ * stay. Returns the node unchanged otherwise.
  */
 export function classOverrideNode(
   data: TreeData,
   classId: number | null | undefined,
   node: TreeNode,
+  ascendId?: string | null,
 ): TreeNode {
-  if (classId == null) {
-    return node;
-  }
-
-  const target = data.classes.find((cls) => cls.id === classId)?.overridePairs?.[node.skill];
+  const target = activeOverrides(data, classId, ascendId)(node.skill);
   const override = target !== undefined ? data.nodes[target] : undefined;
 
   if (!override) {

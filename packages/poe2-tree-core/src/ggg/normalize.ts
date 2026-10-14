@@ -104,6 +104,10 @@ interface GggAscendancy {
   /** Hub-relative position of the disc centre (radius ~1332 toward the class). */
   offsetX?: number;
   offsetY?: number;
+  /** Internal id of the ascendancy whose nodes this one plays on (`Witch3`). */
+  replaces?: string;
+  /** Node display overrides while this ascendancy is active: base skill id -> override skill id. */
+  overridePairs?: Record<string | number, number>;
 }
 
 interface GggClass {
@@ -148,7 +152,7 @@ export function normalizeGggTree(raw: GggTreeJson, version: string): TreeData {
     groups: normalizeGroups(raw.groups),
     nodes,
     classes: raw.classes.map((cls, index) =>
-      normalizeClass(cls, index, startNodeByClass, ascendancyStarts),
+      normalizeClass(cls, index, startNodeByClass, ascendancyStarts, ascendancyNames),
     ),
     jewelSlots: (raw.jewelSlots ?? []).map(Number),
     bounds: { minX: raw.min_x, minY: raw.min_y, maxX: raw.max_x, maxY: raw.max_y },
@@ -344,7 +348,8 @@ function orderIndex(name: string): number {
  * The world position of each ascendancy's start node (the diamond), keyed by
  * GGG ascendancy id. GGG bakes every ascendancy at a far-flung cluster; the
  * start node is the anchor the renderer relocates onto the hub. Ascendancies
- * with no nodes (e.g. unreleased "Abyssal Lich") are simply absent.
+ * with no nodes of their own (unreleased ones, or one that replaces another) are
+ * simply absent.
  */
 function mapAscendancyStarts(nodes: Record<string, GggNode>): Map<string, Point> {
   const starts = new Map<string, Point>();
@@ -384,6 +389,7 @@ function normalizeClass(
   index: number,
   startNodeByClass: Map<number, number>,
   ascendancyStarts: Map<string, Point>,
+  ascendancyNames: Map<string, string>,
 ): ClassDef {
   return {
     name: raw.name,
@@ -400,13 +406,14 @@ function normalizeClass(
       active: { width: RING_SIZE, height: RING_SIZE },
       frame: { width: RING_SIZE, height: RING_SIZE },
     },
-    // Keep only released ascendancies — ones with a name AND a start node (i.e.
-    // actual nodes; e.g. "Abyssal Lich" is named but has none yet, so dropped).
+    // Keep only released ascendancies - ones with a name AND a start node, their
+    // own or, for one that replaces another (the Abyssal Lich plays on the Lich's
+    // nodes), the replaced one's. A named ascendancy without either has no nodes yet.
     ascendancies: (raw.ascendancies ?? [])
       .filter((asc): asc is GggAscendancy & { name: string } =>
-        Boolean(asc.name) && ascendancyStarts.has(asc.id),
+        Boolean(asc.name) && ascendancyStarts.has(asc.replaces ?? asc.id),
       )
-      .map((asc) => normalizeAscendancy(asc, ascendancyStarts)),
+      .map((asc) => normalizeAscendancy(asc, ascendancyStarts, ascendancyNames)),
     ...(raw.overridePairs ? { overridePairs: normalizeOverrides(raw.overridePairs) } : {}),
   };
 }
@@ -425,8 +432,10 @@ function normalizeOverrides(raw: Record<string | number, number>): Record<number
 function normalizeAscendancy(
   raw: GggAscendancy & { name: string },
   ascendancyStarts: Map<string, Point>,
+  ascendancyNames: Map<string, string>,
 ): AscendancyDef {
-  const start = ascendancyStarts.get(raw.id) ?? { x: 0, y: 0 };
+  // A replacing ascendancy sits on the replaced one's disc, so it anchors there.
+  const start = ascendancyStarts.get(raw.replaces ?? raw.id) ?? { x: 0, y: 0 };
   // The renderer relocates each disc node by `centre − worldAnchor`. GGG's
   // `offsetX/offsetY` is where the start diamond must land in the hub — on the
   // class's quatrefoil axis, 1332u out (verified against the original PoB
@@ -442,5 +451,7 @@ function normalizeAscendancy(
     image: `Classes${raw.name.replace(/\s+/g, '')}`,
     worldAnchor: { x: start.x + offsetX, y: start.y + offsetY },
     size: { width: ASCENDANCY_DISC_SIZE, height: ASCENDANCY_DISC_SIZE },
+    ...(raw.replaces !== undefined ? { replaces: ascendancyNames.get(raw.replaces) ?? raw.replaces } : {}),
+    ...(raw.overridePairs ? { overridePairs: normalizeOverrides(raw.overridePairs) } : {}),
   };
 }
