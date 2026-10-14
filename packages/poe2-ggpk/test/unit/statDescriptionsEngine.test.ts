@@ -275,6 +275,17 @@ describe('renderBlock', () => {
     ]);
   });
 
+  it('lists lines in input order, or in description-file order on request', () => {
+    expect(renderBlock(index, ['curse_duration_+%', 'maximum_life'], [25, 30]).lines).toEqual([
+      '25% increased Curse Duration',
+      '+30 to maximum Life',
+    ]);
+    expect(renderBlock(index, ['curse_duration_+%', 'maximum_life'], [25, 30], { descriptionOrder: true }).lines).toEqual([
+      '+30 to maximum Life',
+      '25% increased Curse Duration',
+    ]);
+  });
+
   it('picks the line by selectBy while rendering the given values', () => {
     expect(renderBlock(index, ['maximum_life'], [0], { selectBy: [1] }).lines).toEqual(['+0 to maximum Life']);
     expect(renderBlock(index, ['body_armour_+%'], [80], { selectBy: [0] }).lines).toEqual([]);

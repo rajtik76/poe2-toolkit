@@ -45,6 +45,8 @@ interface Variant {
 interface StatRecord {
   statIds: string[];
   variants: Variant[];
+  /** Position of the block in the description file; the game lists lines in this order. */
+  order: number;
 }
 
 /**
@@ -67,6 +69,11 @@ export interface RenderOptions {
   selectBy?: number[];
   /** Render a gem's quality bonus: lets `gem_quality` lines take part. */
   quality?: boolean;
+  /**
+   * List the lines the way the game does: by their block's position in the
+   * description file, instead of in the order of `statIds`.
+   */
+  descriptionOrder?: boolean;
   /**
    * Render for a gem's stat table: a stat no regular line describes falls back
    * to its `table_only` row, printed as GGG writes it (`label@value`).
@@ -144,6 +151,7 @@ export function buildStatIndex(csd: string): StatIndex {
   const text = csd.charCodeAt(0) === 0xfeff ? csd.slice(1) : csd;
   const lines = text.split(/\r\n|\n/);
   const byStat = new Map<string, StatRecord>();
+  let order = 0;
 
   let i = 0;
 
@@ -191,8 +199,10 @@ export function buildStatIndex(csd: string): StatIndex {
 
     // A stat described twice takes its later block, which supersedes the earlier one.
     for (const id of statIds) {
-      byStat.set(id, { statIds, variants });
+      byStat.set(id, { statIds, variants, order });
     }
+
+    order += 1;
   }
 
   return { byStat };
@@ -412,7 +422,7 @@ export function renderBlock(index: StatIndex, statIds: string[], vals: number[],
   const valueByStat = new Map(statIds.map((id, i) => [id, vals[i]!]));
   const selectByStat = new Map(statIds.map((id, i) => [id, (options.selectBy ?? vals)[i]!]));
   const consumed = new Set<string>();
-  const lines: string[] = [];
+  const rendered: { line: string; order: number }[] = [];
   const unresolved: string[] = [];
 
   for (const statId of statIds) {
@@ -439,7 +449,10 @@ export function renderBlock(index: StatIndex, statIds: string[], vals: number[],
     const variant = selectValues.some((value) => value !== 0) ? selectVariant(record.variants, selectValues, options) : null;
 
     if (variant?.text) {
-      lines.push(stripBbcode(fillTemplate(variant.text, applyHandlers(rawValues, variant.handlers))));
+      rendered.push({
+        line: stripBbcode(fillTemplate(variant.text, applyHandlers(rawValues, variant.handlers))),
+        order: record.order,
+      });
     }
 
     for (const id of record.statIds) {
@@ -455,5 +468,9 @@ export function renderBlock(index: StatIndex, statIds: string[], vals: number[],
     }
   }
 
-  return { lines, unresolved };
+  if (options.descriptionOrder) {
+    rendered.sort((a, b) => a.order - b.order);
+  }
+
+  return { lines: rendered.map((entry) => entry.line), unresolved };
 }
