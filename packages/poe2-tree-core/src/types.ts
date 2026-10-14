@@ -85,8 +85,8 @@ export interface TreeNode {
   isJewelSocket?: boolean;
   /**
    * Special sockets (e.g. "Sinister Jewel Socket") that are not part of the base
-   * tree and are hidden from the normal render. Derived from the node name, as
-   * GGG carries no dedicated flag (PoB shipped this as `noRadius`).
+   * tree and are hidden from the normal render: the anointment-only sockets, which
+   * the export flags `noRadius` as PoB does (older exports: by the node name).
    */
   noRadius?: boolean;
   /** Mastery hub: renders as a background pattern, not a connectable node. GGG: `isMastery` (PoB: `isOnlyImage`). */

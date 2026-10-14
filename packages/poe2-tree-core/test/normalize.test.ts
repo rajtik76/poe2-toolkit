@@ -165,6 +165,17 @@ describe('normalizeGggTree', () => {
     expect(data.nodes[777]?.options?.[0]?.stats).toEqual(['+5 to Strength']);
   });
 
+  it('marks Sinister sockets noRadius from the flag, or from the raw name of older exports', () => {
+    const raw = fixture();
+    raw.nodes['200'] = { ...raw.nodes['200'], isJewelSocket: true, noRadius: true, name: 'Sinister Jewel Socket' };
+    raw.nodes['777'] = { ...raw.nodes['777'], isJewelSocket: true, name: '[SinisterJewelSockets|Sinister] [Jewel] Socket' };
+    const sockets = normalizeGggTree(raw, '0_5');
+
+    expect(sockets.nodes[200]?.noRadius).toBe(true);
+    expect(sockets.nodes[777]?.noRadius).toBe(true);
+    expect(sockets.nodes[16]?.noRadius).toBeUndefined();
+  });
+
   it('translates ascendancyId to its display name', () => {
     expect(data.nodes[16]?.ascendancyName).toBe('Pathfinder');
   });

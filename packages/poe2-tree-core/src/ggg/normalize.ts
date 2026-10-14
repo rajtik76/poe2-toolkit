@@ -77,6 +77,8 @@ interface GggNode {
   isKeystone?: boolean;
   isMastery?: boolean;
   isJewelSocket?: boolean;
+  /** Socket without a radius (the anointment-only Sinister sockets). */
+  noRadius?: boolean;
   isGenericAttribute?: boolean;
   isAscendancyStart?: boolean;
   activeEffectImage?: string;
@@ -246,8 +248,9 @@ function normalizeNode(
     ...(raw.isNotable ? { isNotable: true } : {}),
     ...(raw.isKeystone ? { isKeystone: true } : {}),
     ...(raw.isJewelSocket ? { isJewelSocket: true } : {}),
-    // GGG has no `noRadius`; the hidden Sinister sockets are identified by name.
-    ...(raw.isJewelSocket && name.includes('SinisterJewelSocket') ? { noRadius: true } : {}),
+    // The hidden Sinister sockets: flagged `noRadius` by the extractor (anointment-only
+    // sockets); older exports carried no flag, only the raw bbcode name.
+    ...(raw.noRadius || (raw.isJewelSocket && name.includes('SinisterJewelSocket')) ? { noRadius: true } : {}),
     ...(raw.isMastery ? { isMastery: true } : {}),
     ...(raw.isAscendancyStart ? { isAscendancyStart: true } : {}),
     ...(raw.isGenericAttribute ? { isAttribute: true } : {}),
