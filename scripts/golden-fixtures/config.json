@@ -331,7 +331,16 @@
         "GemEffects",
         "UI_Image",
         "Tier",
-        "BaseSkillGem"
+        "BaseSkillGem",
+        "ItemExperienceType"
+      ]
+    },
+    {
+      "name": "ItemExperiencePerLevel",
+      "columns": [
+        "ItemExperienceType",
+        "ItemCurrentLevel",
+        "Level"
       ]
     },
     {
@@ -344,7 +353,8 @@
         "Icon_DDSFile",
         "GrantedEffect",
         "ActiveSkillTypes",
-        "WebsiteDescription"
+        "WebsiteDescription",
+        "StatDescription"
       ]
     },
     {
@@ -356,7 +366,8 @@
         "SupportGemLetter",
         "StatSet",
         "CastTime",
-        "AllowedActiveSkillTypes"
+        "AllowedActiveSkillTypes",
+        "AdditionalStatSets"
       ]
     },
     {
@@ -405,11 +416,24 @@
       ]
     },
     {
+      "name": "GrantedEffectLabels",
+      "columns": [
+        "Id",
+        "Text"
+      ]
+    },
+    {
       "name": "GrantedEffectStatSets",
       "columns": [
         "Id",
         "ConstantStats",
-        "ConstantStatsValues"
+        "ConstantStatsValues",
+        "Label",
+        "ImplicitStats",
+        "IgnoredStats",
+        "BaseEffectiveness",
+        "IncrementalEffectiveness",
+        "DamageIncrementalEffectiveness"
       ]
     },
     {
@@ -422,7 +446,12 @@
         "BaseResolvedValues",
         "AdditionalStatsValues",
         "FloatStats",
-        "AdditionalStats"
+        "AdditionalStats",
+        "AdditionalFlags",
+        "StatInterpolations",
+        "FloatStatsValues",
+        "InterpolationBases",
+        "ActorLevel"
       ]
     },
     {
@@ -432,7 +461,9 @@
         "Stats",
         "StatsValuesPermille",
         "AltStats",
-        "AltStatValuesPermille"
+        "AltStatValuesPermille",
+        "ApplyToStatSets",
+        "AltApplyToStatSets"
       ]
     },
     {
