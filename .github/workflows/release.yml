@@ -5,15 +5,17 @@ name: Release
 # publish a release from it). Only packages whose version is not yet on npm are
 # published, so partial releases are safe.
 #
-# One-time setup: add an automation npm token as the repo secret NPM_TOKEN
-# (npmjs.com -> Access Tokens -> Generate -> "Automation"). It needs publish
-# rights on the @poe2-toolkit scope.
+# Publishes through npm trusted publishing (OIDC), so no long-lived token lives
+# in the repo. One-time setup per package on npmjs.com (Settings -> Trusted
+# Publisher -> GitHub Actions): repository rajtik76/poe2-toolkit, workflow
+# release.yml.
 on:
   release:
     types: [published]
 
 permissions:
   contents: read
+  id-token: write # the OIDC token npm exchanges for a short-lived publish credential
 
 # Releases publish to npm. Serialize them so several tags published together
 # don't race to publish a shared dependency package (which 403s on the version a
@@ -33,10 +35,10 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: 'https://registry.npmjs.org'
+      # Trusted publishing needs npm 11.5.1 or newer; Node 22 ships an older npm.
+      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
       - run: node scripts/publish-changed.mjs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

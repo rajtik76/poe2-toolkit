@@ -3,7 +3,7 @@
 // in dependency order. Already-published versions are skipped, so a release that
 // only bumped some packages publishes only those - no "version already exists"
 // failures. Run by the Release workflow; assumes `npm run build` already ran and
-// that npm auth is configured (NODE_AUTH_TOKEN via setup-node's .npmrc).
+// that npm trusted publishing (OIDC) is configured for each package.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
