@@ -48,13 +48,18 @@ const CSD = [
   '\t2',
   '\t\t1|# "+{0}% to Fire Resistance"',
   '\t\t#|-1 "{0}% reduced Fire Resistance" negate 1',
+  'description',
+  '\t1 charm_slots',
+  '\t2',
+  '\t\t1 "{0:+d} Charm Slot"',
+  '\t\t2|# "{0:+d} Charm Slots"',
   '',
 ].join('\n');
 
 const TABLES: Record<string, TableRow[]> = {
   Stats: [
     { Id: 'add_str' }, { Id: 'phys_pct' }, { Id: 'add_min' }, { Id: 'add_max' },
-    { Id: 'cond' }, { Id: 'neg_stat' }, { Id: 'cap' }, { Id: 'fire_res' },
+    { Id: 'cond' }, { Id: 'neg_stat' }, { Id: 'cap' }, { Id: 'fire_res' }, { Id: 'charm_slots' },
   ],
   Tags: [{ Id: 'ring' }, { Id: 'default' }, { Id: 'weapon' }],
   ModFamily: [{ Id: 'Strength' }, { Id: 'PhysicalDamage' }],
@@ -105,6 +110,8 @@ const TABLES: Record<string, TableRow[]> = {
     },
     // A range rising from 0 under lines that leave 0 out (1|#, #|-1) keeps its line.
     { Id: 'ZeroStartRes', Domain: 1, GenerationType: 1, Level: 1, Stat1: 7, Stat1Value: [0, 10] },
+    // A zero end takes the other end's line, so singular/plural templates don't split the range.
+    { Id: 'ZeroStartCharms', Domain: 1, GenerationType: 1, Level: 1, Stat1: 8, Stat1Value: [0, 2] },
     // A roll fixed at 0 grants nothing and shows no line; the other stat still renders.
     { Id: 'ZeroRes', Domain: 1, GenerationType: 1, Level: 1, Stat1: 7, Stat1Value: [0, 0], Stat2: 0, Stat2Value: [3, 3] },
     // No stats and no group -> empty stats/rolls, null group/tier; null domain -> "Unknown".
@@ -205,6 +212,12 @@ describe('buildMods', () => {
     const mods = await buildMods(fakeSource());
 
     expect(mods.ZeroStartRes?.stats).toEqual(['+(0-10)% to Fire Resistance']);
+  });
+
+  it('renders both ends of a zero-start range with the line of its non-zero end', async () => {
+    const mods = await buildMods(fakeSource());
+
+    expect(mods.ZeroStartCharms?.stats).toEqual(['+(0-2) Charm Slots']);
   });
 
   it('shows no line for a roll fixed at 0', async () => {

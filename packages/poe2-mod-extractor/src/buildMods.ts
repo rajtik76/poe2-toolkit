@@ -270,9 +270,10 @@ function renderStats(statIndex: StatIndex, rolls: ModRoll[]): string[] {
 
   const statIds = rolls.map((roll) => roll.stat);
   // A zero end has no line of its own (GGG's `1|#` and `#|-1` lines leave 0 out, and
-  // an all-zero block is hidden), so it picks its line by the range's direction:
-  // (0-10) picks as 1. Without this the whole roll would lose its line.
-  const pickAt = (end: number, other: number): number => (end !== 0 ? end : Math.sign(other));
+  // an all-zero block is hidden), so it picks the line of the range's other end:
+  // (0-2) picks as 2, keeping "+(0-2) Charm Slots" on one template. Without this
+  // the whole roll would lose its line.
+  const pickAt = (end: number, other: number): number => (end !== 0 ? end : other);
   const minLines = renderBlock(statIndex, statIds, rolls.map((roll) => roll.min), {
     selectBy: rolls.map((roll) => pickAt(roll.min, roll.max)),
   }).lines;
