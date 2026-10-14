@@ -4,6 +4,22 @@ All notable changes to `@poe2-toolkit/tree-extractor` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-10-14
+
+### Added
+
+- The export now carries the socket, multiple-choice, free-allocate, anointment
+  recipe and replacing-ascendancy data PoB exports, plus the Stat6 / Stat7 and
+  weapon-set points.
+
+### Fixed
+
+- The tree is exported the way PoB does: unreleased ascendancy nodes and empty
+  groups are dropped, markup is stripped from names and stat lines are listed
+  in description order.
+- Overrides of nodes that are no longer on the tree are dropped.
+- Requires `@poe2-toolkit/ggpk` `^1.2.0`.
+
 ## [1.0.0] - 2026-07-30
 
 ### Changed

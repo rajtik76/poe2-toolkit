@@ -4,6 +4,16 @@ All notable changes to `@poe2-toolkit/rune-extractor` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-10-14
+
+### Fixed
+
+- Runes are exported the way PoB does: slots GGG leaves undisplayed are labelled
+  by their category id, bonded effects are included, every DNT core is dropped,
+  names are trimmed, multi-line stats keep real newlines and lines are listed
+  in description order.
+- Requires `@poe2-toolkit/ggpk` `^1.2.0`.
+
 ## [1.0.0] - 2026-07-30
 
 ### Changed

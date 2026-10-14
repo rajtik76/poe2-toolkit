@@ -4,6 +4,26 @@ All notable changes to `@poe2-toolkit/ggpk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-10-14
+
+### Added
+
+- `renderBlock` takes a chain of indexes (a description file and the files it
+  includes, read with the new `csdInclude`) and lists lines the way the game
+  does. It reports the stats each line renders, honours `no_description` and
+  never renders `table_only` lines.
+- `descriptionOrder` option to list stat lines in description file order
+  instead of the order of `statIds`.
+
+### Fixed
+
+- Value handlers now follow GGG's rules: `per_minute_to_per_second` divided by
+  100 and every value was rounded to an integer, so 30 per minute rendered as
+  0% instead of 0.5%. Most other handlers, `!n` conditions and the
+  `gem_quality` / `table_only` line flags were ignored, and a value no line
+  accepted fell back to the first line.
+- A stat described in more than one block now uses the later block.
+
 ## [1.1.0] - 2026-09-05
 
 ### Added

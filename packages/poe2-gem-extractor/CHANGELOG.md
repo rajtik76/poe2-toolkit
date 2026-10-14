@@ -4,6 +4,18 @@ All notable changes to `@poe2-toolkit/gem-extractor` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-10-14
+
+### Fixed
+
+- Gem tooltips are built the way PoB builds them: each stat set's stats render
+  together through its own description scope, further stat sets are included,
+  the required level comes from the gem's level progression, quality bonuses
+  stay whole and are left off supports, and gems GGG names as unreleased are
+  dropped.
+- Quality bonus and stat table lines render.
+- Requires `@poe2-toolkit/ggpk` `^1.2.0`.
+
 ## [2.0.0] - 2026-09-05
 
 ### Changed
