@@ -50,7 +50,7 @@ for (const dir of ORDER) {
   console.log(`stage  ${name}@${version}`);
 
   try {
-    execFileSync('npm', ['stage', 'publish', '-w', `packages/${dir}`], {
+    execFileSync('npm', ['stage', 'publish', `./packages/${dir}`], {
       cwd: fileURLToPath(new URL('..', import.meta.url)),
       stdio: 'inherit',
     });
