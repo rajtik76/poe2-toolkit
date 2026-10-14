@@ -10,6 +10,11 @@
     "geometry"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rajtik76/poe2-toolkit.git",
+    "directory": "packages/poe2-tree-core"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
