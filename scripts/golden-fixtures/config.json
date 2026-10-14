@@ -33,7 +33,14 @@
         "IsAttribute",
         "GrantedSkill",
         "UnlockedBy",
-        "NodeFrameArt"
+        "NodeFrameArt",
+        "Stat6Value",
+        "Stat7Value",
+        "IsAnointmentOnly",
+        "WeaponPointsGranted",
+        "IsFree",
+        "ApplyToArmour",
+        "VisibleForAscendancy"
       ]
     },
     {
@@ -125,6 +132,34 @@
         "CharacterToOverrideFor",
         "SkillToOverride",
         "Override"
+      ]
+    },
+    {
+      "name": "AscendancyPassiveSkillOverrides",
+      "columns": [
+        "AscendancyToOverrideFor",
+        "SkillToOverride",
+        "Override"
+      ]
+    },
+    {
+      "name": "BlightCraftingResults",
+      "columns": [
+        "Id",
+        "PassiveSkill"
+      ]
+    },
+    {
+      "name": "BlightCraftingRecipes",
+      "columns": [
+        "BlightCraftingResult",
+        "BlightCraftingItems"
+      ]
+    },
+    {
+      "name": "BlightCraftingItems",
+      "columns": [
+        "NameShort"
       ]
     },
     {
