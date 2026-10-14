@@ -73,8 +73,8 @@ export type GraphicsSource = GgpkSource & GgpkImageSource;
 
 /** Engine variant prefix for a node's skill icon (mirrors `iconKeyFor`). */
 function variantOf(node: ExportNode): string | null {
-  if (node.isMastery) {
-    return null; // masteries render as their effect pattern
+  if (node.isMastery || node.isAscendancyStart) {
+    return null; // masteries render as their effect pattern, starts as a frame only
   }
 
   if (node.isKeystone) {
@@ -88,33 +88,63 @@ function variantOf(node: ExportNode): string | null {
   return 'normal';
 }
 
-export async function buildGraphics(source: GraphicsSource, tree: TreeExport): Promise<GraphicsResult> {
-  // --- skill icons: one colour atlas (`skills`) -----------------------------
-  // The unallocated dimming is a render-time tint, not a baked desaturation, so
-  // this packs a single colour sprite per node icon.
-
-  // icon-path -> variant; first node wins, same icon shares a variant.
+/**
+ * Every skill icon the renderer can ask for, each with the frame variant it is
+ * keyed under (`<variant>Active:<icon>`): every node's own icon, the +attribute
+ * choice icons, and the icons a class or ascendancy shows in a base node's place.
+ */
+export function wantedSkillIcons(tree: TreeExport): { variant: string; icon: string }[] {
+  // variant + icon -> entry; the same icon in the same variant is packed once.
   const wanted = new Map<string, { variant: string; icon: string }>();
+  const want = (variant: string | null, icon: string | undefined): void => {
+    if (variant && icon && !wanted.has(`${variant}:${icon}`)) {
+      wanted.set(`${variant}:${icon}`, { variant, icon });
+    }
+  };
+
+  // Override nodes sit off the tree with no kind flags of their own: the renderer
+  // draws one in a base node's place, framed as that base node, so its icon is
+  // packed in the base node's variant (an ascendancy notable swapped for another).
+  // Older exports may lack a class's pairs or ascendancies.
+  const overrides = tree.classes.flatMap((cls) => [
+    cls.overridePairs ?? {},
+    ...(cls.ascendancies ?? []).map((asc) => asc.overridePairs ?? {}),
+  ]);
+  const overrideTargets = new Set(overrides.flatMap((pairs) => Object.values(pairs)));
 
   for (const node of Object.values(tree.nodes)) {
-    const variant = variantOf(node);
-
-    if (variant && node.icon && !wanted.has(`${variant}:${node.icon}`)) {
-      wanted.set(`${variant}:${node.icon}`, { variant, icon: node.icon });
+    // An override target is never drawn as itself, only in a base node's frame.
+    if (!overrideTargets.has(node.skill)) {
+      want(variantOf(node), node.icon);
     }
   }
 
   // +attribute choice icons (Str/Dex/Int) — shown on the node once an attribute
   // is picked; not a node's own icon, so add them explicitly.
   for (const override of Object.values(tree.skillOverrides)) {
-    const icon = override.icon;
-
-    if (typeof icon === 'string' && icon && !wanted.has(`normal:${icon}`)) {
-      wanted.set(`normal:${icon}`, { variant: 'normal', icon });
+    if (typeof override.icon === 'string') {
+      want('normal', override.icon);
     }
   }
 
-  const wantedList = [...wanted.values()];
+  for (const pairs of overrides) {
+    for (const [base, target] of Object.entries(pairs)) {
+      const baseNode = tree.nodes[Number(base)];
+
+      if (baseNode) {
+        want(variantOf(baseNode), tree.nodes[target]?.icon);
+      }
+    }
+  }
+
+  return [...wanted.values()];
+}
+
+export async function buildGraphics(source: GraphicsSource, tree: TreeExport): Promise<GraphicsResult> {
+  // --- skill icons: one colour atlas (`skills`) -----------------------------
+  // The unallocated dimming is a render-time tint, not a baked desaturation, so
+  // this packs a single colour sprite per node icon.
+  const wantedList = wantedSkillIcons(tree);
   const activeSlots = await mapConcurrent(wantedList, CONCURRENCY, async ({ variant, icon }) => {
     const img = await source.dds(icon);
 

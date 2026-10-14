@@ -22,7 +22,7 @@ interface AtlasJson {
 
 /** The three atlas frame-maps and the sprite count each pinned to. */
 const ATLASES: { name: string; frames: number }[] = [
-  { name: 'skills', frames: 673 },
+  { name: 'skills', frames: 668 },
   { name: 'frame', frames: 17 },
   { name: 'mastery-effect-active', frames: 60 },
 ];
