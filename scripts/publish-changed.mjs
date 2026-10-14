@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// Publish to npm every package whose current version is not yet on the registry,
+// Stage on npm every package whose current version is not yet on the registry,
 // in dependency order. Already-published versions are skipped, so a release that
-// only bumped some packages publishes only those - no "version already exists"
-// failures. Run by the Release workflow; assumes `npm run build` already ran and
-// that npm trusted publishing (OIDC) is configured for each package.
+// only bumped some packages stages only those. Staging uploads the package but
+// does not release it: each staged version goes public once a maintainer approves
+// it with 2FA (`npm stage list`, `npm stage approve <id>`). Run by the Release
+// workflow; assumes `npm run build` already ran and that npm trusted publishing
+// (OIDC) is configured for each package.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -45,10 +47,10 @@ for (const dir of ORDER) {
     continue;
   }
 
-  console.log(`publish ${name}@${version}`);
+  console.log(`stage  ${name}@${version}`);
 
   try {
-    execFileSync('npm', ['publish', '-w', `packages/${dir}`], {
+    execFileSync('npm', ['stage', 'publish', '-w', `packages/${dir}`], {
       cwd: fileURLToPath(new URL('..', import.meta.url)),
       stdio: 'inherit',
     });
@@ -69,4 +71,4 @@ for (const dir of ORDER) {
   }
 }
 
-console.log(published === 0 ? 'Nothing to publish - all versions current.' : `Published ${published} package(s).`);
+console.log(published === 0 ? 'Nothing to publish - all versions current.' : `Staged ${published} package(s). Approve them with 2FA to publish.`);

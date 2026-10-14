@@ -5,10 +5,12 @@ name: Release
 # publish a release from it). Only packages whose version is not yet on npm are
 # published, so partial releases are safe.
 #
-# Publishes through npm trusted publishing (OIDC), so no long-lived token lives
-# in the repo. One-time setup per package on npmjs.com (Settings -> Trusted
-# Publisher -> GitHub Actions): repository rajtik76/poe2-toolkit, workflow
-# release.yml.
+# Stages the packages through npm trusted publishing (OIDC), so no long-lived
+# token lives in the repo. Nothing goes public until a maintainer approves each
+# staged version with 2FA (`npm stage approve <id>`, or on npmjs.com). One-time
+# setup per package on npmjs.com (Settings -> Trusted Publisher -> GitHub
+# Actions): repository rajtik76/poe2-toolkit, workflow release.yml, direct
+# publishing left unchecked.
 on:
   release:
     types: [published]
