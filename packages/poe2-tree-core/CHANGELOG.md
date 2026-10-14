@@ -4,6 +4,19 @@ All notable changes to `@poe2-toolkit/tree-core` are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-10-14
+
+### Added
+
+- `TreeNode` carries `isMultipleChoice`, `isMultipleChoiceOption`,
+  `isFreeAllocate`, `containJewelSocket` and `applyToArmour` from the export.
+
+### Changed
+
+- `toggleAscendancyAllocation` keeps one option per multiple-choice node:
+  picking an option drops the other and the nodes only it connects, as in PoB.
+- A node holding a jewel socket is always basic, like a socket.
+
 ## [1.1.0] - 2026-10-14
 
 ### Added
