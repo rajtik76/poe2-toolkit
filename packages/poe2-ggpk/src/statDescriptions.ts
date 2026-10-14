@@ -143,6 +143,12 @@ function parseDescriptionLine(line: string): Variant {
  * `lang "..."` blocks are skipped by the outer loop, which only resumes on the
  * next `description` marker.
  *
+ * A stat described by more than one block keeps the last one, as Path of
+ * Building resolves it. Note that `skill_stat_descriptions.csd` ends with
+ * skill-table blocks that supersede the tooltip blocks of some stats that way
+ * (e.g. `projectile_speed_+%`); gem tooltips read through each skill's own
+ * statset description file, which describes those stats again.
+ *
  * @param csd - The decoded UTF-16 text of a `stat_descriptions.csd` file.
  * @returns A {@link StatIndex} to pass to {@link renderBlock}.
  */
