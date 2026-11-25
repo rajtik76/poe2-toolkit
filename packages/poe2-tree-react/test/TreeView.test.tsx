@@ -241,6 +241,34 @@ describe('TreeView render-on-demand', () => {
     expect(latestApp()?.stop).toHaveBeenCalled();
   });
 
+  it('tears down without releasing pixi global pools another live tree still uses', async () => {
+    // Pixi's batch pool is module-level, shared by every Application on the page. `releaseGlobalResources`
+    // (implied by `destroy(true)`) destroys batches a surviving tree still renders with, so its next
+    // instruction rebuild throws "Cannot read properties of null (reading 'clear')".
+    const other = document.createElement('div');
+    document.body.appendChild(other);
+    const otherRoot = createRoot(other);
+
+    await act(async () => {
+      root.render(<TreeView scene={makeScene()} />);
+      otherRoot.render(<TreeView scene={makeScene()} />);
+    });
+    await flush();
+    const [first] = appInstances;
+
+    act(() => otherRoot.unmount());
+    other.remove();
+    await flush();
+
+    const destroyed = appInstances.filter((app) => app !== first && app.destroy.mock.calls.length > 0);
+    expect(destroyed).toHaveLength(1);
+    const [rendererOptions] = destroyed[0]!.destroy.mock.calls[0]!;
+    expect(rendererOptions).not.toBe(true);
+    expect(rendererOptions).toMatchObject({ removeView: true });
+    expect(rendererOptions).not.toHaveProperty('releaseGlobalResources', true);
+    expect(first!.destroy).not.toHaveBeenCalled();
+  });
+
   it('renders a frame when a still (non-pulsing) highlight is set, without starting the ticker', async () => {
     await act(async () => {
       root.render(<TreeView scene={makeScene()} />);

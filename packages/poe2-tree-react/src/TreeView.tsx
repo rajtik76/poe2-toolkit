@@ -282,7 +282,9 @@ export function TreeView({
       }
 
       // Destroy once init settles, releasing the WebGL context and canvas whether or not init had finished.
-      void ready.then(() => app.destroy(true, { children: true }));
+      // Not `destroy(true)`: that also releases pixi's module-level pools, whose batches another live
+      // TreeView (or the StrictMode remount) may still be rendering with.
+      void ready.then(() => app.destroy({ removeView: true }, { children: true }));
     };
   }, []);
 
