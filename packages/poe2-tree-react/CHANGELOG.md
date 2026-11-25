@@ -4,6 +4,15 @@ All notable changes to `@poe2-toolkit/tree-react` are documented here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions
 follow [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-11-25
+
+### Fixed
+
+- Unmounting a `TreeView` no longer releases pixi's page-wide resource pools.
+  Another live `TreeView` (or the second mount under React StrictMode) could
+  crash on its next redraw with "Cannot read properties of null (reading
+  'clear')". The canvas is still removed and the WebGL context still released.
+
 ## [1.1.0] - 2026-10-14
 
 ### Added
